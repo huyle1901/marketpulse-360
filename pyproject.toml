@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "marketpulse-mock"
+version = "0.1.0"
+description = "Deterministic omnichannel marketing data generator for MarketPulse 360"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+marketpulse-mock = "marketpulse_mock.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
