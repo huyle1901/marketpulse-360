@@ -141,6 +141,55 @@ flowchart LR
 
 ## 4. Main data flows
 
+### 4.0 Source simulation boundary
+
+Before real integrations are available, the `marketpulse_mock` package produces
+deterministic, correlated representations of Google Ads, Meta Ads, TikTok Ads,
+web/mobile analytics, CRM, commerce, and email systems. Ad platforms expose daily
+aggregate reports, while first-party clickstream and order systems expose event-level
+records connected by platform click IDs, campaign IDs, sessions, customers, and
+orders. This deliberately mirrors common marketing integration boundaries instead
+of pretending that advertising platforms provide unrestricted user-level impression
+logs.
+
+Small fixtures are versioned for correctness tests. Large `demo` and `benchmark`
+runs are generated locally under ignored `data/generated/`, accompanied by a
+manifest with seeds, schemas, counts, anomalies, checksums, and expected aggregates.
+MP-02 will replay event-level files to Kafka with configurable speed; batch-shaped
+vendor reports and CRM snapshots will enter through Dagster.
+
+The generator writes each source incrementally. A bounded priority queue merges only
+the currently overlapping journeys so every replayable partition remains ordered by
+event time without sorting or retaining a whole day in memory.
+
+Purchases use the latest eligible paid click, including a newer click that occurs
+while journeys overlap. Email unsubscribe events deterministically update later CRM
+snapshots and suppress future sends. The validator checks source-specific envelopes,
+UTC partitions, schemas, file hashes, anomalies, cross-source attribution, ad spend,
+orders, refunds, and daily ground truth. Its reconciliation state is finalized and
+released at each date boundary so memory does not grow across the complete run.
+
+Mock source data is not application operational data. User accounts, saved segments,
+alert rules, annotations, and platform configuration created through the future
+MarketPulse 360 application remain a separate PostgreSQL domain.
+
+### 4.0.1 Implemented evidence (MP-01)
+
+As of 2026-10-11, the source-simulation boundary is implemented and verified:
+
+| Evidence | Result |
+|---|---:|
+| Automated tests | 69 passing |
+| Committed seed-360 fixture | 615 rows, 22 files, 116 KB |
+| Local seed-360 demo | 1,200,225 rows, 130 files, about 90 MB compressed |
+| Demo time range | 2026-01-01 through 2026-01-14 UTC |
+| Demo master data | 50,000 customers, 30 campaigns, 1,000 products |
+| Demo injected anomalies | 6,688 late, 2,237 duplicate, 619 bot, 310 invalid, 917 refund events |
+
+The fixture is tracked for repeatable tests. The demo is regenerated from its seed
+and remains outside Git. Both use the same CLI, schemas, writer, manifest, and
+validator; therefore the fixture is not a simplified parallel implementation.
+
 ### 4.1 Streaming path
 
 1. Web, mobile, order, and simulator events are published to Kafka.
