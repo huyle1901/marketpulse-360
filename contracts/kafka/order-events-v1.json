@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketpulse:kafka:order-events:v1",
+  "title": "MarketPulse order event v1",
+  "type": "object",
+  "required": ["event_id", "event_name", "event_time", "ingested_at", "source", "schema_version", "customer_id", "anonymous_id", "session_id", "campaign_id", "platform_campaign_id", "click_id", "consent_analytics", "is_late", "payload"],
+  "properties": {
+    "event_id": {"type": "string", "format": "uuid"},
+    "event_name": {"enum": ["order_created", "order_refunded"]},
+    "event_time": {"type": "string", "format": "date-time"},
+    "ingested_at": {"type": "string", "format": "date-time"},
+    "source": {"const": "commerce"},
+    "schema_version": {"const": 1},
+    "customer_id": {"type": ["string", "null"]},
+    "anonymous_id": {"type": ["string", "null"]},
+    "session_id": {"type": "string"},
+    "campaign_id": {"type": "string"},
+    "platform_campaign_id": {"type": "string"},
+    "click_id": {"type": "string"},
+    "consent_analytics": {"type": "boolean"},
+    "is_late": {"type": "boolean"},
+    "payload": {"type": "object", "required": ["order_id", "items", "gross_amount_minor", "refund_amount_minor", "currency", "attributed_platform", "attributed_campaign_id"]}
+  },
+  "additionalProperties": false
+}

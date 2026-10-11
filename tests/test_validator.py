@@ -219,6 +219,44 @@ class DatasetValidatorTests(unittest.TestCase):
         self.assertFalse(report.valid)
         self.assertTrue(any("broken funnel" in error for error in report.errors))
 
+    def test_quality_cases_require_utc_partition_order(self) -> None:
+        candidates = list((self.root / "quality_cases").rglob("*.jsonl.gz"))
+        target = max(
+            candidates,
+            key=lambda path: len(gzip.open(path, "rt", encoding="utf-8").readlines()),
+        )
+        with gzip.open(target, "rt", encoding="utf-8") as stream:
+            rows = [json.loads(line) for line in stream]
+        self.assertGreaterEqual(len(rows), 2)
+        rows[1]["event_time"] = "2026-01-01T00:00:00Z"
+        self._rewrite_json_rows(target, rows)
+
+        report = validate_dataset(self.root)
+
+        self.assertFalse(report.valid)
+        self.assertTrue(
+            any("nondecreasing event_time" in error for error in report.errors),
+            report.errors,
+        )
+
+    def test_order_and_email_payload_identity_is_required(self) -> None:
+        for dataset, identity in (("orders", "order_id"), ("email_events", "message_id")):
+            with self.subTest(dataset=dataset):
+                self.tearDown()
+                self.setUp()
+
+                def mutate(row: dict[str, object]) -> None:
+                    payload = row["payload"]
+                    assert isinstance(payload, dict)
+                    payload.pop(identity, None)
+
+                self._mutate_first_json_record(dataset, mutate)
+                report = validate_dataset(self.root)
+                self.assertTrue(
+                    any(f"missing payload {identity}" in error for error in report.errors),
+                    report.errors,
+                )
+
     def _mutate_first_json_record(
         self,
         dataset: str,
@@ -262,6 +300,19 @@ class DatasetValidatorTests(unittest.TestCase):
         manifest_path.write_text(
             json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
+
+    def _rewrite_json_rows(self, target: Path, rows: list[dict[str, object]]) -> None:
+        raw = target.open("wb")
+        compressed = gzip.GzipFile(
+            filename="", mode="wb", fileobj=raw, compresslevel=6, mtime=0
+        )
+        text = io.TextIOWrapper(compressed, encoding="utf-8", newline="")
+        for row in rows:
+            text.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")))
+            text.write("\n")
+        text.close()
+        raw.close()
+        self._refresh_manifest_file_stat(target)
 
 
 if __name__ == "__main__":

@@ -155,8 +155,9 @@ logs.
 Small fixtures are versioned for correctness tests. Large `demo` and `benchmark`
 runs are generated locally under ignored `data/generated/`, accompanied by a
 manifest with seeds, schemas, counts, anomalies, checksums, and expected aggregates.
-MP-02 will replay event-level files to Kafka with configurable speed; batch-shaped
-vendor reports and CRM snapshots will enter through Dagster.
+MP-02 replays event-level files to Kafka with configurable event-time speed, fixed
+events-per-second pacing, or an explicit no-sleep mode. Batch-shaped vendor reports
+and CRM snapshots remain inputs to the later Dagster path.
 
 The generator writes each source incrementally. A bounded priority queue merges only
 the currently overlapping journeys so every replayable partition remains ordered by
@@ -193,7 +194,10 @@ validator; therefore the fixture is not a simplified parallel implementation.
 ### 4.1 Streaming path
 
 1. Web, mobile, order, and simulator events are published to Kafka.
-2. Kafka records are validated against versioned Avro or Protobuf contracts.
+2. Kafka records are validated against versioned JSON Schema contracts registered
+   in Apicurio Registry. Canonical JSON keeps MP-01 fixture bytes directly
+   inspectable during the classroom demo; Avro remains a future optimization when
+   binary size becomes more important than transparency.
 3. Flink applies event-time processing, watermarks, deduplication, sessionization,
    identity enrichment, and campaign aggregation.
 4. Invalid records are written to dead-letter topics with an error reason.
@@ -218,6 +222,7 @@ Suggested topic naming:
 ```text
 marketing.raw.web-events.v1
 marketing.raw.order-events.v1
+marketing.raw.email-events.v1
 marketing.raw.ad-spend.v1
 marketing.raw.crm-changes.v1
 marketing.clean.customer-events.v1
@@ -229,15 +234,44 @@ marketing.dlq.validation.v1
 
 Kafka deployment decisions:
 
-- Use the official Apache Kafka image in KRaft mode; ZooKeeper is not required.
+- Pin the local MP-02 stack to Apache Kafka `4.3.1`, Apicurio Registry `3.3.3`,
+  and Kafbat UI `1.5.0`; ZooKeeper is not required.
 - Start with one broker for the laptop demo and use three brokers only for a
   failure-tolerance experiment or larger VM deployment.
 - Use replication factor 1 locally and document that production would use 3.
 - Partition high-volume topics by `customer_id` or `session_id`; partition
   campaign aggregates by `campaign_id`.
 - Use deterministic `event_id` values and idempotent producers.
-- Retain raw topics long enough for the live demo, while Iceberg remains the
-  durable long-term history.
+- Retain MP-02 topics for seven days (`retention.ms=604800000`) and reject existing
+  topics whose partition count or retention configuration has drifted. Iceberg
+  remains the durable long-term history.
+- Partition raw web, order, and email topics into six partitions. Keys prefer
+  `customer_id`, then fall back to source-specific session/order/message identity,
+  preserving per-identity order.
+- Route deterministic MP-01 quality cases to `marketing.dlq.validation.v1` with
+  their expected reason code; CRM and ad reports stay on the later batch path.
+
+### 5.1 Implemented evidence (MP-02)
+
+As of 2026-10-11, the Kafka ingestion boundary is implemented and verified with
+118 passing automated tests plus a clean real-container smoke run. The pinned
+stack is Kafka `4.3.1`, Apicurio Registry `3.3.3`, and Kafbat UI `1.5.0`.
+
+| Fixture delivery evidence | Acknowledged and consumed |
+|---|---:|
+| `marketing.raw.web-events.v1` | 199 |
+| `marketing.raw.order-events.v1` | 14 |
+| `marketing.raw.email-events.v1` | 6 |
+| `marketing.dlq.validation.v1` | 4 |
+| Total | 223 |
+
+The verification run registered the four JSON Schema contracts twice to prove
+idempotence and delivered 223 records in 0.595 seconds (374.5 records/second) in
+no-sleep mode. It compared exact consumed event IDs and DLQ reason codes, not only
+counts. Replay shutdown interrupts pacing/backpressure waits, always flushes accepted
+records, and excludes paused time from throughput. This small fixture measurement
+proves the control path and exact accounting; MP-10 will perform capacity benchmarks
+on named larger profiles.
 
 ## 6. Storage decision: BigQuery versus PostgreSQL
 
@@ -279,10 +313,18 @@ dependent on the cloud.
 
 ## 7. Docker deployment view
 
+The first implemented slice is the `streaming` profile: one Kafka 4.3.1 KRaft
+broker, idempotent four-topic initialization, Apicurio Registry 3.3.3, and Kafbat
+UI 1.5.0. A separate `replay` tool container reads the committed MP-01 fixture or
+locally generated data through a read-only mount. It is activated only when the
+operator invokes it, so starting the streaming profile never publishes data by
+surprise. Kafka is reachable as `localhost:9092` from the host and `kafka:29092`
+inside Compose; the UI and Registry API are exposed on ports 8080 and 8081.
+
 ```mermaid
 flowchart TB
     subgraph Compose["Docker Compose project"]
-        subgraph Core["profile: core"]
+        subgraph Core["profile: streaming (MP-02 implemented)"]
             K1["kafka"]
             KU["kafka-ui"]
             SR["schema-registry"]
@@ -323,11 +365,11 @@ flowchart TB
 Recommended laptop profiles:
 
 ```bash
-docker compose --profile core --profile batch --profile app up -d
+docker compose --profile streaming up -d --build --wait
 ```
 
-Enable observability during evaluation and run the Kafka Streams alternative separately
-when memory is limited.
+Later milestones add the `batch`, `app`, and `observability` profiles. Run the
+Kafka Streams alternative separately when memory is limited.
 
 ## 8. Business capabilities shown by the application
 

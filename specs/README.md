@@ -54,7 +54,7 @@ committed 615-row/22-file fixture, and a validated 1,200,225-row/130-file demo r
 
 ### MP-02 - Kafka ingestion and replay controls
 
-**Status:** Planned; depends on MP-01
+**Status:** Implemented
 
 Replay event sources into versioned Kafka topics while batch sources arrive as
 scheduled files. Support `--speed`, `--events-per-second`, pause/resume, idempotent
@@ -67,6 +67,14 @@ producer mode, and a no-sleep benchmark mode.
 - Replay maintains event-time order per partition and exposes observed throughput.
 - Invalid records are routed to a validation DLQ with a reason code.
 - Replaying the same deterministic input does not change reconciled totals.
+
+**Proof:** 118 automated tests pass. The pinned Docker stack runs Kafka `4.3.1`
+in KRaft mode, Apicurio Registry `3.3.3`, and Kafbat UI `1.5.0`. A clean smoke
+run acknowledged and consumed exactly 199 web, 14 order, 6 email, and 4 DLQ
+records. Its no-sleep replay delivered all 223 records in 0.595 seconds
+(374.5 records/second on the verification machine); this is a reproducibility
+measurement, not a production capacity claim. The smoke verifier also compares
+the exact consumed event IDs and DLQ reason codes with the fixture.
 
 ### MP-03 - Stateful stream processing with Flink
 

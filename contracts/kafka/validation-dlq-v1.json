@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketpulse:kafka:validation-dlq:v1",
+  "title": "MarketPulse validation DLQ record v1",
+  "type": "object",
+  "required": ["case_id", "event_time", "source_dataset", "source_topic", "reason_code", "failed_record"],
+  "properties": {
+    "case_id": {"type": "string", "format": "uuid"},
+    "event_time": {"type": "string", "format": "date-time"},
+    "source_dataset": {"enum": ["web_events", "orders", "email_events"]},
+    "source_topic": {"type": "string"},
+    "reason_code": {"enum": ["MISSING_REQUIRED_FIELD", "UNSUPPORTED_SCHEMA_VERSION", "ORPHAN_CLICK_ID"]},
+    "failed_record": {"type": "object"}
+  },
+  "additionalProperties": false
+}

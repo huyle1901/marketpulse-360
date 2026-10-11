@@ -149,9 +149,13 @@ def validate_dataset(root: Path) -> ValidationReport:
             for row in _iter_rows(path, str(item["format"])):
                 row_count += 1
                 rows_checked += 1
-                if dataset in REPLAYABLE_DATASETS:
-                    event_time = _validate_event_envelope(
-                        dataset, relative_path, row, master, errors
+                if dataset in REPLAYABLE_DATASETS or dataset == "quality_cases":
+                    event_time = (
+                        _validate_event_envelope(
+                            dataset, relative_path, row, master, errors
+                        )
+                        if dataset in REPLAYABLE_DATASETS
+                        else _validate_quality_case(relative_path, row, errors)
                     )
                     if event_time is not None:
                         order_key = (dataset, partition or "")
@@ -606,6 +610,18 @@ def _validate_event_envelope(
         errors.append(f"is_late must be boolean: {path}")
     if not isinstance(row.get("payload"), dict):
         errors.append(f"payload must be an object: {path}")
+    else:
+        payload = row["payload"]
+        assert isinstance(payload, dict)
+        identity = (
+            "order_id"
+            if dataset == "orders"
+            else "message_id"
+            if dataset == "email_events"
+            else None
+        )
+        if identity is not None and not payload.get(identity):
+            errors.append(f"missing payload {identity}: {path}")
     try:
         event_time = datetime.fromisoformat(
             str(row["event_time"]).replace("Z", "+00:00")
@@ -636,6 +652,40 @@ def _validate_event_envelope(
     if partition != event_time.date().isoformat():
         errors.append(
             f"partition date mismatch: partition={partition} event_time={event_time.date()}: {path}"
+        )
+    return event_time
+
+
+def _validate_quality_case(
+    path: str,
+    row: dict[str, object],
+    errors: list[str],
+) -> datetime | None:
+    required = {
+        "case_id",
+        "event_time",
+        "original_dataset",
+        "expected_error_code",
+        "record",
+    }
+    missing = required - set(row)
+    if missing:
+        errors.append(f"missing quality-case fields {sorted(missing)}: {path}")
+        return None
+    try:
+        event_time = datetime.fromisoformat(
+            str(row["event_time"]).replace("Z", "+00:00")
+        )
+    except ValueError:
+        errors.append(f"invalid quality-case event_time {row.get('event_time')}: {path}")
+        return None
+    if event_time.utcoffset() != timedelta(0):
+        errors.append(f"quality-case event_time must be UTC: {path}")
+    partition = _partition_from_path(path)
+    if partition != event_time.date().isoformat():
+        errors.append(
+            "quality-case partition date mismatch: "
+            f"partition={partition} event_time={event_time.date()}: {path}"
         )
     return event_time
 
