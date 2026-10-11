@@ -155,8 +155,9 @@ logs.
 Small fixtures are versioned for correctness tests. Large `demo` and `benchmark`
 runs are generated locally under ignored `data/generated/`, accompanied by a
 manifest with seeds, schemas, counts, anomalies, checksums, and expected aggregates.
-MP-02 will replay event-level files to Kafka with configurable speed; batch-shaped
-vendor reports and CRM snapshots will enter through Dagster.
+MP-02 replays event-level files to Kafka with configurable event-time speed, fixed
+events-per-second pacing, or an explicit no-sleep mode. Batch-shaped vendor reports
+and CRM snapshots remain inputs to the later Dagster path.
 
 The generator writes each source incrementally. A bounded priority queue merges only
 the currently overlapping journeys so every replayable partition remains ordered by
@@ -289,10 +290,18 @@ dependent on the cloud.
 
 ## 7. Docker deployment view
 
+The first implemented slice is the `streaming` profile: one Kafka 4.3.1 KRaft
+broker, idempotent four-topic initialization, Apicurio Registry 3.3.3, and Kafbat
+UI 1.5.0. A separate `replay` tool container reads the committed MP-01 fixture or
+locally generated data through a read-only mount. It is activated only when the
+operator invokes it, so starting the streaming profile never publishes data by
+surprise. Kafka is reachable as `localhost:9092` from the host and `kafka:29092`
+inside Compose; the UI and Registry API are exposed on ports 8080 and 8081.
+
 ```mermaid
 flowchart TB
     subgraph Compose["Docker Compose project"]
-        subgraph Core["profile: core"]
+        subgraph Core["profile: streaming (MP-02 implemented)"]
             K1["kafka"]
             KU["kafka-ui"]
             SR["schema-registry"]
@@ -333,11 +342,11 @@ flowchart TB
 Recommended laptop profiles:
 
 ```bash
-docker compose --profile core --profile batch --profile app up -d
+docker compose --profile streaming up -d --build --wait
 ```
 
-Enable observability during evaluation and run the Kafka Streams alternative separately
-when memory is limited.
+Later milestones add the `batch`, `app`, and `observability` profiles. Run the
+Kafka Streams alternative separately when memory is limited.
 
 ## 8. Business capabilities shown by the application
 
