@@ -141,6 +141,27 @@ flowchart LR
 
 ## 4. Main data flows
 
+### 4.0 Source simulation boundary
+
+Before real integrations are available, the `marketpulse_mock` package produces
+deterministic, correlated representations of Google Ads, Meta Ads, TikTok Ads,
+web/mobile analytics, CRM, commerce, and email systems. Ad platforms expose daily
+aggregate reports, while first-party clickstream and order systems expose event-level
+records connected by platform click IDs, campaign IDs, sessions, customers, and
+orders. This deliberately mirrors common marketing integration boundaries instead
+of pretending that advertising platforms provide unrestricted user-level impression
+logs.
+
+Small fixtures are versioned for correctness tests. Large `demo` and `benchmark`
+runs are generated locally under ignored `data/generated/`, accompanied by a
+manifest with seeds, schemas, counts, anomalies, checksums, and expected aggregates.
+MP-02 will replay event-level files to Kafka with configurable speed; batch-shaped
+vendor reports and CRM snapshots will enter through Dagster.
+
+Mock source data is not application operational data. User accounts, saved segments,
+alert rules, annotations, and platform configuration created through the future
+MarketPulse 360 application remain a separate PostgreSQL domain.
+
 ### 4.1 Streaming path
 
 1. Web, mobile, order, and simulator events are published to Kafka.
