@@ -311,6 +311,8 @@ the exact validated output directory passed to the command.
 5. Injected duplicate, late, invalid, no-consent, bot, and refund counts match the
    manifest.
 6. Writers rotate at the configured limit and do not retain all events in memory.
+   Overlapping journeys are merged through a bounded event-time priority queue;
+   the generator never sorts or retains a whole day of events.
 7. Validation detects a modified file, missing reference, broken funnel, and
    aggregate mismatch with actionable error messages.
 8. The committed fixture remains small enough for Git; demo/benchmark paths are

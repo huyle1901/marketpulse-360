@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import heapq
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Iterator
@@ -105,6 +106,8 @@ def iter_day_records(
     replayable_index = 0
     click_index = 0
     order_index = 0
+    pending_records: list[tuple[datetime, int, SourceRecord]] = []
+    pending_sequence = 0
 
     def with_anomalies(record: SourceRecord) -> Iterator[SourceRecord]:
         nonlocal replayable_index
@@ -131,6 +134,21 @@ def iter_day_records(
         yield record
         if duplicate:
             yield record
+
+    def enqueue(record: SourceRecord) -> None:
+        """Buffer a short-lived journey event for event-time ordered output."""
+
+        nonlocal pending_sequence
+        for candidate in with_anomalies(record):
+            heapq.heappush(
+                pending_records,
+                (candidate.event_time, pending_sequence, candidate),
+            )
+            pending_sequence += 1
+
+    def flush_until(cutoff: datetime) -> Iterator[SourceRecord]:
+        while pending_records and pending_records[0][0] <= cutoff:
+            yield heapq.heappop(pending_records)[2]
 
     yield from _iter_crm_snapshots(config, masters, day, day_start)
 
@@ -163,6 +181,7 @@ def iter_day_records(
         event_time = day_start + timedelta(
             seconds=(impression_ordinal * 86_000) // max(1, impression_count)
         )
+        yield from flush_until(event_time)
         session_id = stable_id(
             config.seed, f"session-{day_index}", impression_ordinal
         )
@@ -215,7 +234,7 @@ def iter_day_records(
                 ),
             },
         )
-        yield from with_anomalies(page_view)
+        enqueue(page_view)
 
         if page_view.payload["payload"]["is_bot"]:
             bot_view = _event_record(
@@ -236,7 +255,7 @@ def iter_day_records(
                     "is_bot": True,
                 },
             )
-            yield from with_anomalies(bot_view)
+            enqueue(bot_view)
 
         funnel_score = stable_int(
             config.seed, "funnel", day_index, impression_ordinal, modulo=1_000
@@ -256,7 +275,7 @@ def iter_day_records(
                 click_id=click_id,
                 payload=_web_payload(product, device, "product", False),
             )
-            yield from with_anomalies(view_item)
+            enqueue(view_item)
 
         if funnel_score < 400:
             add_to_cart = _event_record(
@@ -273,7 +292,7 @@ def iter_day_records(
                 click_id=click_id,
                 payload=_web_payload(product, device, "cart", False),
             )
-            yield from with_anomalies(add_to_cart)
+            enqueue(add_to_cart)
 
         if funnel_score < 250:
             checkout = _event_record(
@@ -290,7 +309,7 @@ def iter_day_records(
                 click_id=click_id,
                 payload=_web_payload(product, device, "checkout", False),
             )
-            yield from with_anomalies(checkout)
+            enqueue(checkout)
 
         purchase = click_index == 0 or funnel_score < 120
         if purchase:
@@ -331,7 +350,7 @@ def iter_day_records(
                     "currency": "VND",
                 },
             )
-            yield from with_anomalies(web_purchase)
+            enqueue(web_purchase)
 
             order_created = _event_record(
                 config=config,
@@ -361,7 +380,7 @@ def iter_day_records(
                     "attributed_campaign_id": attributed_touch.campaign_id,
                 },
             )
-            yield from with_anomalies(order_created)
+            enqueue(order_created)
 
             refunded = order_index == 0 or _is_scheduled(
                 order_index, config.anomalies.refund, forced_index=-1
@@ -385,7 +404,7 @@ def iter_day_records(
                         "refund_amount_minor": amount_minor,
                     },
                 )
-                yield from with_anomalies(refund_event)
+                enqueue(refund_event)
             order_index += 1
 
         if click_index == 0 or _is_scheduled(
@@ -400,6 +419,8 @@ def iter_day_records(
                 click_id,
             )
         click_index += 1
+
+    yield from flush_until(datetime.max.replace(tzinfo=timezone.utc))
 
     report_time = day_start + timedelta(hours=23, minutes=59, seconds=59)
     for campaign in masters.campaigns:

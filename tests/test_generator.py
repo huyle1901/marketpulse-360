@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
-from marketpulse_mock.config import resolve_config
+from marketpulse_mock.config import GenerationConfig, ScaleProfile, resolve_config
 from marketpulse_mock.generator import generate_dataset
+from marketpulse_mock.validator import validate_dataset
 
 
 EXPECTED_DATASETS = {
@@ -143,6 +145,31 @@ class DatasetGenerationTests(unittest.TestCase):
         self.assertGreater(
             sum(stat.dataset == "web_events" for stat in manifest.files), 2
         )
+
+    def test_dense_profile_keeps_overlapping_journeys_in_event_time_order(self) -> None:
+        profile = ScaleProfile(
+            name="dense",
+            days=1,
+            customers=50,
+            campaigns=3,
+            products=10,
+            impressions_per_day=3_000,
+            rows_per_file=10_000,
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output = Path(temporary_directory) / "dense"
+            config = GenerationConfig(
+                profile=profile,
+                seed=360,
+                output_dir=output,
+                start_date=date(2026, 1, 1),
+                rows_per_file=profile.rows_per_file,
+            )
+
+            generate_dataset(config)
+            report = validate_dataset(output)
+
+        self.assertTrue(report.valid, report.errors)
 
 
 if __name__ == "__main__":
