@@ -306,7 +306,7 @@ Implementation progress on `feat/flink-stream-processing`:
 | Slice | Status |
 |---|---|
 | Design, public output contracts, and recovery oracle | Specified and builder-reviewed |
-| Kafka topic/schema assets | Planned |
+| Kafka topic/schema assets | Implemented: 10 versioned contracts with contract-driven retention and cleanup validation |
 | Flink validation and stateful transformations | Planned |
 | Executable job and Docker cluster | Planned |
 | Mid-replay recovery evidence | Planned |

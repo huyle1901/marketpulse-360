@@ -35,14 +35,22 @@ class DockerAssetTests(unittest.TestCase):
             "marketing.raw.order-events.v1",
             "marketing.raw.email-events.v1",
             "marketing.dlq.validation.v1",
+            "marketing.clean.customer-events.v1",
+            "marketing.clean.sessions.v1",
+            "marketing.gold.funnel-metrics.v1",
+            "marketing.gold.revenue-metrics.v1",
+            "marketing.gold.campaign-metrics.v1",
+            "marketing.dlq.flink-validation.v1",
         }
         self.assertEqual(expected, {line.strip() for line in script.splitlines() if line.startswith("marketing.")})
         self.assertIn("--if-not-exists", script)
-        self.assertIn("--partitions 6", script)
+        self.assertIn('--partitions "${partitions}"', script)
         self.assertIn("--replication-factor 1", script)
-        self.assertIn("--config retention.ms=604800000", script)
-        self.assertIn("PartitionCount: 6", script)
-        self.assertIn("retention.ms=604800000", script)
+        self.assertIn('--config retention.ms="${retention_ms}"', script)
+        self.assertIn('--config cleanup.policy="${cleanup_policy}"', script)
+        self.assertIn("PartitionCount: ${partitions}", script)
+        self.assertIn("retention.ms=${retention_ms}", script)
+        self.assertIn("cleanup.policy=", script)
 
     def test_replay_image_is_pinned_and_runs_as_non_root(self) -> None:
         dockerfile = (ROOT / "docker/replay/Dockerfile").read_text()

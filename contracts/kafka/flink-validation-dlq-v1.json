@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketpulse:kafka:flink-validation-dlq:v1",
+  "title": "MarketPulse Flink validation DLQ v1",
+  "type": "object",
+  "required": ["schema_version", "error_id", "detected_at", "processor", "source_topic", "source_partition", "source_offset", "source_key", "reason_code", "failed_value_base64", "failed_value_utf8"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "error_id": {"type": "string", "format": "uuid"},
+    "detected_at": {"type": "string", "format": "date-time"},
+    "processor": {"const": "marketpulse-flink"},
+    "source_topic": {"type": "string", "minLength": 1},
+    "source_partition": {"type": "integer", "minimum": 0},
+    "source_offset": {"type": "integer", "minimum": 0},
+    "source_key": {"type": ["string", "null"]},
+    "reason_code": {"enum": ["MALFORMED_JSON", "UNSUPPORTED_SCHEMA_VERSION", "TOPIC_SOURCE_MISMATCH", "MISSING_REQUIRED_FIELD", "INVALID_FIELD_TYPE", "INVALID_EVENT_ID", "INVALID_TIMESTAMP", "INVALID_EVENT_NAME", "MISSING_IDENTITY", "INVALID_PAYLOAD"]},
+    "failed_value_base64": {"type": "string", "contentEncoding": "base64"},
+    "failed_value_utf8": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}

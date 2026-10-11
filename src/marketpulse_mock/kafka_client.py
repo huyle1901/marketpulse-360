@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Protocol
 
-from .kafka_contracts import TOPIC_CONTRACTS
+from .kafka_contracts import ALL_TOPIC_CONTRACTS
 from .replay_reader import ReplayRecord
 
 
@@ -126,9 +126,12 @@ def create_topics(
             contract.topic,
             num_partitions=contract.partitions,
             replication_factor=1,
-            config={"retention.ms": "604800000"},
+            config={
+                "retention.ms": str(contract.retention_ms),
+                "cleanup.policy": contract.cleanup_policy,
+            },
         )
-        for contract in TOPIC_CONTRACTS.values()
+        for contract in ALL_TOPIC_CONTRACTS.values()
     ]
     futures = admin.create_topics(topics)
     created = existing = failed = 0
@@ -147,7 +150,7 @@ def create_topics(
 
     if hasattr(admin, "list_topics"):
         metadata = admin.list_topics(timeout=10.0)
-        for contract in TOPIC_CONTRACTS.values():
+        for contract in ALL_TOPIC_CONTRACTS.values():
             topic_metadata = metadata.topics.get(contract.topic)
             actual_partitions = (
                 len(topic_metadata.partitions) if topic_metadata is not None else 0
@@ -159,22 +162,43 @@ def create_topics(
                     f"got {actual_partitions}"
                 )
     if config_resource_factory is not None and hasattr(admin, "describe_configs"):
+        contracts_by_topic = {
+            contract.topic: contract for contract in ALL_TOPIC_CONTRACTS.values()
+        }
         resources = [
             config_resource_factory(contract.topic)
-            for contract in TOPIC_CONTRACTS.values()
+            for contract in ALL_TOPIC_CONTRACTS.values()
         ]
         for resource, future in admin.describe_configs(resources).items():
             try:
+                contract = contracts_by_topic[resource.name]
                 configuration = future.result()
                 retention = configuration.get("retention.ms")
                 actual_retention = getattr(retention, "value", retention)
-                if actual_retention != "604800000":
+                if actual_retention != str(contract.retention_ms):
                     failed += 1
                     errors.append(
-                        f"{resource.name}: expected retention.ms=604800000, "
+                        f"{resource.name}: expected retention.ms="
+                        f"{contract.retention_ms}, "
                         f"got {actual_retention}"
+                    )
+                cleanup = configuration.get("cleanup.policy")
+                actual_cleanup = getattr(cleanup, "value", cleanup)
+                if _normalize_cleanup(actual_cleanup) != _normalize_cleanup(
+                    contract.cleanup_policy
+                ):
+                    failed += 1
+                    errors.append(
+                        f"{resource.name}: expected cleanup.policy="
+                        f"{contract.cleanup_policy}, got {actual_cleanup}"
                     )
             except Exception as error:
                 failed += 1
                 errors.append(f"{resource.name}: cannot verify config: {error}")
     return TopicBootstrapSummary(created, existing, failed, tuple(errors))
+
+
+def _normalize_cleanup(value: object) -> tuple[str, ...]:
+    return tuple(
+        sorted(part.strip() for part in str(value or "").split(",") if part.strip())
+    )

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketpulse:kafka:campaign-metrics:v1",
+  "title": "MarketPulse campaign metrics v1",
+  "type": "object",
+  "required": ["schema_version", "metric_key", "campaign_id", "event_date", "sessions", "page_view_sessions", "view_item_sessions", "add_to_cart_sessions", "checkout_sessions", "purchase_sessions", "order_count", "refund_count", "gross_revenue_minor", "refund_amount_minor", "net_revenue_minor", "currency", "max_event_time", "processed_at"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "metric_key": {"type": "string", "minLength": 1},
+    "campaign_id": {"type": "string", "minLength": 1},
+    "event_date": {"type": "string", "format": "date"},
+    "sessions": {"type": "integer", "minimum": 0},
+    "page_view_sessions": {"type": "integer", "minimum": 0},
+    "view_item_sessions": {"type": "integer", "minimum": 0},
+    "add_to_cart_sessions": {"type": "integer", "minimum": 0},
+    "checkout_sessions": {"type": "integer", "minimum": 0},
+    "purchase_sessions": {"type": "integer", "minimum": 0},
+    "order_count": {"type": "integer", "minimum": 0},
+    "refund_count": {"type": "integer", "minimum": 0},
+    "gross_revenue_minor": {"type": "integer", "minimum": 0},
+    "refund_amount_minor": {"type": "integer", "minimum": 0},
+    "net_revenue_minor": {"type": "integer"},
+    "currency": {"type": ["string", "null"]},
+    "max_event_time": {"type": "string", "format": "date-time"},
+    "processed_at": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}

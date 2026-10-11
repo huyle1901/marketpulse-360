@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketpulse:kafka:sessions:v1",
+  "title": "MarketPulse web session v1",
+  "type": "object",
+  "required": ["schema_version", "session_id", "customer_id", "anonymous_id", "campaign_id", "session_start", "session_end", "event_count", "page_view_count", "view_item_count", "add_to_cart_count", "checkout_count", "purchase_count", "gross_revenue_minor", "currency", "late_event_count", "status", "processed_at"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "session_id": {"type": "string", "minLength": 1},
+    "customer_id": {"type": ["string", "null"]},
+    "anonymous_id": {"type": ["string", "null"]},
+    "campaign_id": {"type": ["string", "null"]},
+    "session_start": {"type": "string", "format": "date-time"},
+    "session_end": {"type": "string", "format": "date-time"},
+    "event_count": {"type": "integer", "minimum": 1},
+    "page_view_count": {"type": "integer", "minimum": 0},
+    "view_item_count": {"type": "integer", "minimum": 0},
+    "add_to_cart_count": {"type": "integer", "minimum": 0},
+    "checkout_count": {"type": "integer", "minimum": 0},
+    "purchase_count": {"type": "integer", "minimum": 0},
+    "gross_revenue_minor": {"type": "integer", "minimum": 0},
+    "currency": {"type": ["string", "null"]},
+    "late_event_count": {"type": "integer", "minimum": 0},
+    "status": {"enum": ["open", "closed"]},
+    "processed_at": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}
