@@ -307,7 +307,8 @@ Implementation progress on `feat/flink-stream-processing`:
 |---|---|
 | Design, public output contracts, and recovery oracle | Specified and builder-reviewed |
 | Kafka topic/schema assets | Implemented: 10 versioned contracts with contract-driven retention and cleanup validation |
-| Flink validation and stateful transformations | Planned |
+| Flink raw-byte parser and validation DLQ | Implemented: Java 17 boundary preserves Kafka lineage, validates all three source envelopes, and covers 10 deterministic failure reasons in 3 JUnit tests |
+| Flink stateful transformations | Planned |
 | Executable job and Docker cluster | Planned |
 | Mid-replay recovery evidence | Planned |
 
