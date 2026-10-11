@@ -1,0 +1,40 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Local agent instructions (intentionally not shared)
+AGENTS.md
+agent.md
+
+# Secrets and local environments
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+# Python caches and tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local scratch files
+tmp/
+.worktrees/
+
+# Course brief kept as a local reference
+DE_Presentation and Project Descriptions and Requirements-Semester 1-2026-2027 (1).pdf
+
+# Generated mock data can be large; only small fixtures are versioned
+data/generated/
+data/mock/generated/
+mock_data/generated/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
