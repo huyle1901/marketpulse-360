@@ -273,6 +273,34 @@ records, and excludes paused time from throughput. This small fixture measuremen
 proves the control path and exact accounting; MP-10 will perform capacity benchmarks
 on named larger profiles.
 
+### 5.2 MP-03 Flink processing boundary
+
+MP-03 is designed as a Java 17 DataStream job on Apache Flink `2.2.1` with
+Kafka connector `5.0.0-2.2`. It consumes the three raw event topics, validates
+version-1 envelopes, deduplicates by `event_id`, assigns bounded event-time
+watermarks, classifies late events, creates 30-minute web sessions, and maintains
+campaign/day funnel and revenue state.
+
+The milestone deliberately writes its clean and aggregate products back to
+versioned Kafka topics. This keeps recovery testing independent of storage work;
+MP-04 attaches MinIO and Iceberg sinks to the same clean contracts.
+
+```text
+marketing.clean.customer-events.v1
+marketing.clean.sessions.v1
+marketing.gold.funnel-metrics.v1
+marketing.gold.revenue-metrics.v1
+marketing.gold.campaign-metrics.v1
+marketing.dlq.flink-validation.v1
+```
+
+Clean events and the processing DLQ retain seven days. Sessions use compact-plus-
+delete for seven days; Gold topics use compact-plus-delete with thirty-day retention
+so the latest keyed snapshot is directly consumable. Flink
+checkpoints source offsets, keyed state, timers, and transactional Kafka output to
+a named local volume. The recovery demonstration restarts the TaskManager after a
+completed checkpoint and verifies exact final IDs and KPI values.
+
 ## 6. Storage decision: BigQuery versus PostgreSQL
 
 BigQuery and PostgreSQL do not solve the same problem and should not be treated

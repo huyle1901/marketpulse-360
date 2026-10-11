@@ -78,7 +78,7 @@ the exact consumed event IDs and DLQ reason codes with the fixture.
 
 ### MP-03 - Stateful stream processing with Flink
 
-**Status:** Planned; depends on MP-02
+**Status:** Design complete; implementation in progress on `feat/flink-stream-processing`
 
 Validate, deduplicate, watermark, sessionize, enrich, and aggregate streaming events
 with Flink using event time.
@@ -89,6 +89,11 @@ with Flink using event time.
 - Configured late events are handled consistently and measured.
 - Session, funnel, campaign, and revenue outputs have versioned schemas.
 - A TaskManager restart demonstrates checkpoint recovery without lost totals.
+
+**Selected implementation:** Java 17 DataStream job on Flink `2.2.1`, Kafka
+connector `5.0.0-2.2`, transactional Kafka output, five-minute watermarks,
+seven-day deduplication state, 30-minute sessions, and versioned clean/Gold-style
+Kafka topics. Durable Iceberg sinks remain MP-04 scope.
 
 ### MP-04 - Bronze/Silver/Gold lakehouse
 
