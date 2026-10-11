@@ -301,6 +301,16 @@ checkpoints source offsets, keyed state, timers, and transactional Kafka output 
 a named local volume. The recovery demonstration restarts the TaskManager after a
 completed checkpoint and verifies exact final IDs and KPI values.
 
+Implementation progress on `feat/flink-stream-processing`:
+
+| Slice | Status |
+|---|---|
+| Design, public output contracts, and recovery oracle | Specified and builder-reviewed |
+| Kafka topic/schema assets | Planned |
+| Flink validation and stateful transformations | Planned |
+| Executable job and Docker cluster | Planned |
+| Mid-replay recovery evidence | Planned |
+
 ## 6. Storage decision: BigQuery versus PostgreSQL
 
 BigQuery and PostgreSQL do not solve the same problem and should not be treated
