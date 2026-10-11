@@ -193,7 +193,10 @@ validator; therefore the fixture is not a simplified parallel implementation.
 ### 4.1 Streaming path
 
 1. Web, mobile, order, and simulator events are published to Kafka.
-2. Kafka records are validated against versioned Avro or Protobuf contracts.
+2. Kafka records are validated against versioned JSON Schema contracts registered
+   in Apicurio Registry. Canonical JSON keeps MP-01 fixture bytes directly
+   inspectable during the classroom demo; Avro remains a future optimization when
+   binary size becomes more important than transparency.
 3. Flink applies event-time processing, watermarks, deduplication, sessionization,
    identity enrichment, and campaign aggregation.
 4. Invalid records are written to dead-letter topics with an error reason.
@@ -218,6 +221,7 @@ Suggested topic naming:
 ```text
 marketing.raw.web-events.v1
 marketing.raw.order-events.v1
+marketing.raw.email-events.v1
 marketing.raw.ad-spend.v1
 marketing.raw.crm-changes.v1
 marketing.clean.customer-events.v1
@@ -229,7 +233,8 @@ marketing.dlq.validation.v1
 
 Kafka deployment decisions:
 
-- Use the official Apache Kafka image in KRaft mode; ZooKeeper is not required.
+- Pin the local MP-02 stack to Apache Kafka `4.3.1`, Apicurio Registry `3.3.3`,
+  and Kafbat UI `1.5.0`; ZooKeeper is not required.
 - Start with one broker for the laptop demo and use three brokers only for a
   failure-tolerance experiment or larger VM deployment.
 - Use replication factor 1 locally and document that production would use 3.
@@ -238,6 +243,11 @@ Kafka deployment decisions:
 - Use deterministic `event_id` values and idempotent producers.
 - Retain raw topics long enough for the live demo, while Iceberg remains the
   durable long-term history.
+- Partition raw web, order, and email topics into six partitions. Keys prefer
+  `customer_id`, then fall back to source-specific session/order/message identity,
+  preserving per-identity order.
+- Route deterministic MP-01 quality cases to `marketing.dlq.validation.v1` with
+  their expected reason code; CRM and ad reports stay on the later batch path.
 
 ## 6. Storage decision: BigQuery versus PostgreSQL
 

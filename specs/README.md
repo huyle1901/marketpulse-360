@@ -54,7 +54,7 @@ committed 615-row/22-file fixture, and a validated 1,200,225-row/130-file demo r
 
 ### MP-02 - Kafka ingestion and replay controls
 
-**Status:** Planned; depends on MP-01
+**Status:** In progress; MP-01 dependency complete
 
 Replay event sources into versioned Kafka topics while batch sources arrive as
 scheduled files. Support `--speed`, `--events-per-second`, pause/resume, idempotent
