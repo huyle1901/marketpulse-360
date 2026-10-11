@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import sys
 from datetime import date
 from pathlib import Path
@@ -11,6 +12,11 @@ from typing import Sequence
 
 from .config import PROFILES, resolve_config
 from .generator import generate_dataset
+from .kafka_client import ConfluentKafkaPublisher, create_topics
+from .registry import register_contracts
+from .replay import replay
+from .replay_pacing import PacingConfig, ReplayController, ReplayPacer
+from .replay_reader import iter_replay_records
 from .validator import validate_dataset
 
 
@@ -30,7 +36,38 @@ def build_parser() -> argparse.ArgumentParser:
     validate = subparsers.add_parser("validate", help="validate a generated dataset")
     validate.add_argument("--input", type=Path, required=True)
     validate.add_argument("--json", action="store_true", dest="as_json")
+
+    kafka = subparsers.add_parser("kafka", help="operate the local Kafka replay layer")
+    kafka_commands = kafka.add_subparsers(dest="kafka_command", required=True)
+
+    topics = kafka_commands.add_parser("topics", help="create replay topics")
+    topics.add_argument("--bootstrap-servers", default="localhost:9092")
+
+    registry = kafka_commands.add_parser(
+        "register-contracts", help="register JSON Schemas in Apicurio"
+    )
+    registry.add_argument("--registry-url", default="http://localhost:8081")
+    registry.add_argument("--contract-dir", type=Path, default=Path("contracts/kafka"))
+
+    kafka_replay = kafka_commands.add_parser(
+        "replay", help="replay generated events into Kafka"
+    )
+    kafka_replay.add_argument("--input", type=Path, required=True)
+    kafka_replay.add_argument("--bootstrap-servers", default="localhost:9092")
+    kafka_replay.add_argument("--include-dlq", action="store_true")
+    pacing = kafka_replay.add_mutually_exclusive_group()
+    pacing.add_argument("--speed", type=float)
+    pacing.add_argument("--events-per-second", type=float)
+    pacing.add_argument("--no-sleep", action="store_true")
     return parser
+
+
+def install_signal_handlers(controller: ReplayController) -> None:
+    """SIGUSR1 toggles pause; SIGINT requests a graceful flushed stop."""
+
+    if hasattr(signal, "SIGUSR1"):
+        signal.signal(signal.SIGUSR1, lambda _signum, _frame: controller.toggle())
+    signal.signal(signal.SIGINT, lambda _signum, _frame: controller.stop())
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -71,7 +108,47 @@ def main(argv: Sequence[str] | None = None) -> int:
                 for error in report.errors:
                     print(f"error: {error}", file=sys.stderr)
             return 0 if report.valid else 2
-    except (ValueError, FileExistsError, OSError) as error:
+        if args.command == "kafka" and args.kafka_command == "topics":
+            summary = create_topics(args.bootstrap_servers)
+            print(json.dumps({
+                "created": summary.created,
+                "existing": summary.existing,
+                "failed": summary.failed,
+                "errors": list(summary.errors),
+            }, sort_keys=True))
+            for error in summary.errors:
+                print(f"error: {error}", file=sys.stderr)
+            return 0 if summary.success else 2
+        if args.command == "kafka" and args.kafka_command == "register-contracts":
+            summary = register_contracts(args.registry_url, args.contract_dir)
+            print(json.dumps(summary.to_dict(), sort_keys=True))
+            for error in summary.errors:
+                print(f"error: {error}", file=sys.stderr)
+            return 0 if summary.success else 2
+        if args.command == "kafka" and args.kafka_command == "replay":
+            config = PacingConfig(
+                speed=(
+                    args.speed
+                    if args.speed is not None
+                    else 1000.0
+                    if args.events_per_second is None and not args.no_sleep
+                    else None
+                ),
+                events_per_second=args.events_per_second,
+                no_sleep=args.no_sleep,
+            )
+            controller = ReplayController()
+            install_signal_handlers(controller)
+            publisher = ConfluentKafkaPublisher(args.bootstrap_servers)
+            summary = replay(
+                iter_replay_records(args.input, include_dlq=args.include_dlq),
+                publisher,
+                ReplayPacer(config, controller),
+                controller,
+            )
+            print(json.dumps(summary.to_dict(), sort_keys=True))
+            return 0 if summary.success else 2
+    except (ValueError, RuntimeError, FileExistsError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
     parser.error(f"unsupported command: {args.command}")
