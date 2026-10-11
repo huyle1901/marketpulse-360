@@ -42,7 +42,8 @@ docker compose exec kafka /opt/kafka/bin/kafka-topics.sh \
   --topic marketing.raw.web-events.v1
 ```
 
-The four project topics must each have six partitions and replication factor one:
+The four project topics must each have six partitions, replication factor one, and
+seven-day local retention. Bootstrap fails if an existing topic has drifted:
 
 - `marketing.raw.web-events.v1`
 - `marketing.raw.order-events.v1`
@@ -66,8 +67,9 @@ curl -fsS http://localhost:8081/apis/registry/v3/groups/marketpulse/artifacts
 
 ## Replay the fixture
 
-Use exactly one pacing mode. Every command prints a JSON summary after all
-delivery callbacks and the final producer flush complete.
+Use exactly one pacing mode. Every command prints its PID and pacing mode to stderr,
+then prints a JSON summary after all delivery callbacks and the final producer flush
+complete.
 
 Accelerated event time (1,000 simulated seconds per real second):
 
@@ -152,7 +154,8 @@ copy; stable event IDs let downstream MP-03 deduplication prevent KPI inflation.
 
 The script uses its own Compose project, deletes only that project's prior smoke
 volume, starts healthy services, initializes topics twice, registers contracts
-twice, replays the fixture, asserts all four exact topic counts, and cleans up.
+twice, replays the fixture, compares exact event IDs and DLQ reasons, asserts all
+four topic counts, and cleans up.
 Use `KEEP_STACK=1 ./scripts/kafka-smoke-test.sh` only when you want to inspect its
 containers afterward.
 

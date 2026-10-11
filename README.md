@@ -14,7 +14,7 @@ Batch-shaped sources remain inputs to the later Dagster milestone.
 
 ## Current proof
 
-- 106 automated tests cover mock-data correctness plus Kafka contracts, bounded
+- 118 automated tests cover mock-data correctness plus Kafka contracts, bounded
   replay ordering, pacing, idempotent delivery, registry behavior, CLI behavior,
   and Docker assets.
 - The committed fixture contains 615 rows in 22 compressed files.

@@ -242,8 +242,9 @@ Kafka deployment decisions:
 - Partition high-volume topics by `customer_id` or `session_id`; partition
   campaign aggregates by `campaign_id`.
 - Use deterministic `event_id` values and idempotent producers.
-- Retain raw topics long enough for the live demo, while Iceberg remains the
-  durable long-term history.
+- Retain MP-02 topics for seven days (`retention.ms=604800000`) and reject existing
+  topics whose partition count or retention configuration has drifted. Iceberg
+  remains the durable long-term history.
 - Partition raw web, order, and email topics into six partitions. Keys prefer
   `customer_id`, then fall back to source-specific session/order/message identity,
   preserving per-identity order.
@@ -253,7 +254,7 @@ Kafka deployment decisions:
 ### 5.1 Implemented evidence (MP-02)
 
 As of 2026-10-11, the Kafka ingestion boundary is implemented and verified with
-106 passing automated tests plus a clean real-container smoke run. The pinned
+118 passing automated tests plus a clean real-container smoke run. The pinned
 stack is Kafka `4.3.1`, Apicurio Registry `3.3.3`, and Kafbat UI `1.5.0`.
 
 | Fixture delivery evidence | Acknowledged and consumed |
@@ -266,8 +267,11 @@ stack is Kafka `4.3.1`, Apicurio Registry `3.3.3`, and Kafbat UI `1.5.0`.
 
 The verification run registered the four JSON Schema contracts twice to prove
 idempotence and delivered 223 records in 0.595 seconds (374.5 records/second) in
-no-sleep mode. This small fixture measurement proves the control path and exact
-accounting; MP-10 will perform capacity benchmarks on named larger profiles.
+no-sleep mode. It compared exact consumed event IDs and DLQ reason codes, not only
+counts. Replay shutdown interrupts pacing/backpressure waits, always flushes accepted
+records, and excludes paused time from throughput. This small fixture measurement
+proves the control path and exact accounting; MP-10 will perform capacity benchmarks
+on named larger profiles.
 
 ## 6. Storage decision: BigQuery versus PostgreSQL
 

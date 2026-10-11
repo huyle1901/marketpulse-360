@@ -47,7 +47,9 @@ class FakePublisher:
         self.flush_remaining = flush_remaining
         self.records: list[ReplayRecord] = []
 
-    def publish(self, record: ReplayRecord, callback: object) -> None:
+    def publish(
+        self, record: ReplayRecord, callback: object, *, cancelled: object = lambda: False
+    ) -> None:
         self.records.append(record)
         error = RuntimeError("delivery failed") if len(self.records) - 1 == self.failure_index else None
         callback(error)  # type: ignore[operator]
@@ -131,6 +133,82 @@ class ReplayTests(unittest.TestCase):
             outputs.append([(row.event_id, row.value) for row in publisher.records])
 
         self.assertEqual(outputs[0], outputs[1])
+
+    def test_iterator_failure_still_flushes_and_returns_failed_summary(self) -> None:
+        publisher = FakePublisher()
+        controller = ReplayController()
+
+        def broken_records():
+            yield records()[0]
+            raise ValueError("broken source part")
+
+        summary = replay(
+            broken_records(), publisher, self.make_pacer(controller), controller
+        )
+
+        self.assertEqual(1, summary.attempted)
+        self.assertEqual(1, summary.delivered)
+        self.assertEqual(1, summary.failed)
+        self.assertEqual(30.0, publisher.timeout)
+        self.assertIn("broken source part", summary.errors[0])
+
+    def test_deferred_callbacks_are_counted_after_flush(self) -> None:
+        class DeferredPublisher(FakePublisher):
+            def __init__(self) -> None:
+                super().__init__()
+                self.callbacks: list[object] = []
+
+            def publish(
+                self, record: ReplayRecord, callback: object, *, cancelled: object = lambda: False
+            ) -> None:
+                self.records.append(record)
+                self.callbacks.append(callback)
+
+            def flush(self, timeout: float) -> int:
+                for callback in self.callbacks:
+                    callback(None)  # type: ignore[operator]
+                return 0
+
+        controller = ReplayController()
+        summary = replay(
+            records(), DeferredPublisher(), self.make_pacer(controller), controller
+        )
+
+        self.assertEqual(3, summary.delivered)
+        self.assertEqual(0, summary.failed)
+
+    def test_paused_time_is_excluded_from_duration_and_throughput(self) -> None:
+        class ManualClock:
+            now = 0.0
+
+            def monotonic(self) -> float:
+                return self.now
+
+        clock = ManualClock()
+        controller = ReplayController(monotonic=clock.monotonic)
+
+        class PausingPublisher(FakePublisher):
+            def publish(
+                self, record: ReplayRecord, callback: object, *, cancelled: object = lambda: False
+            ) -> None:
+                super().publish(record, callback, cancelled=cancelled)
+                if len(self.records) == 1:
+                    clock.now = 1.0
+                    controller.pause()
+                    clock.now = 6.0
+                    controller.resume()
+                    clock.now = 7.0
+
+        summary = replay(
+            records(),
+            PausingPublisher(),
+            self.make_pacer(controller),
+            controller,
+            monotonic=clock.monotonic,
+        )
+
+        self.assertEqual(2.0, summary.duration_seconds)
+        self.assertEqual(1.5, summary.events_per_second)
 
 
 if __name__ == "__main__":

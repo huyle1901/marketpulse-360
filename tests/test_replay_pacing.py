@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import unittest
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 from marketpulse_mock.replay_pacing import (
@@ -122,6 +124,41 @@ class ReplayPacingTests(unittest.TestCase):
         self.controller.toggle()
         self.assertFalse(self.controller.paused)
         self.assertEqual(3.0, self.controller.paused_seconds)
+
+    def test_stop_interrupts_an_active_real_time_gap(self) -> None:
+        controller = ReplayController()
+        pacer = ReplayPacer(PacingConfig(speed=1.0), controller)
+        pacer.wait(self.start, 0)
+        worker = threading.Thread(
+            target=pacer.wait,
+            args=(self.start + timedelta(seconds=5), 1),
+        )
+
+        worker.start()
+        time.sleep(0.05)
+        controller.stop()
+        worker.join(timeout=0.5)
+
+        self.assertFalse(worker.is_alive(), "stop must wake a scheduled pacing wait")
+
+    def test_pause_during_active_gap_delays_delivery_without_burst(self) -> None:
+        controller = ReplayController()
+        pacer = ReplayPacer(PacingConfig(speed=1.0), controller)
+        pacer.wait(self.start, 0)
+        worker = threading.Thread(
+            target=pacer.wait,
+            args=(self.start + timedelta(seconds=0.2), 1),
+        )
+
+        worker.start()
+        time.sleep(0.03)
+        controller.pause()
+        time.sleep(0.22)
+        self.assertTrue(worker.is_alive())
+        controller.resume()
+        worker.join(timeout=0.5)
+
+        self.assertFalse(worker.is_alive())
 
 
 if __name__ == "__main__":

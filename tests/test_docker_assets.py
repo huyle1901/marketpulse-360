@@ -40,6 +40,9 @@ class DockerAssetTests(unittest.TestCase):
         self.assertIn("--if-not-exists", script)
         self.assertIn("--partitions 6", script)
         self.assertIn("--replication-factor 1", script)
+        self.assertIn("--config retention.ms=604800000", script)
+        self.assertIn("PartitionCount: 6", script)
+        self.assertIn("retention.ms=604800000", script)
 
     def test_replay_image_is_pinned_and_runs_as_non_root(self) -> None:
         dockerfile = (ROOT / "docker/replay/Dockerfile").read_text()
@@ -61,6 +64,7 @@ class DockerAssetTests(unittest.TestCase):
         self.assertIn("register-contracts", script)
         self.assertIn("--include-dlq", script)
         self.assertIn("down --volumes --remove-orphans", script)
+        self.assertIn("marketpulse_mock.smoke_verify", script)
 
     @unittest.skipUnless(shutil.which("docker"), "Docker CLI is not installed")
     def test_compose_configuration_is_valid(self) -> None:

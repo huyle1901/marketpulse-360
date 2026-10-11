@@ -10,7 +10,7 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.optional-dependencies]
-kafka = ["confluent-kafka>=2.6,<3"]
+kafka = ["confluent-kafka==2.16.0"]
 
 [project.scripts]
 marketpulse-mock = "marketpulse_mock.cli:main"

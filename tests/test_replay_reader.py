@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import gzip
 import tempfile
 import unittest
 from collections import Counter
 from pathlib import Path
+from unittest.mock import patch
 
 from marketpulse_mock.replay_reader import iter_replay_records
+from marketpulse_mock.validator import ValidationReport
 
 
 FIXTURE = Path("data/mock/fixtures/seed-360")
@@ -88,6 +91,42 @@ class ReplayReaderTests(unittest.TestCase):
             iterator = iter_replay_records(copied)
             with self.assertRaisesRegex(ValueError, "checksum mismatch"):
                 next(iterator)
+
+    def test_rotated_equal_timestamp_parts_use_path_tie_breaking(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            paths = []
+            for part, event_id in ((1, "later-path"), (0, "earlier-path")):
+                relative = f"web_events/date=2026-01-01/part-{part:05d}.jsonl.gz"
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                row = {
+                    "event_id": event_id,
+                    "event_time": "2026-01-01T00:00:00Z",
+                    "customer_id": "customer-1",
+                    "session_id": "session-1",
+                }
+                with gzip.open(path, "wt", encoding="utf-8") as stream:
+                    stream.write(json.dumps(row) + "\n")
+                paths.append(relative)
+            (root / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "files": [
+                            {"dataset": "web_events", "relative_path": path}
+                            for path in paths
+                        ]
+                    }
+                )
+            )
+
+            with patch(
+                "marketpulse_mock.replay_reader.validate_dataset",
+                return_value=ValidationReport((), 2, 2),
+            ):
+                result = list(iter_replay_records(root))
+
+        self.assertEqual(["earlier-path", "later-path"], [row.event_id for row in result])
 
 
 if __name__ == "__main__":

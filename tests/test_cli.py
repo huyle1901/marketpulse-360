@@ -122,14 +122,19 @@ class CommandLineTests(unittest.TestCase):
         )
         run_replay.return_value = summary
         stdout = io.StringIO()
+        stderr = io.StringIO()
 
-        with redirect_stdout(stdout):
+        with redirect_stdout(stdout), redirect_stderr(stderr), patch(
+            "marketpulse_mock.cli.os.getpid", return_value=4321
+        ):
             exit_code = main(
                 ["kafka", "replay", "--input", "fixture", "--no-sleep", "--include-dlq"]
             )
 
         self.assertEqual(0, exit_code)
         self.assertEqual(summary.to_dict(), json.loads(stdout.getvalue()))
+        self.assertIn("pid=4321", stderr.getvalue())
+        self.assertIn("pacing=no-sleep", stderr.getvalue())
         self.assertTrue(reader.call_args.kwargs["include_dlq"])
 
     @patch("marketpulse_mock.cli.signal.signal")

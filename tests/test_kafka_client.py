@@ -87,6 +87,21 @@ class KafkaClientTests(unittest.TestCase):
         self.assertEqual(1, len(producer.produced))
         self.assertEqual([0.1, 0.0], producer.poll_calls)
 
+    def test_permanent_queue_full_honors_cancellation(self) -> None:
+        producer = FakeProducer({}, queue_failures=100)
+        publisher = ConfluentKafkaPublisher(
+            "unused", producer_factory=lambda _: producer
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "cancelled"):
+            publisher.publish(
+                sample_record(),
+                lambda _: None,
+                cancelled=lambda: bool(producer.poll_calls),
+            )
+
+        self.assertEqual([0.1], producer.poll_calls)
+
     def test_flush_timeout_is_returned_to_replay_service(self) -> None:
         producer = FakeProducer({})
         producer.flush_result = 2
@@ -109,10 +124,11 @@ class KafkaClientTests(unittest.TestCase):
                 return {topic.name: AlreadyExistsFuture() for topic in topics}
 
         class Topic:
-            def __init__(self, name: str, num_partitions: int, replication_factor: int):
+            def __init__(self, name: str, num_partitions: int, replication_factor: int, config: dict[str, str]):
                 self.name = name
                 self.num_partitions = num_partitions
                 self.replication_factor = replication_factor
+                self.config = config
 
         class AlreadyExistsFuture:
             def result(self) -> None:
@@ -125,8 +141,67 @@ class KafkaClientTests(unittest.TestCase):
         self.assertEqual(4, len(calls[0][1]))
         self.assertTrue(all(topic.num_partitions == 6 for topic in calls[0][1]))
         self.assertTrue(all(topic.replication_factor == 1 for topic in calls[0][1]))
+        self.assertTrue(all(topic.config == {"retention.ms": "604800000"} for topic in calls[0][1]))
         self.assertEqual(4, result.existing)
         self.assertEqual(0, result.failed)
+
+    def test_create_topics_rejects_partition_and_retention_drift(self) -> None:
+        class Value:
+            def __init__(self, value: str) -> None:
+                self.value = value
+
+        class Future:
+            def __init__(self, value: object) -> None:
+                self.value = value
+
+            def result(self) -> object:
+                return self.value
+
+        class TopicMetadata:
+            partitions = {0: object()}
+
+        class Metadata:
+            topics = {
+                "marketing.raw.web-events.v1": TopicMetadata(),
+                "marketing.raw.order-events.v1": TopicMetadata(),
+                "marketing.raw.email-events.v1": TopicMetadata(),
+                "marketing.dlq.validation.v1": TopicMetadata(),
+            }
+
+        class Resource:
+            def __init__(self, name: str) -> None:
+                self.name = name
+
+        class Topic:
+            def __init__(self, name: str, **kwargs: object) -> None:
+                self.name = name
+
+        class Admin:
+            def __init__(self, config: dict[str, object]) -> None:
+                pass
+
+            def create_topics(self, topics: list[object]) -> dict[str, Future]:
+                return {topic.name: Future(None) for topic in topics}
+
+            def list_topics(self, timeout: float) -> Metadata:
+                return Metadata()
+
+            def describe_configs(self, resources: list[Resource]) -> dict[Resource, Future]:
+                return {
+                    resource: Future({"retention.ms": Value("123")})
+                    for resource in resources
+                }
+
+        summary = create_topics(
+            "kafka:29092",
+            admin_factory=Admin,
+            topic_factory=Topic,
+            config_resource_factory=Resource,
+        )
+
+        self.assertEqual(8, summary.failed)
+        self.assertTrue(any("expected 6 partitions" in error for error in summary.errors))
+        self.assertTrue(any("expected retention.ms" in error for error in summary.errors))
 
 
 if __name__ == "__main__":

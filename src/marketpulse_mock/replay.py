@@ -60,7 +60,9 @@ def replay(
     monotonic: Callable[[], float] = time.monotonic,
 ) -> ReplaySummary:
     started = monotonic()
+    paused_at_start = controller.paused_seconds
     attempted = delivered = callback_failures = dlq = 0
+    orchestration_failures = 0
     topic_counts: Counter[str] = Counter()
     errors: list[str] = []
     first_event_time: datetime | None = None
@@ -82,28 +84,42 @@ def replay(
 
         return acknowledge
 
-    for ordinal, record in enumerate(records):
-        if controller.stopped:
-            break
-        pacer.wait(record.event_time, ordinal)
-        if controller.stopped:
-            break
-        attempted += 1
-        if first_event_time is None:
-            first_event_time = record.event_time
-        last_event_time = record.event_time
+    remaining = 0
+    try:
+        for ordinal, record in enumerate(records):
+            if controller.stopped:
+                break
+            pacer.wait(record.event_time, ordinal)
+            if controller.stopped:
+                break
+            attempted += 1
+            if first_event_time is None:
+                first_event_time = record.event_time
+            last_event_time = record.event_time
+            try:
+                publisher.publish(
+                    record,
+                    delivery_callback(record),
+                    cancelled=lambda: controller.stopped,
+                )
+            except Exception as error:
+                callback_failures += 1
+                errors.append(str(error))
+    except Exception as error:
+        orchestration_failures += 1
+        errors.append(str(error))
+    finally:
         try:
-            publisher.publish(record, delivery_callback(record))
+            remaining = publisher.flush(flush_timeout)
         except Exception as error:
-            callback_failures += 1
-            errors.append(str(error))
-
-    remaining = publisher.flush(flush_timeout)
+            orchestration_failures += 1
+            errors.append(f"flush failed: {error}")
     if remaining:
         errors.append(f"flush timed out with {remaining} undelivered message(s)")
     with lock:
-        failed = callback_failures + remaining
-    duration = max(0.0, monotonic() - started)
+        failed = callback_failures + orchestration_failures + remaining
+    paused_duration = max(0.0, controller.paused_seconds - paused_at_start)
+    duration = max(0.0, monotonic() - started - paused_duration)
     return ReplaySummary(
         attempted=attempted,
         delivered=delivered,

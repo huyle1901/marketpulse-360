@@ -13,7 +13,13 @@ DeliveryCallback = Callable[[Exception | None], None]
 
 
 class KafkaPublisher(Protocol):
-    def publish(self, record: ReplayRecord, callback: DeliveryCallback) -> None: ...
+    def publish(
+        self,
+        record: ReplayRecord,
+        callback: DeliveryCallback,
+        *,
+        cancelled: Callable[[], bool] = lambda: False,
+    ) -> None: ...
 
     def flush(self, timeout: float) -> int: ...
 
@@ -56,7 +62,13 @@ class ConfluentKafkaPublisher:
         }
         self._producer = producer_factory(config)
 
-    def publish(self, record: ReplayRecord, callback: DeliveryCallback) -> None:
+    def publish(
+        self,
+        record: ReplayRecord,
+        callback: DeliveryCallback,
+        *,
+        cancelled: Callable[[], bool] = lambda: False,
+    ) -> None:
         def on_delivery(error: object, _message: object) -> None:
             callback(RuntimeError(str(error)) if error is not None else None)
 
@@ -73,6 +85,8 @@ class ConfluentKafkaPublisher:
                 break
             except BufferError:
                 self._producer.poll(0.1)
+                if cancelled():
+                    raise RuntimeError("Kafka publication cancelled during backpressure")
         self._producer.poll(0.0)
 
     def flush(self, timeout: float) -> int:
@@ -84,18 +98,27 @@ def create_topics(
     *,
     admin_factory: Callable[[dict[str, object]], object] | None = None,
     topic_factory: Callable[..., object] | None = None,
+    config_resource_factory: Callable[[str], object] | None = None,
 ) -> TopicBootstrapSummary:
     """Create all versioned topics, treating existing topics as success."""
 
     if admin_factory is None or topic_factory is None:
         try:
-            from confluent_kafka.admin import AdminClient, NewTopic
+            from confluent_kafka.admin import (
+                AdminClient,
+                ConfigResource,
+                NewTopic,
+                ResourceType,
+            )
         except ImportError as error:
             raise RuntimeError(
                 "Kafka support is not installed; run pip install '.[kafka]'"
             ) from error
         admin_factory = admin_factory or AdminClient
         topic_factory = topic_factory or NewTopic
+        config_resource_factory = config_resource_factory or (
+            lambda name: ConfigResource(ResourceType.TOPIC, name)
+        )
 
     admin = admin_factory({"bootstrap.servers": bootstrap_servers})
     topics = [
@@ -103,6 +126,7 @@ def create_topics(
             contract.topic,
             num_partitions=contract.partitions,
             replication_factor=1,
+            config={"retention.ms": "604800000"},
         )
         for contract in TOPIC_CONTRACTS.values()
     ]
@@ -120,4 +144,37 @@ def create_topics(
             else:
                 failed += 1
                 errors.append(f"{topic}: {message}")
+
+    if hasattr(admin, "list_topics"):
+        metadata = admin.list_topics(timeout=10.0)
+        for contract in TOPIC_CONTRACTS.values():
+            topic_metadata = metadata.topics.get(contract.topic)
+            actual_partitions = (
+                len(topic_metadata.partitions) if topic_metadata is not None else 0
+            )
+            if actual_partitions != contract.partitions:
+                failed += 1
+                errors.append(
+                    f"{contract.topic}: expected {contract.partitions} partitions, "
+                    f"got {actual_partitions}"
+                )
+    if config_resource_factory is not None and hasattr(admin, "describe_configs"):
+        resources = [
+            config_resource_factory(contract.topic)
+            for contract in TOPIC_CONTRACTS.values()
+        ]
+        for resource, future in admin.describe_configs(resources).items():
+            try:
+                configuration = future.result()
+                retention = configuration.get("retention.ms")
+                actual_retention = getattr(retention, "value", retention)
+                if actual_retention != "604800000":
+                    failed += 1
+                    errors.append(
+                        f"{resource.name}: expected retention.ms=604800000, "
+                        f"got {actual_retention}"
+                    )
+            except Exception as error:
+                failed += 1
+                errors.append(f"{resource.name}: cannot verify config: {error}")
     return TopicBootstrapSummary(created, existing, failed, tuple(errors))

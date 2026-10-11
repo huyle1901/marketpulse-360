@@ -73,6 +73,16 @@ class KafkaContractTests(unittest.TestCase):
     def test_missing_partition_identity_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "partition key"):
             record_key("web_events", {"customer_id": None, "session_id": None})
+        with self.assertRaisesRegex(ValueError, "partition key"):
+            record_key(
+                "orders",
+                {"customer_id": None, "session_id": "not-an-order", "payload": {}},
+            )
+        with self.assertRaisesRegex(ValueError, "partition key"):
+            record_key(
+                "email_events",
+                {"customer_id": None, "session_id": "not-a-message", "payload": {}},
+            )
 
     def test_every_contract_loads_a_json_schema_with_required_identity(self) -> None:
         contract_dir = Path("contracts/kafka")

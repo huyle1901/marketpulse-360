@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import signal
 import sys
 from datetime import date
@@ -139,6 +140,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             controller = ReplayController()
             install_signal_handlers(controller)
+            pacing_mode = (
+                "no-sleep"
+                if config.no_sleep
+                else f"events-per-second={config.events_per_second:g}"
+                if config.events_per_second is not None
+                else f"speed={config.speed:g}x"
+            )
+            print(
+                f"replay pid={os.getpid()} pacing={pacing_mode}",
+                file=sys.stderr,
+            )
             publisher = ConfluentKafkaPublisher(args.bootstrap_servers)
             summary = replay(
                 iter_replay_records(args.input, include_dlq=args.include_dlq),

@@ -90,6 +90,13 @@ class ReplayController:
                 self._condition.wait()
             return self._paused_seconds
 
+    def wait_for_signal(self, timeout: float) -> None:
+        """Wait for a timeout, pause/resume, or stop notification."""
+
+        with self._condition:
+            if not self._stopped:
+                self._condition.wait(timeout=timeout)
+
 
 class ReplayPacer:
     def __init__(
@@ -104,6 +111,7 @@ class ReplayPacer:
         self.controller = controller
         self._monotonic = monotonic
         self._sleep = sleep
+        self._interruptible = sleep is time.sleep
         self._first_event_time: datetime | None = None
         self._started_at: float | None = None
         self._pause_baseline = 0.0
@@ -137,4 +145,7 @@ class ReplayPacer:
             remaining = target - self._monotonic()
             if remaining <= 0:
                 return
-            self._sleep(remaining)
+            if self._interruptible:
+                self.controller.wait_for_signal(remaining)
+            else:
+                self._sleep(remaining)

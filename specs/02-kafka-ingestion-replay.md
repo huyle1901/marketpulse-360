@@ -139,4 +139,3 @@ marketpulse-mock kafka replay --input data/mock/fixtures/seed-360 \
    delivery acknowledgements arrive.
 6. Architecture, backlog status, README, and an operator runbook reflect the tested
    commands and the exact implemented versions.
-

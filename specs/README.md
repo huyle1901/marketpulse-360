@@ -68,12 +68,13 @@ producer mode, and a no-sleep benchmark mode.
 - Invalid records are routed to a validation DLQ with a reason code.
 - Replaying the same deterministic input does not change reconciled totals.
 
-**Proof:** 106 automated tests pass. The pinned Docker stack runs Kafka `4.3.1`
+**Proof:** 118 automated tests pass. The pinned Docker stack runs Kafka `4.3.1`
 in KRaft mode, Apicurio Registry `3.3.3`, and Kafbat UI `1.5.0`. A clean smoke
 run acknowledged and consumed exactly 199 web, 14 order, 6 email, and 4 DLQ
 records. Its no-sleep replay delivered all 223 records in 0.595 seconds
 (374.5 records/second on the verification machine); this is a reproducibility
-measurement, not a production capacity claim.
+measurement, not a production capacity claim. The smoke verifier also compares
+the exact consumed event IDs and DLQ reason codes with the fixture.
 
 ### MP-03 - Stateful stream processing with Flink
 
