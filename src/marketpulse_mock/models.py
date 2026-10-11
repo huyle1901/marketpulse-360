@@ -60,4 +60,3 @@ class MasterData:
     products: tuple[Product, ...]
     campaigns: tuple[Campaign, ...]
     ads: tuple[Ad, ...]
-

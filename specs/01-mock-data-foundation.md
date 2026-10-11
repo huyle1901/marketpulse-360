@@ -255,6 +255,13 @@ retain `event_time` and change only `ingested_at`.
 Invalid records are written to an explicit `quality_cases` source so parsers can
 consume valid JSON while downstream validation decides whether to accept or reject
 each record. This makes every failure deterministic and explainable.
+Every quality case starts from a complete valid event and introduces exactly one
+defect, so all three expected DLQ reason codes can be demonstrated independently.
+
+Email unsubscribe events change effective consent on subsequent UTC days. Later
+email sends exclude those customers and CRM snapshots expose the updated marketing
+consent state. A configured anomaly rate of zero disables that anomaly completely;
+fixture coverage never overrides an explicit zero.
 
 ## Output contract
 

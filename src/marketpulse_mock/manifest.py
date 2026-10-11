@@ -51,4 +51,3 @@ class Manifest:
                 for stat in self.files
             ],
         }
-

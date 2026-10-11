@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 from marketpulse_mock.config import GenerationConfig, ScaleProfile, resolve_config
 from marketpulse_mock.generator import generate_dataset
@@ -133,6 +134,36 @@ class DatasetGenerationTests(unittest.TestCase):
             self.assertTrue((output / "manifest.json").exists())
             self.assertEqual("keep", sibling.read_text())
             self.assertEqual(360, manifest.seed)
+
+    def test_overwrite_refuses_symbolic_link_without_touching_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            parent = Path(temporary_directory)
+            target = parent / "real-output"
+            target.mkdir()
+            marker = target / "keep.txt"
+            marker.write_text("keep")
+            output_link = parent / "output-link"
+            output_link.symlink_to(target, target_is_directory=True)
+
+            with self.assertRaisesRegex(ValueError, "symbolic link"):
+                generate_dataset(
+                    resolve_config("fixture", 360, output_link),
+                    overwrite=True,
+                )
+
+            self.assertTrue(output_link.is_symlink())
+            self.assertEqual("keep", marker.read_text())
+
+    def test_overwrite_refuses_an_ancestor_of_the_working_directory(self) -> None:
+        protected_ancestor = Path.cwd().parent
+        with patch("marketpulse_mock.generator.shutil.rmtree") as remove_tree:
+            with self.assertRaisesRegex(ValueError, "unsafe overwrite target"):
+                generate_dataset(
+                    resolve_config("fixture", 360, protected_ancestor),
+                    overwrite=True,
+                )
+
+        remove_tree.assert_not_called()
 
     def test_small_rotation_limit_bounds_every_part(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

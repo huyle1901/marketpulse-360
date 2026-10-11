@@ -168,7 +168,9 @@ class DatasetWriter:
 
         if state.format == "csv":
             assert state.csv_writer is not None
-            state.csv_writer.writerow(record.payload)
+            state.csv_writer.writerow(
+                {key: _csv_value(value) for key, value in record.payload.items()}
+            )
         else:
             state.stream.write(
                 json.dumps(
@@ -267,6 +269,12 @@ def _dataset_format(dataset: str) -> str:
     if dataset in JSONL_DATASETS:
         return "jsonl"
     raise ValueError(f"unsupported dataset {dataset!r}")
+
+
+def _csv_value(value: object) -> object:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return value
 
 
 def _relative_path(

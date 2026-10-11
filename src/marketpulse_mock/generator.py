@@ -122,9 +122,10 @@ def generate_dataset(
 
 
 def _prepare_output(output_dir: Path, overwrite: bool) -> Path:
-    output = Path(output_dir).expanduser().resolve()
-    if output.is_symlink():
+    requested_output = Path(output_dir).expanduser()
+    if requested_output.is_symlink():
         raise ValueError("output directory must not be a symbolic link")
+    output = requested_output.resolve()
     if output.exists() and any(output.iterdir()):
         if not overwrite:
             raise FileExistsError(f"output directory is not empty: {output}")
@@ -136,7 +137,11 @@ def _prepare_output(output_dir: Path, overwrite: bool) -> Path:
 
 def _assert_safe_overwrite_target(output: Path) -> None:
     protected = {Path("/").resolve(), Path.home().resolve(), Path.cwd().resolve()}
-    if output in protected or len(output.parts) < 3:
+    contains_protected_path = any(
+        protected_path == output or output in protected_path.parents
+        for protected_path in protected
+    )
+    if contains_protected_path or len(output.parts) < 3:
         raise ValueError(f"refusing unsafe overwrite target: {output}")
 
 

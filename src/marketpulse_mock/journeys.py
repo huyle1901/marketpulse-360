@@ -150,7 +150,9 @@ def iter_day_records(
         while pending_records and pending_records[0][0] <= cutoff:
             yield heapq.heappop(pending_records)[2]
 
-    yield from _iter_crm_snapshots(config, masters, day, day_start)
+    yield from _iter_crm_snapshots(
+        config, masters, day_index, day, day_start
+    )
 
     for record in _iter_email_events(config, masters, day_index, day_start):
         yield from with_anomalies(record)
@@ -228,9 +230,8 @@ def iter_day_records(
                 ),
                 "device_type": device,
                 "market": "VN",
-                "is_bot": click_index == 0
-                or _is_scheduled(
-                    click_index, config.anomalies.bot_session, forced_index=-1
+                "is_bot": _is_scheduled(
+                    click_index, config.anomalies.bot_session, forced_index=0
                 ),
             },
         )
@@ -260,6 +261,8 @@ def iter_day_records(
         funnel_score = stable_int(
             config.seed, "funnel", day_index, impression_ordinal, modulo=1_000
         )
+        if click_index == 0:
+            funnel_score = 0
         if funnel_score < 850:
             view_item = _event_record(
                 config=config,
@@ -311,12 +314,26 @@ def iter_day_records(
             )
             enqueue(checkout)
 
-        purchase = click_index == 0 or funnel_score < 120
+        purchase = funnel_score < 120
         if purchase:
             purchase_time = event_time + timedelta(seconds=60)
-            attributed_touch = last_paid_touch((touch,), purchase_time)
+            attributed_touch = _latest_purchase_touch(
+                config=config,
+                masters=masters,
+                day_index=day_index,
+                impression_ordinal=impression_ordinal,
+                customer=customer,
+                current_touch=touch,
+                purchase_time=purchase_time,
+            )
             if attributed_touch is None:
                 raise AssertionError("new paid touch must be attributable")
+            attributed_campaign = next(
+                candidate
+                for candidate in masters.campaigns
+                if candidate.campaign_id == attributed_touch.campaign_id
+            )
+            attributed_aggregate = aggregates[attributed_campaign.campaign_id]
             quantity = 1 + stable_int(
                 config.seed,
                 "quantity",
@@ -328,8 +345,8 @@ def iter_day_records(
             order_id = stable_id(
                 config.seed, f"order-{day_index}", impression_ordinal
             )
-            aggregate.orders += 1
-            aggregate.gross_revenue_minor += amount_minor
+            attributed_aggregate.orders += 1
+            attributed_aggregate.gross_revenue_minor += amount_minor
 
             web_purchase = _event_record(
                 config=config,
@@ -341,8 +358,8 @@ def iter_day_records(
                 customer=customer,
                 anonymous_id=anonymous_id,
                 session_id=session_id,
-                campaign=campaign,
-                click_id=click_id,
+                campaign=attributed_campaign,
+                click_id=attributed_touch.click_id,
                 payload={
                     **_web_payload(product, device, "confirmation", False),
                     "order_id": order_id,
@@ -362,8 +379,8 @@ def iter_day_records(
                 customer=customer,
                 anonymous_id=anonymous_id,
                 session_id=session_id,
-                campaign=campaign,
-                click_id=click_id,
+                campaign=attributed_campaign,
+                click_id=attributed_touch.click_id,
                 payload={
                     "order_id": order_id,
                     "items": [
@@ -382,11 +399,11 @@ def iter_day_records(
             )
             enqueue(order_created)
 
-            refunded = order_index == 0 or _is_scheduled(
-                order_index, config.anomalies.refund, forced_index=-1
+            refunded = _is_scheduled(
+                order_index, config.anomalies.refund, forced_index=0
             )
             if refunded:
-                aggregate.refunds_minor += amount_minor
+                attributed_aggregate.refunds_minor += amount_minor
                 refund_event = _event_record(
                     config=config,
                     ordinal=(day_index * impression_count + impression_ordinal) * 10 + 7,
@@ -397,8 +414,8 @@ def iter_day_records(
                     customer=customer,
                     anonymous_id=anonymous_id,
                     session_id=session_id,
-                    campaign=campaign,
-                    click_id=click_id,
+                    campaign=attributed_campaign,
+                    click_id=attributed_touch.click_id,
                     payload={
                         **order_created.payload["payload"],
                         "refund_amount_minor": amount_minor,
@@ -407,8 +424,12 @@ def iter_day_records(
                 enqueue(refund_event)
             order_index += 1
 
-        if click_index == 0 or _is_scheduled(
-            click_index, config.anomalies.invalid_case, forced_index=-1
+        if config.anomalies.invalid_case > 0 and (
+            (day_index == 0 and click_index < 3)
+            or click_index == 0
+            or _is_scheduled(
+                click_index, config.anomalies.invalid_case, forced_index=-1
+            )
         ):
             yield _quality_case(
                 config,
@@ -452,10 +473,20 @@ def iter_day_records(
 def _iter_crm_snapshots(
     config: GenerationConfig,
     masters: MasterData,
+    day_index: int,
     day: date,
     day_start: datetime,
 ) -> Iterator[SourceRecord]:
+    email_ordinals = {
+        customer.customer_id: ordinal
+        for ordinal, customer in enumerate(_email_audience(masters))
+    }
     for ordinal, customer in enumerate(masters.customers):
+        email_ordinal = email_ordinals.get(customer.customer_id)
+        consent_marketing = customer.consent_marketing and not (
+            email_ordinal is not None
+            and _email_unsubscribed_before(config, email_ordinal, day_index)
+        )
         yield SourceRecord(
             dataset="crm",
             event_time=day_start,
@@ -469,7 +500,7 @@ def _iter_crm_snapshots(
                 ),
                 "last_order_at": None,
                 "consent_analytics": customer.consent_analytics,
-                "consent_marketing": customer.consent_marketing,
+                "consent_marketing": consent_marketing,
             },
         )
 
@@ -480,9 +511,9 @@ def _iter_email_events(
     day_index: int,
     day_start: datetime,
 ) -> Iterator[SourceRecord]:
-    eligible = [customer for customer in masters.customers if customer.consent_marketing]
-    selected_count = max(1, len(eligible) // 50)
-    for ordinal, customer in enumerate(eligible[:selected_count]):
+    for ordinal, customer in enumerate(_email_audience(masters)):
+        if _email_unsubscribed_before(config, ordinal, day_index):
+            continue
         message_id = stable_id(config.seed, f"email-{day_index}", ordinal)
         session_id = stable_id(config.seed, f"email-session-{day_index}", ordinal)
         event_time = day_start + timedelta(hours=8, seconds=ordinal * 10)
@@ -523,6 +554,34 @@ def _iter_email_events(
                     },
                 ),
             )
+
+
+def _email_audience(masters: MasterData) -> tuple[Customer, ...]:
+    eligible = tuple(
+        customer
+        for customer in masters.customers
+        if customer.consent_marketing
+    )
+    selected_count = max(1, len(eligible) // 50)
+    return eligible[:selected_count]
+
+
+def _email_unsubscribed_before(
+    config: GenerationConfig,
+    email_ordinal: int,
+    day_index: int,
+) -> bool:
+    return any(
+        stable_int(
+            config.seed,
+            "email",
+            previous_day,
+            email_ordinal,
+            modulo=100,
+        )
+        == 0
+        for previous_day in range(day_index)
+    )
 
 
 def _event_record(
@@ -620,13 +679,25 @@ def _quality_case(
         "ORPHAN_CLICK_ID",
     )
     error_code = error_codes[ordinal % len(error_codes)]
-    invalid_record: dict[str, object] = {
-        "event_id": stable_id(config.seed, f"invalid-{day_index}", ordinal),
-        "event_name": "page_view",
-        "schema_version": 1,
-        "campaign_id": campaign.campaign_id,
-        "click_id": click_id,
-    }
+    invalid_record = _envelope(
+        event_id=stable_id(config.seed, f"invalid-{day_index}", ordinal),
+        event_name="page_view",
+        event_time=event_time,
+        source="web",
+        customer=None,
+        anonymous_id=stable_id(config.seed, f"invalid-anonymous-{day_index}", ordinal),
+        session_id=stable_id(config.seed, f"invalid-session-{day_index}", ordinal),
+        campaign=campaign,
+        click_id=click_id,
+        payload={
+            "product_id": None,
+            "page_url": "https://shop.marketpulse.example.test/quality-case",
+            "device_type": "desktop",
+            "market": "VN",
+            "is_bot": False,
+        },
+    )
+    invalid_record["is_late"] = False
     if error_code == "MISSING_REQUIRED_FIELD":
         invalid_record.pop("event_id")
     elif error_code == "UNSUPPORTED_SCHEMA_VERSION":
@@ -691,6 +762,64 @@ def _vendor_report_payload(
     }
 
 
+def _latest_purchase_touch(
+    *,
+    config: GenerationConfig,
+    masters: MasterData,
+    day_index: int,
+    impression_ordinal: int,
+    customer: Customer | None,
+    current_touch: PaidTouch,
+    purchase_time: datetime,
+) -> PaidTouch | None:
+    """Resolve last paid click, including clicks during an overlapping journey."""
+
+    if customer is None:
+        return current_touch
+    touches = [current_touch]
+    impression_count = config.profile.impressions_per_day
+    day = config.start_date + timedelta(days=day_index)
+    day_start = datetime.combine(day, time.min, tzinfo=timezone.utc)
+    for candidate_ordinal in range(impression_ordinal + 1, impression_count):
+        candidate_time = day_start + timedelta(
+            seconds=(candidate_ordinal * 86_000) // max(1, impression_count)
+        )
+        if candidate_time > purchase_time:
+            break
+        campaign = masters.campaigns[candidate_ordinal % len(masters.campaigns)]
+        click_score = stable_int(
+            config.seed,
+            "click",
+            day_index,
+            candidate_ordinal,
+            modulo=1_000,
+        )
+        if click_score >= _click_threshold(campaign):
+            continue
+        candidate_customer = _select_customer(
+            config,
+            masters.customers,
+            day_index,
+            candidate_ordinal,
+        )
+        if candidate_customer != customer:
+            continue
+        touches.append(
+            PaidTouch(
+                click_id=_click_id(
+                    config.seed,
+                    campaign.platform,
+                    day_index,
+                    candidate_ordinal,
+                ),
+                campaign_id=campaign.campaign_id,
+                platform=campaign.platform,
+                event_time=candidate_time,
+            )
+        )
+    return last_paid_touch(touches, purchase_time)
+
+
 def _select_customer(
     config: GenerationConfig,
     customers: tuple[Customer, ...],
@@ -752,10 +881,10 @@ def _click_id(
 
 
 def _is_scheduled(index: int, rate: float, forced_index: int) -> bool:
-    if index == forced_index:
-        return True
     if rate <= 0:
         return False
+    if index == forced_index:
+        return True
     interval = max(1, round(1 / rate))
     return (index + 1) % interval == 0
 

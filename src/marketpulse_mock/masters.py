@@ -61,11 +61,20 @@ def _generate_customers(config: GenerationConfig) -> tuple[Customer, ...]:
                 loyalty_tier=tiers[
                     stable_int(config.seed, "customer-tier", ordinal, modulo=3)
                 ],
-                consent_analytics=(ordinal + 1) % 20 != 0,
+                consent_analytics=not _is_scheduled_rate(
+                    ordinal, config.anomalies.no_analytics_consent
+                ),
                 consent_marketing=(ordinal + 1) % 10 != 0,
             )
         )
     return tuple(customers)
+
+
+def _is_scheduled_rate(ordinal: int, rate: float) -> bool:
+    if rate <= 0:
+        return False
+    interval = max(1, round(1 / rate))
+    return (ordinal + 1) % interval == 0
 
 
 def _generate_products(config: GenerationConfig) -> tuple[Product, ...]:

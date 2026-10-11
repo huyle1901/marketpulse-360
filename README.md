@@ -13,10 +13,10 @@ to Kafka and ingest batch-shaped sources through Dagster.
 
 ## Current proof
 
-- 53 automated tests cover configuration, deterministic IDs, cross-source journeys,
+- 69 automated tests cover configuration, deterministic IDs, cross-source journeys,
   file rotation, checksums, CLI behavior, and semantic validation.
-- The committed fixture contains 613 rows in 22 compressed files.
-- The validated `demo` profile produces 1,202,860 rows in 130 files (about 90 MB)
+- The committed fixture contains 615 rows in 22 compressed files.
+- The validated `demo` profile produces 1,200,225 rows in 130 files (about 90 MB)
   for seed `360`.
 - Every run writes a manifest with configuration, file hashes, row counts, time
   bounds, source totals, and injected anomaly counts.
@@ -65,4 +65,3 @@ The future application's operational data is different. Accounts, roles, saved
 segments, alert rules, annotations, and configuration are created by application
 users and will live in PostgreSQL. Analytical results shown by the application will
 come from ClickHouse and Iceberg, not from that operational database.
-

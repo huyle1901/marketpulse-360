@@ -162,6 +162,13 @@ The generator writes each source incrementally. A bounded priority queue merges 
 the currently overlapping journeys so every replayable partition remains ordered by
 event time without sorting or retaining a whole day in memory.
 
+Purchases use the latest eligible paid click, including a newer click that occurs
+while journeys overlap. Email unsubscribe events deterministically update later CRM
+snapshots and suppress future sends. The validator checks source-specific envelopes,
+UTC partitions, schemas, file hashes, anomalies, cross-source attribution, ad spend,
+orders, refunds, and daily ground truth. Its reconciliation state is finalized and
+released at each date boundary so memory does not grow across the complete run.
+
 Mock source data is not application operational data. User accounts, saved segments,
 alert rules, annotations, and platform configuration created through the future
 MarketPulse 360 application remain a separate PostgreSQL domain.
@@ -172,12 +179,12 @@ As of 2026-10-11, the source-simulation boundary is implemented and verified:
 
 | Evidence | Result |
 |---|---:|
-| Automated tests | 53 passing |
-| Committed seed-360 fixture | 613 rows, 22 files, 116 KB |
-| Local seed-360 demo | 1,202,860 rows, 130 files, about 90 MB compressed |
+| Automated tests | 69 passing |
+| Committed seed-360 fixture | 615 rows, 22 files, 116 KB |
+| Local seed-360 demo | 1,200,225 rows, 130 files, about 90 MB compressed |
 | Demo time range | 2026-01-01 through 2026-01-14 UTC |
 | Demo master data | 50,000 customers, 30 campaigns, 1,000 products |
-| Demo injected anomalies | 6,725 late, 2,249 duplicate, 623 bot, 308 invalid, 922 refund events |
+| Demo injected anomalies | 6,688 late, 2,237 duplicate, 619 bot, 310 invalid, 917 refund events |
 
 The fixture is tracked for repeatable tests. The demo is regenerated from its seed
 and remains outside Git. Both use the same CLI, schemas, writer, manifest, and

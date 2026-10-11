@@ -2,7 +2,7 @@
   "anomalies": {
     "bot_events": 4,
     "duplicate_events": 2,
-    "invalid_cases": 2,
+    "invalid_cases": 4,
     "late_events": 3,
     "no_analytics_consent_customers": 5,
     "refund_events": 2
@@ -36,31 +36,31 @@
     "master/products": 50,
     "meta_ads": 4,
     "orders": 14,
-    "quality_cases": 2,
+    "quality_cases": 4,
     "tiktok_ads": 4,
     "web_events": 199
   },
   "end_date": "2026-01-02",
   "files": [
     {
-      "byte_size": 3557,
+      "byte_size": 3553,
       "dataset": "crm",
       "format": "csv",
       "max_event_time": "2026-01-01T00:00:00Z",
       "min_event_time": "2026-01-01T00:00:00Z",
       "relative_path": "crm/date=2026-01-01/part-00000.csv.gz",
       "row_count": 100,
-      "sha256": "8427edc1a3f4c99c94d25009d6c97dbf073c8de4d1700e49f2b85abb7c229e08"
+      "sha256": "07dd683894db3beba6f3acab773e98bc6349e6f8ea81779f6cbf3942797eb6f7"
     },
     {
-      "byte_size": 3555,
+      "byte_size": 3551,
       "dataset": "crm",
       "format": "csv",
       "max_event_time": "2026-01-02T00:00:00Z",
       "min_event_time": "2026-01-02T00:00:00Z",
       "relative_path": "crm/date=2026-01-02/part-00000.csv.gz",
       "row_count": 100,
-      "sha256": "4a644bf3da3b49edc13e8f97b3f1d8aab7df58442b4bf8e0c69545da51004008"
+      "sha256": "c7cad4fa0ec064581099edea383a900f9caa75038d30f0adc9f76705d90eba7b"
     },
     {
       "byte_size": 410,
@@ -143,14 +143,14 @@
       "sha256": "baa9ef9e97c61d04acfee895404073b0e2c820c861898cbc275d4207d431a588"
     },
     {
-      "byte_size": 4355,
+      "byte_size": 4353,
       "dataset": "master/customers",
       "format": "csv",
       "max_event_time": "2026-01-01T00:00:00Z",
       "min_event_time": "2026-01-01T00:00:00Z",
       "relative_path": "master/customers.csv.gz",
       "row_count": 100,
-      "sha256": "f6f92f92530674d1e1fa57a21ebd5836a5ddb7da4c0e57324e97fdbad35f607a"
+      "sha256": "eb7b5a4055c728e9677e1347412c3c34242a2fb2b52eb783296ae5e3cfe2bfbd"
     },
     {
       "byte_size": 1870,
@@ -203,24 +203,24 @@
       "sha256": "920f18b7645f50e17fc8cea0530af33159f3c31909036d9f5c37ee0d6a81a26c"
     },
     {
-      "byte_size": 275,
+      "byte_size": 928,
       "dataset": "quality_cases",
       "format": "jsonl",
-      "max_event_time": "2026-01-01T00:05:44Z",
+      "max_event_time": "2026-01-01T00:28:40Z",
       "min_event_time": "2026-01-01T00:05:44Z",
       "relative_path": "quality_cases/date=2026-01-01/part-00000.jsonl.gz",
-      "row_count": 1,
-      "sha256": "cdb9df943792cb7b956ed04b2375612554e11682d7874c287a3914b4d9854aa6"
+      "row_count": 3,
+      "sha256": "50f39a2501ebed74287e03ffa60098fe2c499398528456976201d0f47a76a85f"
     },
     {
-      "byte_size": 275,
+      "byte_size": 500,
       "dataset": "quality_cases",
       "format": "jsonl",
       "max_event_time": "2026-01-02T00:20:04Z",
       "min_event_time": "2026-01-02T00:20:04Z",
       "relative_path": "quality_cases/date=2026-01-02/part-00000.jsonl.gz",
       "row_count": 1,
-      "sha256": "08acc0aff78f052c85982b5649f8253f39cc772ceb56961990461d8a37641a42"
+      "sha256": "be3f6fc6fa0fdd6d24c5b034c6b04a345646cb0985a9bec917048715b62a110b"
     },
     {
       "byte_size": 145,

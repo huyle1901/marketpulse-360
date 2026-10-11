@@ -64,4 +64,3 @@ CRM snapshots and ad-platform reports are batch sources and will be ingested thr
 Dagster. The generator does not publish to Kafka itself, which keeps source creation
 deterministic and lets ingestion tests replay the exact same bytes at different
 speeds.
-

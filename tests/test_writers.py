@@ -156,6 +156,33 @@ class DatasetWriterTests(unittest.TestCase):
 
         self.assertEqual("master/customers.csv.gz", relative_path)
 
+    def test_csv_booleans_use_lowercase_contract_values(self) -> None:
+        record = SourceRecord(
+            dataset="master/customers",
+            event_time=self.start,
+            payload={
+                "customer_id": "customer-1",
+                "email": "customer-1@marketpulse.example.test",
+                "phone_token": "synthetic-0000000001",
+                "created_at": "2025-01-01T00:00:00Z",
+                "country": "VN",
+                "city": "Da Nang",
+                "loyalty_tier": "silver",
+                "consent_analytics": True,
+                "consent_marketing": False,
+            },
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            writer = DatasetWriter(Path(temporary_directory), rows_per_file=10)
+            writer.write(record)
+            relative_path = writer.close()[0].relative_path
+            with gzip.open(
+                Path(temporary_directory) / relative_path, "rt", encoding="utf-8"
+            ) as stream:
+                row = stream.read().splitlines()[1]
+
+        self.assertTrue(row.endswith(",true,false"), row)
+
     def test_close_does_not_leak_the_underlying_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             writer = DatasetWriter(Path(temporary_directory), rows_per_file=10)

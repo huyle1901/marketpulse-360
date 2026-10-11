@@ -49,8 +49,8 @@ Ads, web/mobile analytics, CRM, commerce, and email systems.
 - Files preserve event time and can later be replayed with a speed parameter.
 
 **Proof:** `python -m unittest discover -s tests -v`, fixture manifest, and a local
-demo-profile generation report. Seed `360` currently proves 53 passing tests, a
-committed 613-row/22-file fixture, and a validated 1,202,860-row/130-file demo run.
+demo-profile generation report. Seed `360` currently proves 69 passing tests, a
+committed 615-row/22-file fixture, and a validated 1,200,225-row/130-file demo run.
 
 ### MP-02 - Kafka ingestion and replay controls
 
