@@ -250,6 +250,25 @@ Kafka deployment decisions:
 - Route deterministic MP-01 quality cases to `marketing.dlq.validation.v1` with
   their expected reason code; CRM and ad reports stay on the later batch path.
 
+### 5.1 Implemented evidence (MP-02)
+
+As of 2026-10-11, the Kafka ingestion boundary is implemented and verified with
+106 passing automated tests plus a clean real-container smoke run. The pinned
+stack is Kafka `4.3.1`, Apicurio Registry `3.3.3`, and Kafbat UI `1.5.0`.
+
+| Fixture delivery evidence | Acknowledged and consumed |
+|---|---:|
+| `marketing.raw.web-events.v1` | 199 |
+| `marketing.raw.order-events.v1` | 14 |
+| `marketing.raw.email-events.v1` | 6 |
+| `marketing.dlq.validation.v1` | 4 |
+| Total | 223 |
+
+The verification run registered the four JSON Schema contracts twice to prove
+idempotence and delivered 223 records in 0.595 seconds (374.5 records/second) in
+no-sleep mode. This small fixture measurement proves the control path and exact
+accounting; MP-10 will perform capacity benchmarks on named larger profiles.
+
 ## 6. Storage decision: BigQuery versus PostgreSQL
 
 BigQuery and PostgreSQL do not solve the same problem and should not be treated
