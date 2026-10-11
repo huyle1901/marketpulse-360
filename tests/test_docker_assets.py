@@ -51,6 +51,7 @@ class DockerAssetTests(unittest.TestCase):
         self.assertIn("PartitionCount: ${partitions}", script)
         self.assertIn("retention.ms=${retention_ms}", script)
         self.assertIn("cleanup.policy=", script)
+        self.assertIn("s/^[[:space:]]*cleanup.policy=", script)
 
     def test_replay_image_is_pinned_and_runs_as_non_root(self) -> None:
         dockerfile = (ROOT / "docker/replay/Dockerfile").read_text()
@@ -58,6 +59,53 @@ class DockerAssetTests(unittest.TestCase):
         self.assertIn("FROM python:3.12.12-slim-bookworm", dockerfile)
         self.assertIn("USER marketpulse", dockerfile)
         self.assertIn('ENTRYPOINT ["marketpulse-mock"]', dockerfile)
+
+    def test_flink_image_is_pinned_multistage_and_runs_as_non_root(self) -> None:
+        dockerfile = (ROOT / "docker/flink/Dockerfile").read_text()
+
+        self.assertIn("FROM maven:3.9.11-eclipse-temurin-17 AS builder", dockerfile)
+        self.assertIn("FROM flink:2.2.1-java17", dockerfile)
+        self.assertIn("mvn -q -f flink-job/pom.xml clean package -DskipTests", dockerfile)
+        self.assertIn("/opt/flink/usrlib/marketpulse-flink-job.jar", dockerfile)
+        self.assertIn("USER flink", dockerfile)
+
+    def test_compose_defines_healthy_flink_cluster_and_exact_job_arguments(self) -> None:
+        compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+
+        for service in ("flink-jobmanager:", "flink-taskmanager:", "flink-job-submit:"):
+            self.assertIn(service, compose)
+        self.assertIn('"8082:8081"', compose)
+        self.assertIn("taskmanager.numberOfTaskSlots: 2", compose)
+        self.assertIn("jobmanager.memory.process.size: 768m", compose)
+        self.assertIn("taskmanager.memory.process.size: 1024m", compose)
+        self.assertIn("flink_checkpoints:/opt/flink/checkpoints", compose)
+        self.assertGreaterEqual(compose.count("- flink"), 3)
+        self.assertGreaterEqual(compose.count("condition: service_healthy"), 7)
+        for argument in (
+            "--bootstrap-servers=kafka:29092",
+            "--group-id=marketpulse-flink-v1",
+            "--checkpoint-uri=file:///opt/flink/checkpoints",
+            "--checkpoint-interval-ms=5000",
+            "--watermark-ms=300000",
+            "--idleness-ms=60000",
+            "--correction-horizon-ms=600000",
+            "--session-gap-ms=1800000",
+            "--dedup-ttl-ms=604800000",
+            "--parallelism=2",
+            "--transaction-prefix=marketpulse-flink-v1-",
+            "--job-name=marketpulse-stream-v1",
+        ):
+            self.assertIn(argument, compose)
+        self.assertIn("flink_checkpoints:", compose)
+
+    def test_flink_submitter_is_idempotent_for_running_named_job(self) -> None:
+        script = (ROOT / "docker/flink/submit-job.sh").read_text()
+
+        self.assertIn("/jobs/overview", script)
+        self.assertIn("marketpulse-stream-v1", script)
+        self.assertIn('"state":"RUNNING"', script)
+        self.assertIn("already RUNNING", script)
+        self.assertIn("flink run -d", script)
 
     def test_smoke_script_asserts_fixture_delivery_counts(self) -> None:
         script = (ROOT / "scripts/kafka-smoke-test.sh").read_text()

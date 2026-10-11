@@ -6,17 +6,20 @@ Kafka, Flink, Iceberg on MinIO, ClickHouse, PostgreSQL, Dagster, dbt, FastAPI, a
 Next.js in a Docker-based local environment. BigQuery/BigLake remains an optional
 cloud benchmark rather than a runtime dependency.
 
-The repository currently implements **MP-01: reproducible omnichannel mock data**
-and **MP-02: Kafka ingestion and replay controls**. It generates coherent data
+The repository implements **MP-01: reproducible omnichannel mock data** and
+**MP-02: Kafka ingestion and replay controls**. MP-03 now includes the versioned
+contracts, stateful Java job, and local Flink cluster; its automated recovery proof
+is the remaining delivery slice. The project generates coherent data
 shaped like Google Ads, Meta Ads, TikTok Ads, web/mobile analytics, CRM, commerce,
 and email systems, then replays event-shaped sources to versioned Kafka topics.
 Batch-shaped sources remain inputs to the later Dagster milestone.
 
 ## Current proof
 
-- 118 automated tests cover mock-data correctness plus Kafka contracts, bounded
+- 122 Python tests and 23 Java tests cover mock-data correctness, Kafka contracts, bounded
   replay ordering, pacing, idempotent delivery, registry behavior, CLI behavior,
-  and Docker assets.
+  Docker assets, raw-event validation, checkpointed deduplication, late events,
+  sessions, campaign KPIs, Kafka serde, and the executable Flink graph.
 - The committed fixture contains 615 rows in 22 compressed files.
 - The validated `demo` profile produces 1,200,225 rows in 130 files (about 90 MB)
   for seed `360`.
@@ -59,6 +62,19 @@ docker compose --profile streaming up -d --build --wait
 docker compose --profile streaming ps
 ./scripts/kafka-smoke-test.sh
 ```
+
+Start Kafka and the stateful Flink job together with:
+
+```bash
+docker compose --profile streaming --profile flink up -d --build --wait
+docker compose --profile streaming --profile flink ps
+curl -fsS http://localhost:8082/jobs/overview
+```
+
+The Flink dashboard is at <http://localhost:8082>; Kafka UI remains at
+<http://localhost:8080>. The one-shot submitter is idempotent: running it again
+reports that `marketpulse-stream-v1` is already `RUNNING` instead of creating a
+second job.
 
 The smoke test uses an isolated Compose project and cleans it up. For manual
 replay, contract registration, pause/resume, UI inspection, and reset commands,

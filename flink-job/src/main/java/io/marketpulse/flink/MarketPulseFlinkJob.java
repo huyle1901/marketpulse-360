@@ -18,6 +18,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Properties;
 import java.util.UUID;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.typeinfo.TypeHint;
@@ -147,6 +148,7 @@ public final class MarketPulseFlinkJob {
                 .union(sessions, funnel, revenue, campaign, validationDlq);
         KafkaSink<OutputRecord> sink = KafkaSink.<OutputRecord>builder()
                 .setBootstrapServers(config.bootstrapServers())
+                .setKafkaProducerConfig(kafkaProducerProperties())
                 .setDeliveryGuarantee(DeliveryGuarantee.EXACTLY_ONCE)
                 .setTransactionalIdPrefix(config.transactionPrefix())
                 .setRecordSerializer(new OutputRecordSerializationSchema())
@@ -155,6 +157,12 @@ public final class MarketPulseFlinkJob {
                 .name("dynamic-kafka-sink")
                 .uid("dynamic-kafka-sink");
         return outputs;
+    }
+
+    static Properties kafkaProducerProperties() {
+        Properties properties = new Properties();
+        properties.setProperty("transaction.timeout.ms", "600000");
+        return properties;
     }
 
     private static void configureEnvironment(

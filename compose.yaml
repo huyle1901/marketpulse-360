@@ -94,5 +94,111 @@ services:
       - ./data:/app/data:ro
     entrypoint: ["marketpulse-mock"]
 
+  flink-jobmanager:
+    image: marketpulse-360/flink-job:2.2.1
+    build:
+      context: .
+      dockerfile: docker/flink/Dockerfile
+    profiles:
+      - flink
+    command: jobmanager
+    depends_on:
+      kafka:
+        condition: service_healthy
+      topic-init:
+        condition: service_completed_successfully
+    ports:
+      - "8082:8081"
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        rest.address: 0.0.0.0
+        rest.bind-address: 0.0.0.0
+        jobmanager.memory.process.size: 768m
+        taskmanager.numberOfTaskSlots: 2
+        parallelism.default: 2
+        state.checkpoints.dir: file:///opt/flink/checkpoints
+    volumes:
+      - flink_checkpoints:/opt/flink/checkpoints
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/overview >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 896M
+
+  flink-taskmanager:
+    image: marketpulse-360/flink-job:2.2.1
+    build:
+      context: .
+      dockerfile: docker/flink/Dockerfile
+    profiles:
+      - flink
+    command: taskmanager
+    depends_on:
+      kafka:
+        condition: service_healthy
+      flink-jobmanager:
+        condition: service_healthy
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.memory.process.size: 1024m
+        taskmanager.numberOfTaskSlots: 2
+        parallelism.default: 2
+        state.checkpoints.dir: file:///opt/flink/checkpoints
+    volumes:
+      - flink_checkpoints:/opt/flink/checkpoints
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://flink-jobmanager:8081/taskmanagers | grep -q taskmanagers"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 1280M
+
+  flink-job-submit:
+    image: marketpulse-360/flink-job:2.2.1
+    build:
+      context: .
+      dockerfile: docker/flink/Dockerfile
+    profiles:
+      - flink
+    depends_on:
+      kafka:
+        condition: service_healthy
+      topic-init:
+        condition: service_completed_successfully
+      flink-jobmanager:
+        condition: service_healthy
+      flink-taskmanager:
+        condition: service_healthy
+    environment:
+      FLINK_JOBMANAGER_URL: http://flink-jobmanager:8081
+      FLINK_JOB_NAME: marketpulse-stream-v1
+    entrypoint: ["/opt/flink/bin/submit-marketpulse-job"]
+    command:
+      - --bootstrap-servers=kafka:29092
+      - --group-id=marketpulse-flink-v1
+      - --checkpoint-uri=file:///opt/flink/checkpoints
+      - --checkpoint-interval-ms=5000
+      - --watermark-ms=300000
+      - --idleness-ms=60000
+      - --correction-horizon-ms=600000
+      - --session-gap-ms=1800000
+      - --dedup-ttl-ms=604800000
+      - --parallelism=2
+      - --transaction-prefix=marketpulse-flink-v1-
+      - --job-name=marketpulse-stream-v1
+    restart: "no"
+
 volumes:
   kafka_data:
+  flink_checkpoints:

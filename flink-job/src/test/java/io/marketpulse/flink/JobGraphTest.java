@@ -54,4 +54,12 @@ class JobGraphTest {
                 environment.getCheckpointConfig().getExternalizedCheckpointRetention());
         assertEquals(1, environment.getParallelism());
     }
+
+    @Test
+    void kafkaTransactionTimeoutFitsTheLocalBrokerLimit() {
+        assertEquals(
+                "600000",
+                MarketPulseFlinkJob.kafkaProducerProperties()
+                        .getProperty("transaction.timeout.ms"));
+    }
 }

@@ -310,8 +310,16 @@ Implementation progress on `feat/flink-stream-processing`:
 | Flink raw-byte parser and validation DLQ | Implemented: Java 17 boundary preserves Kafka lineage, validates all three source envelopes, and covers 10 deterministic failure reasons in 3 JUnit tests |
 | Flink stateful transformations | Implemented: checkpoint-restored 7-day deduplication, late/correction classification, 30-minute session upserts, and unified campaign/funnel/revenue state; 12 operator-harness tests |
 | Executable Flink job | Implemented: three-topic Kafka source, validation side output, event-time/state branches, and one exactly-once dynamic Kafka sink in a 23 MB shaded JAR; 23 Java tests |
-| Dockerized Flink cluster | Planned |
+| Dockerized Flink cluster | Implemented: pinned Java 17 multi-stage image, healthy JobManager/TaskManager, two slots, retained checkpoint volume, idempotent named-job submission, and dashboard on port 8082 |
 | Mid-replay recovery evidence | Planned |
+
+The local deployment was exercised against Kafka `4.3.1`: job
+`marketpulse-stream-v1` reached `RUNNING` with all 10 execution tasks running,
+one registered TaskManager, two occupied slots, and completed checkpoint `1` at
+`file:///opt/flink/checkpoints`. Re-running the submitter returned success without
+creating a duplicate job. The Kafka producer transaction timeout is explicitly ten
+minutes so it stays below the local broker maximum while comfortably exceeding the
+five-second checkpoint interval.
 
 ## 6. Storage decision: BigQuery versus PostgreSQL
 

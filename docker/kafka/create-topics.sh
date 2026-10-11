@@ -57,7 +57,7 @@ for topic in ${topics}; do
     echo "topic ${topic} has incompatible retention.ms" >&2
     exit 1
   }
-  actual_cleanup="$(sed -n 's/.*cleanup.policy=\([^ ]*\).*/\1/p' <<<"${configuration}")"
+  actual_cleanup="$(sed -n 's/^[[:space:]]*cleanup.policy=\([^ ]*\).*/\1/p' <<<"${configuration}")"
   expected_cleanup="$(tr ',' '\n' <<<"${cleanup_policy}" | sort | paste -sd, -)"
   normalized_cleanup="$(tr ',' '\n' <<<"${actual_cleanup}" | sort | paste -sd, -)"
   [[ "${normalized_cleanup}" == "${expected_cleanup}" ]] || {
