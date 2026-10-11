@@ -148,12 +148,13 @@ contains `event_id:str`, `event_name:str`, `event_time:timestamp`,
 `ingested_at:timestamp`, `source:enum[web,mobile,commerce,email]`,
 `schema_version:int=1`, nullable `customer_id`, `anonymous_id`, `session_id`,
 `campaign_id`, `platform_campaign_id`, and `click_id`,
-`consent_analytics:bool`, plus `payload:object`.
+`consent_analytics:bool`, `is_late:bool`, plus `payload:object`.
 
 - Web/mobile event names are `page_view`, `view_item`, `add_to_cart`,
   `begin_checkout`, and `purchase`. Payload uses nullable `product_id`,
   `page_url`, `device_type:enum[desktop,mobile,tablet]`, `market:str`, and for
-  purchase `order_id`, `amount_minor:int`, `currency:enum[VND]`.
+  all web events `is_bot:bool`; purchase also includes `order_id`,
+  `amount_minor:int`, `currency:enum[VND]`.
 - Commerce event names are `order_created` and `order_refunded`. Payload contains
   `order_id`, `items:list[{product_id,quantity,unit_price_minor}]`,
   `gross_amount_minor`, `refund_amount_minor`, `currency:enum[VND]`, and nullable
@@ -245,9 +246,11 @@ Default rates are deterministic schedules over eligible records, not random draw
 | refund | 5.0% of created orders |
 | orphan click quality case | included in the invalid 0.2% allocation |
 
-Each enabled anomaly has at least one occurrence in `fixture`; larger profiles use
-`floor(eligible_records * rate)` with a minimum of one. Duplicate rows retain the
-same `event_id`; late rows retain `event_time` and change only `ingested_at`.
+Each enabled anomaly has at least one occurrence in `fixture`. Larger profiles use a
+deterministic ordinal schedule with interval `round(1 / rate)`, so realized rates
+converge to the configured targets without retaining all events in memory. The
+manifest records actual counts. Duplicate rows retain the same `event_id`; late rows
+retain `event_time` and change only `ingested_at`.
 
 Invalid records are written to an explicit `quality_cases` source so parsers can
 consume valid JSON while downstream validation decides whether to accept or reject
