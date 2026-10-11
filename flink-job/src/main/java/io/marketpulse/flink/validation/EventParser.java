@@ -7,6 +7,7 @@ import io.marketpulse.flink.model.InvalidRecord.ReasonCode;
 import io.marketpulse.flink.model.MarketingEvent;
 import io.marketpulse.flink.model.RawKafkaRecord;
 import io.marketpulse.flink.serde.JsonSupport;
+import java.io.Serializable;
 import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -15,7 +16,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-public final class EventParser {
+public final class EventParser implements Serializable {
     private static final Set<String> REQUIRED = Set.of(
             "event_id", "event_name", "event_time", "ingested_at", "source",
             "schema_version", "customer_id", "anonymous_id", "session_id",

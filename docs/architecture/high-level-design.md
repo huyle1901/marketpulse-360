@@ -309,7 +309,8 @@ Implementation progress on `feat/flink-stream-processing`:
 | Kafka topic/schema assets | Implemented: 10 versioned contracts with contract-driven retention and cleanup validation |
 | Flink raw-byte parser and validation DLQ | Implemented: Java 17 boundary preserves Kafka lineage, validates all three source envelopes, and covers 10 deterministic failure reasons in 3 JUnit tests |
 | Flink stateful transformations | Implemented: checkpoint-restored 7-day deduplication, late/correction classification, 30-minute session upserts, and unified campaign/funnel/revenue state; 12 operator-harness tests |
-| Executable job and Docker cluster | Planned |
+| Executable Flink job | Implemented: three-topic Kafka source, validation side output, event-time/state branches, and one exactly-once dynamic Kafka sink in a 23 MB shaded JAR; 23 Java tests |
+| Dockerized Flink cluster | Planned |
 | Mid-replay recovery evidence | Planned |
 
 ## 6. Storage decision: BigQuery versus PostgreSQL
