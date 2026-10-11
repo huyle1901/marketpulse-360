@@ -33,7 +33,7 @@ the group can select enough after its final member count is known.
 
 ### MP-01 - Reproducible omnichannel mock data
 
-**Status:** In progress
+**Status:** Implemented
 
 Generate coherent, deterministic data that resembles Google Ads, Meta Ads, TikTok
 Ads, web/mobile analytics, CRM, commerce, and email systems.
@@ -49,7 +49,8 @@ Ads, web/mobile analytics, CRM, commerce, and email systems.
 - Files preserve event time and can later be replayed with a speed parameter.
 
 **Proof:** `python -m unittest discover -s tests -v`, fixture manifest, and a local
-demo-profile generation report.
+demo-profile generation report. Seed `360` currently proves 53 passing tests, a
+committed 613-row/22-file fixture, and a validated 1,202,860-row/130-file demo run.
 
 ### MP-02 - Kafka ingestion and replay controls
 
@@ -204,4 +205,3 @@ evidence for the final report, slides, video, and executable demonstration.
 | Data correctness | MP-01, MP-03, MP-05, MP-10 |
 | Performance | MP-02, MP-03, MP-05, MP-10 |
 | Application effectiveness | MP-06 through MP-08, MP-10 |
-

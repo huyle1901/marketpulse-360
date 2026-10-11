@@ -158,9 +158,30 @@ manifest with seeds, schemas, counts, anomalies, checksums, and expected aggrega
 MP-02 will replay event-level files to Kafka with configurable speed; batch-shaped
 vendor reports and CRM snapshots will enter through Dagster.
 
+The generator writes each source incrementally. A bounded priority queue merges only
+the currently overlapping journeys so every replayable partition remains ordered by
+event time without sorting or retaining a whole day in memory.
+
 Mock source data is not application operational data. User accounts, saved segments,
 alert rules, annotations, and platform configuration created through the future
 MarketPulse 360 application remain a separate PostgreSQL domain.
+
+### 4.0.1 Implemented evidence (MP-01)
+
+As of 2026-10-11, the source-simulation boundary is implemented and verified:
+
+| Evidence | Result |
+|---|---:|
+| Automated tests | 53 passing |
+| Committed seed-360 fixture | 613 rows, 22 files, 116 KB |
+| Local seed-360 demo | 1,202,860 rows, 130 files, about 90 MB compressed |
+| Demo time range | 2026-01-01 through 2026-01-14 UTC |
+| Demo master data | 50,000 customers, 30 campaigns, 1,000 products |
+| Demo injected anomalies | 6,725 late, 2,249 duplicate, 623 bot, 308 invalid, 922 refund events |
+
+The fixture is tracked for repeatable tests. The demo is regenerated from its seed
+and remains outside Git. Both use the same CLI, schemas, writer, manifest, and
+validator; therefore the fixture is not a simplified parallel implementation.
 
 ### 4.1 Streaming path
 
