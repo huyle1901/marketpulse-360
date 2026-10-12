@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketpulse:kafka:revenue-metrics:v1",
+  "title": "MarketPulse revenue metrics v1",
+  "type": "object",
+  "required": ["schema_version", "metric_key", "campaign_id", "event_date", "order_count", "refund_count", "gross_revenue_minor", "refund_amount_minor", "net_revenue_minor", "currency", "max_event_time", "processed_at"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "metric_key": {"type": "string", "minLength": 1},
+    "campaign_id": {"type": "string", "minLength": 1},
+    "event_date": {"type": "string", "format": "date"},
+    "order_count": {"type": "integer", "minimum": 0},
+    "refund_count": {"type": "integer", "minimum": 0},
+    "gross_revenue_minor": {"type": "integer", "minimum": 0},
+    "refund_amount_minor": {"type": "integer", "minimum": 0},
+    "net_revenue_minor": {"type": "integer"},
+    "currency": {"type": ["string", "null"]},
+    "max_event_time": {"type": "string", "format": "date-time"},
+    "processed_at": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}

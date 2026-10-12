@@ -4,6 +4,7 @@ import unittest
 from datetime import datetime, timezone
 
 from marketpulse_mock.kafka_client import ConfluentKafkaPublisher, create_topics
+from marketpulse_mock.kafka_contracts import ALL_TOPIC_CONTRACTS
 from marketpulse_mock.replay_reader import ReplayRecord
 
 
@@ -138,11 +139,20 @@ class KafkaClientTests(unittest.TestCase):
             "kafka:29092", admin_factory=Admin, topic_factory=Topic
         )
 
-        self.assertEqual(4, len(calls[0][1]))
-        self.assertTrue(all(topic.num_partitions == 6 for topic in calls[0][1]))
+        self.assertEqual(10, len(calls[0][1]))
         self.assertTrue(all(topic.replication_factor == 1 for topic in calls[0][1]))
-        self.assertTrue(all(topic.config == {"retention.ms": "604800000"} for topic in calls[0][1]))
-        self.assertEqual(4, result.existing)
+        expected = {contract.topic: contract for contract in ALL_TOPIC_CONTRACTS.values()}
+        for topic in calls[0][1]:
+            contract = expected[topic.name]
+            self.assertEqual(contract.partitions, topic.num_partitions)
+            self.assertEqual(
+                {
+                    "retention.ms": str(contract.retention_ms),
+                    "cleanup.policy": contract.cleanup_policy,
+                },
+                topic.config,
+            )
+        self.assertEqual(10, result.existing)
         self.assertEqual(0, result.failed)
 
     def test_create_topics_rejects_partition_and_retention_drift(self) -> None:
@@ -157,15 +167,10 @@ class KafkaClientTests(unittest.TestCase):
             def result(self) -> object:
                 return self.value
 
-        class TopicMetadata:
-            partitions = {0: object()}
-
         class Metadata:
             topics = {
-                "marketing.raw.web-events.v1": TopicMetadata(),
-                "marketing.raw.order-events.v1": TopicMetadata(),
-                "marketing.raw.email-events.v1": TopicMetadata(),
-                "marketing.dlq.validation.v1": TopicMetadata(),
+                contract.topic: type("TopicMetadata", (), {"partitions": {0: object()}})()
+                for contract in ALL_TOPIC_CONTRACTS.values()
             }
 
         class Resource:
@@ -188,7 +193,12 @@ class KafkaClientTests(unittest.TestCase):
 
             def describe_configs(self, resources: list[Resource]) -> dict[Resource, Future]:
                 return {
-                    resource: Future({"retention.ms": Value("123")})
+                    resource: Future(
+                        {
+                            "retention.ms": Value("123"),
+                            "cleanup.policy": Value("unexpected"),
+                        }
+                    )
                     for resource in resources
                 }
 
@@ -199,9 +209,11 @@ class KafkaClientTests(unittest.TestCase):
             config_resource_factory=Resource,
         )
 
-        self.assertEqual(8, summary.failed)
+        self.assertEqual(30, summary.failed)
+        self.assertTrue(any("expected 3 partitions" in error for error in summary.errors))
         self.assertTrue(any("expected 6 partitions" in error for error in summary.errors))
         self.assertTrue(any("expected retention.ms" in error for error in summary.errors))
+        self.assertTrue(any("expected cleanup.policy" in error for error in summary.errors))
 
 
 if __name__ == "__main__":
