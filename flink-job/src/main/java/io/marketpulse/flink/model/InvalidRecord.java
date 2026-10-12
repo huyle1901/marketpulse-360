@@ -48,7 +48,8 @@ public record InvalidRecord(
 
     public static InvalidRecord from(
             RawKafkaRecord raw, ReasonCode reasonCode, Instant detectedAt) {
-        byte[] value = raw.value();
+        byte[] originalValue = raw.value();
+        byte[] value = originalValue == null ? new byte[0] : originalValue;
         String digest = HexFormat.of().formatHex(hash("SHA-256", value));
         String name = "%s:%d:%d:%s".formatted(
                 raw.topic(), raw.partition(), raw.offset(), digest);
@@ -61,7 +62,7 @@ public record InvalidRecord(
                 raw.keyUtf8(),
                 reasonCode,
                 value,
-                decodeUtf8(value));
+                originalValue == null ? null : decodeUtf8(value));
     }
 
     public String failedValueBase64() {

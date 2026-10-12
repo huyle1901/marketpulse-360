@@ -95,14 +95,16 @@ connector `5.0.0-2.2`, transactional Kafka output, five-minute watermarks,
 seven-day deduplication state, 30-minute sessions, and versioned clean/Gold-style
 Kafka topics. Durable Iceberg sinks remain MP-04 scope.
 
-**Proof:** 129 Python tests and 25 Java tests pass. The isolated Docker recovery
+**Proof:** 135 Python tests and 30 Java tests pass. The isolated Docker recovery
 test consumed all six outputs with `read_committed` isolation after restarting the
 TaskManager: 217 unique fixture events, two rejected duplicate copies, 73 session
 keys, one malformed processing-DLQ record, and one watermark-late audit event.
-Checkpoint `20` restored into checkpoint `21` in 13 seconds on the verification
-machine. Gross `29,718,000`, refunds `4,967,000`, and net `24,751,000` minor units
-match the fixture oracle. This is a correctness/recovery proof, not a capacity
-benchmark.
+The producer stayed active during the restart: raw Kafka input advanced from 83 to
+219 records while checkpoint `18` restored into checkpoint `19` in 16 seconds on
+the verification machine. Gross `29,718,000`, refunds `4,967,000`, and net
+`24,751,000` minor units match the fixture and per-campaign oracle. Six output
+schemas plus Flink accepted/duplicate/late/invalid counters are verified. This is
+a correctness/recovery proof, not a capacity benchmark.
 
 ### MP-04 - Bronze/Silver/Gold lakehouse
 

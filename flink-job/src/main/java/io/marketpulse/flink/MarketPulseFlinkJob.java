@@ -3,6 +3,7 @@ package io.marketpulse.flink;
 import io.marketpulse.flink.config.JobConfig;
 import io.marketpulse.flink.kafka.OutputRecordSerializationSchema;
 import io.marketpulse.flink.kafka.RawKafkaDeserializationSchema;
+import io.marketpulse.flink.kafka.RawEventTimeTimestampAssigner;
 import io.marketpulse.flink.model.CampaignSnapshot;
 import io.marketpulse.flink.model.EnrichedEvent;
 import io.marketpulse.flink.model.MarketingEvent;
@@ -21,6 +22,8 @@ import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.OpenContext;
+import org.apache.flink.metrics.Counter;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.configuration.CheckpointingOptions;
@@ -69,8 +72,13 @@ public final class MarketPulseFlinkJob {
                 .setDeserializer(new RawKafkaDeserializationSchema())
                 .build();
 
+        WatermarkStrategy<RawKafkaRecord> watermarks =
+                WatermarkStrategy.<RawKafkaRecord>forBoundedOutOfOrderness(
+                                config.watermarkOutOfOrderness())
+                        .withTimestampAssigner(new RawEventTimeTimestampAssigner())
+                        .withIdleness(config.sourceIdleness());
         DataStream<RawKafkaRecord> raw = environment
-                .fromSource(source, WatermarkStrategy.noWatermarks(), "raw-kafka-source")
+                .fromSource(source, watermarks, "raw-kafka-source")
                 .uid("raw-kafka-source");
 
         SingleOutputStreamOperator<MarketingEvent> parsed = raw
@@ -86,17 +94,7 @@ public final class MarketPulseFlinkJob {
                 .name("validation-dlq-projection")
                 .uid("validation-dlq-projection");
 
-        WatermarkStrategy<MarketingEvent> watermarks =
-                WatermarkStrategy.<MarketingEvent>forBoundedOutOfOrderness(
-                                config.watermarkOutOfOrderness())
-                        .withTimestampAssigner((event, previous) -> event.eventTime().toEpochMilli())
-                        .withIdleness(config.sourceIdleness());
-        DataStream<MarketingEvent> timestamped = parsed
-                .assignTimestampsAndWatermarks(watermarks)
-                .name("assign-watermarks")
-                .uid("assign-watermarks");
-
-        DataStream<MarketingEvent> unique = timestamped
+        DataStream<MarketingEvent> unique = parsed
                 .keyBy(MarketingEvent::eventId)
                 .process(new DeduplicateFunction(config.dedupTtl()))
                 .name("deduplicate-events")
@@ -188,9 +186,15 @@ public final class MarketPulseFlinkJob {
             extends ProcessFunction<RawKafkaRecord, MarketingEvent> {
         private final Clock clock;
         private final EventParser parser = new EventParser();
+        private transient Counter invalid;
 
         private ParseAndValidateFunction(Clock clock) {
             this.clock = clock;
+        }
+
+        @Override
+        public void open(OpenContext openContext) {
+            invalid = getRuntimeContext().getMetricGroup().counter("invalid");
         }
 
         @Override
@@ -203,6 +207,7 @@ public final class MarketPulseFlinkJob {
             if (result.valid()) {
                 output.collect(result.event());
             } else {
+                invalid.inc();
                 context.output(VALIDATION_DLQ, result.invalid().toOutputRecord());
             }
         }

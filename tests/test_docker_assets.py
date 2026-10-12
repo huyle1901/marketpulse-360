@@ -101,8 +101,20 @@ class DockerAssetTests(unittest.TestCase):
     def test_flink_smoke_script_proves_recovery_and_read_committed_outputs(self) -> None:
         script = (ROOT / "scripts/flink-smoke-test.sh").read_text()
 
+        self.assertIn('COMPOSE_PROJECT_NAME="marketpulse-mp03-smoke-$$"', script)
+        self.assertNotIn('${COMPOSE_PROJECT_NAME:-', script)
         self.assertIn("--events-per-second 20", script)
         self.assertIn("restart flink-taskmanager", script)
+        self.assertNotIn('docker pause "${replay_container}"', script)
+        self.assertIn("raw_records_before_restart", script)
+        self.assertIn("raw_records_after_restart", script)
+        self.assertIn("/subtasks/metrics", script)
+        self.assertIn("deduplicate-events.accepted", script)
+        self.assertIn("deduplicate-events.duplicates", script)
+        self.assertIn("classify-late-events.source_marked_late", script)
+        self.assertIn("classify-late-events.watermark_late", script)
+        self.assertIn("parse-and-validate.invalid", script)
+        self.assertIn("metrics.json", script)
         self.assertIn("checkpoint_before_restart", script)
         self.assertIn("checkpoint_after_restart", script)
         self.assertIn("--consume-bootstrap kafka:29092", script)
@@ -114,12 +126,15 @@ class DockerAssetTests(unittest.TestCase):
 
     def test_flink_submitter_is_idempotent_for_running_named_job(self) -> None:
         script = (ROOT / "docker/flink/submit-job.sh").read_text()
+        dockerfile = (ROOT / "docker/flink/Dockerfile").read_text()
 
         self.assertIn("/jobs/overview", script)
         self.assertIn("marketpulse-stream-v1", script)
-        self.assertIn('"state":"RUNNING"', script)
-        self.assertIn("already RUNNING", script)
+        self.assertIn("jq -r", script)
+        self.assertIn('state != "FINISHED"', script)
+        self.assertIn("already active", script)
         self.assertIn("flink run -d", script)
+        self.assertIn("apt-get install -y --no-install-recommends jq", dockerfile)
 
     def test_smoke_script_asserts_fixture_delivery_counts(self) -> None:
         script = (ROOT / "scripts/kafka-smoke-test.sh").read_text()

@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_root="$(cd "${script_dir}/.." && pwd)"
-export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-marketpulse-mp03-smoke-$$}"
+export COMPOSE_PROJECT_NAME="marketpulse-mp03-smoke-$$"
 export KAFKA_HOST_PORT="${KAFKA_HOST_PORT:-19092}"
 export REGISTRY_HOST_PORT="${REGISTRY_HOST_PORT:-18081}"
 export KAFKA_UI_HOST_PORT="${KAFKA_UI_HOST_PORT:-18080}"
@@ -29,7 +29,6 @@ replay_pid=""
 replay_container="${COMPOSE_PROJECT_NAME}-fixture-replay"
 
 cleanup() {
-  docker unpause "${replay_container}" >/dev/null 2>&1 || true
   if [[ -n "${replay_pid}" ]] && kill -0 "${replay_pid}" 2>/dev/null; then
     kill "${replay_pid}" 2>/dev/null || true
     wait "${replay_pid}" 2>/dev/null || true
@@ -72,6 +71,34 @@ print(-1 if completed is None else completed["id"])
 '
 }
 
+vertex_id() {
+  local id="$1"
+  local name_fragment="$2"
+  curl -fsS "${flink_url}/jobs/${id}" | python3 -c '
+import json, sys
+fragment = sys.argv[1]
+vertices = json.load(sys.stdin).get("vertices", [])
+match = next((vertex for vertex in vertices if fragment in vertex.get("name", "")), None)
+if match is None:
+    raise SystemExit(f"missing Flink vertex containing {fragment}")
+print(match["id"])
+' "${name_fragment}"
+}
+
+metric_sum() {
+  local id="$1"
+  local vertex="$2"
+  local metric="$3"
+  curl -fsS "${flink_url}/jobs/${id}/vertices/${vertex}/subtasks/metrics?get=${metric}&agg=sum" |
+    python3 -c '
+import json, sys
+values = json.load(sys.stdin)
+if len(values) != 1 or "sum" not in values[0]:
+    raise SystemExit("missing Flink metric")
+print(int(float(values[0]["sum"])))
+'
+}
+
 wait_for_running_job() {
   local deadline=$((SECONDS + 120))
   while (( SECONDS < deadline )); do
@@ -101,6 +128,14 @@ wait_for_checkpoint_after() {
   done
   echo "No completed checkpoint after ${previous}" >&2
   return 1
+}
+
+raw_record_count() {
+  "${compose[@]}" exec -T kafka sh -lc '
+for topic in marketing.raw.web-events.v1 marketing.raw.order-events.v1 marketing.raw.email-events.v1; do
+  /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:29092 --topic "${topic}" --time latest
+done
+' | awk -F: '{ total += $3 } END { print total + 0 }'
 }
 
 produce_line() {
@@ -150,16 +185,12 @@ kill -0 "${replay_pid}" 2>/dev/null || {
   echo "Replay ended before the recovery checkpoint was created" >&2
   exit 1
 }
-# Freeze the producer, drain its Kafka backlog, and cross two checkpoints. The
-# second checkpoint is quiescent, so every transaction carrying prior records was
-# committed by the preceding checkpoint before TaskManager recovery starts.
-docker pause "${replay_container}" >/dev/null
-drained_checkpoint="$(wait_for_checkpoint_after "${flink_job_id}" "${active_checkpoint}")"
-checkpoint_before_restart="$(wait_for_checkpoint_after "${flink_job_id}" "${drained_checkpoint}")"
-kill -0 "${replay_pid}" 2>/dev/null || {
-  echo "Replay ended while its producer was paused" >&2
+checkpoint_before_restart="${active_checkpoint}"
+raw_records_before_restart="$(raw_record_count)"
+if (( raw_records_before_restart <= 0 || raw_records_before_restart >= 219 )); then
+  echo "Recovery checkpoint must split the replay, raw records=${raw_records_before_restart}" >&2
   exit 1
-}
+fi
 
 restart_started="$(date +%s)"
 "${compose[@]}" restart flink-taskmanager
@@ -167,7 +198,6 @@ flink_job_id="$(wait_for_running_job)"
 checkpoint_after_restart="$(wait_for_checkpoint_after "${flink_job_id}" "${checkpoint_before_restart}")"
 restart_finished="$(date +%s)"
 recovery_seconds=$((restart_finished - restart_started))
-docker unpause "${replay_container}" >/dev/null
 
 wait "${replay_pid}"
 replay_pid=""
@@ -176,6 +206,12 @@ grep -q '"delivered": 219' "${evidence_dir}/first-replay.log" || {
   cat "${evidence_dir}/first-replay.log" >&2
   exit 1
 }
+raw_records_after_restart="$(raw_record_count)"
+if (( raw_records_after_restart != 219 \
+      || raw_records_after_restart <= raw_records_before_restart )); then
+  echo "Raw input did not progress across recovery: ${raw_records_before_restart} -> ${raw_records_after_restart}" >&2
+  exit 1
+fi
 
 "${compose[@]}" run --rm replay kafka replay \
   --input /app/data/mock/fixtures/seed-360 \
@@ -187,25 +223,65 @@ PYTHONPATH="${project_root}/src" python3 -m marketpulse_mock.flink_smoke_verify 
   --output-dir "${evidence_dir}" \
   --write-probes >/dev/null
 
-produce_line marketing.raw.web-events.v1 "${evidence_dir}/frontier.json"
+"${compose[@]}" run --rm \
+  --entrypoint python \
+  -v "${evidence_dir}:/evidence" \
+  replay -m marketpulse_mock.flink_smoke_verify \
+  --fixture /app/data/mock/fixtures/seed-360 \
+  --output-dir /evidence \
+  --publish-frontier-bootstrap kafka:29092 >/dev/null
 sleep 7
 produce_line marketing.raw.web-events.v1 "${evidence_dir}/late.json"
 produce_line marketing.raw.web-events.v1 "${evidence_dir}/malformed.txt"
 final_checkpoint="$(wait_for_checkpoint_after "${flink_job_id}" "${checkpoint_after_restart}")"
+source_vertex="$(vertex_id "${flink_job_id}" "parse-and-validate")"
+stateful_vertex="$(vertex_id "${flink_job_id}" "deduplicate-events")"
+invalid_count="$(metric_sum "${flink_job_id}" "${source_vertex}" "parse-and-validate.invalid")"
+accepted_count="$(metric_sum "${flink_job_id}" "${stateful_vertex}" "deduplicate-events.accepted")"
+duplicate_count="$(metric_sum "${flink_job_id}" "${stateful_vertex}" "deduplicate-events.duplicates")"
+source_late_count="$(metric_sum "${flink_job_id}" "${stateful_vertex}" "classify-late-events.source_marked_late")"
+watermark_late_count="$(metric_sum "${flink_job_id}" "${stateful_vertex}" "classify-late-events.watermark_late")"
+aggregate_ineligible_count="$(metric_sum "${flink_job_id}" "${stateful_vertex}" "classify-late-events.aggregate_ineligible")"
 
 python3 - "${evidence_dir}/recovery.json" \
+  "${evidence_dir}/metrics.json" \
   "${checkpoint_before_restart}" "${checkpoint_after_restart}" \
-  "${final_checkpoint}" "${recovery_seconds}" <<'PY'
+  "${final_checkpoint}" "${recovery_seconds}" \
+  "${raw_records_before_restart}" "${raw_records_after_restart}" \
+  "${accepted_count}" "${duplicate_count}" "${source_late_count}" \
+  "${watermark_late_count}" "${aggregate_ineligible_count}" \
+  "${invalid_count}" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
+metrics_path = Path(sys.argv[2])
+metrics = {
+    "accepted": int(sys.argv[9]),
+    "duplicates": int(sys.argv[10]),
+    "source_marked_late": int(sys.argv[11]),
+    "watermark_late": int(sys.argv[12]),
+    "aggregate_ineligible": int(sys.argv[13]),
+    "invalid": int(sys.argv[14]),
+}
+if metrics["accepted"] <= 0 or metrics["duplicates"] < 219:
+    raise SystemExit(f"deduplication counters are implausible: {metrics}")
+if metrics["watermark_late"] != 1 or metrics["aggregate_ineligible"] != 1:
+    raise SystemExit(f"late-event counters do not match injected probe: {metrics}")
+if metrics["invalid"] != 1:
+    raise SystemExit(f"invalid counter does not match malformed probe: {metrics}")
+metrics_path.write_text(
+    json.dumps(metrics, sort_keys=True) + "\n", encoding="utf-8"
+)
 path.write_text(json.dumps({
-    "checkpoint_before_restart": int(sys.argv[2]),
-    "checkpoint_after_restart": int(sys.argv[3]),
-    "final_checkpoint": int(sys.argv[4]),
-    "recovery_seconds": int(sys.argv[5]),
+    "checkpoint_before_restart": int(sys.argv[3]),
+    "checkpoint_after_restart": int(sys.argv[4]),
+    "final_checkpoint": int(sys.argv[5]),
+    "recovery_seconds": int(sys.argv[6]),
+    "raw_records_before_restart": int(sys.argv[7]),
+    "raw_records_after_restart": int(sys.argv[8]),
+    "metrics": metrics,
 }, sort_keys=True) + "\n", encoding="utf-8")
 PY
 

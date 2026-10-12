@@ -113,16 +113,22 @@ The script creates an isolated Compose project and performs the complete proof:
 
 1. Builds a clean Kafka/Flink stack and registers all contracts twice.
 2. Replays 219 fixture records at 20 events/second.
-3. Pauses the producer across checkpoints and restarts the TaskManager.
+3. Leaves the producer active, captures a checkpoint mid-replay, and restarts the
+   TaskManager while raw Kafka offsets continue to advance.
 4. Replays the same fixture to prove restored deduplication state.
 5. Injects one malformed record and one event beyond the correction horizon.
 6. Reads all six outputs with Kafka `read_committed` isolation.
-7. Verifies exact event IDs, 73 session keys, funnel/revenue snapshots, DLQ output,
-   and checkpoint IDs before and after recovery.
+7. Verifies exact event IDs, 73 full session contracts, every campaign/day
+   funnel/revenue snapshot, the exact late probe, deterministic DLQ lineage, raw
+   input progress, Flink accepted/duplicate/late/invalid counters, and checkpoint
+   IDs before and after recovery. Every consumed value is also checked against its
+   committed JSON Schema.
 
 A passing run reports 217 unique fixture event IDs, two duplicate copies, gross
 revenue `29,718,000`, refunds `4,967,000`, and net revenue `24,751,000` minor
-units. The isolated stack is removed automatically. Use
+units. The latest reference run advanced raw input from 83 to 219 records across
+checkpoint `18` to `19` and recovered in 16 seconds. The isolated stack is removed
+automatically. Use
 `KEEP_STACK=1 KEEP_EVIDENCE=1 ./scripts/flink-smoke-test.sh` only for diagnosis.
 
 ## Stop or reset the manual stack

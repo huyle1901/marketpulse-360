@@ -25,7 +25,6 @@ class JobGraphTest {
         assertTrue(names.containsAll(Set.of(
                 "parse-and-validate",
                 "validation-dlq-projection",
-                "assign-watermarks",
                 "deduplicate-events",
                 "classify-late-events",
                 "clean-event-projection",

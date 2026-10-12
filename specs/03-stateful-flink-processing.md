@@ -16,7 +16,8 @@ KPI computation, and checkpoint recovery.
 - A separate `marketing.dlq.flink-validation.v1` topic for malformed/runtime input,
   leaving MP-02 quality-case DLQ records unchanged.
 - Seven-day keyed `event_id` deduplication state.
-- Five-minute bounded event-time watermark and one-minute partition idleness.
+- Five-minute bounded event-time watermark assigned per Kafka partition/split and
+  one-minute partition idleness.
 - Ten-minute aggregate correction horizon with late audit preservation.
 - Thirty-minute event-time web sessionization.
 - Clean event, session, funnel, campaign, and revenue output topics.
@@ -35,7 +36,9 @@ KPI computation, and checkpoint recovery.
 1. Preserve Kafka lineage before parsing each source value.
 2. Reject unsupported topic/source/event/schema combinations before state updates.
 3. Accept the first valid `event_id` and drop later copies for seven days.
-4. Assign event timestamps from `event_time` and generate bounded watermarks.
+4. Assign event timestamps from `event_time` and generate bounded watermarks at the
+   Kafka source, independently per source partition; invalid/tombstone values never
+   advance event time.
 5. Preserve every accepted event in the clean stream with a late-status field.
 6. Exclude events beyond the correction horizon from session and aggregate updates.
 7. Emit provisional session upserts immediately and a closed upsert after thirty
@@ -98,8 +101,9 @@ DLQ and is not reused for arbitrary malformed bytes.
 
 ## Implemented evidence
 
-The clean isolated recovery run completed with checkpoint `20` before restart and
-checkpoint `21` after restore, with a measured recovery time of 13 seconds. The
+The clean isolated recovery run kept the producer active, observed raw Kafka input
+advance from 83 to 219 records, and completed with checkpoint `18` before restart
+and checkpoint `19` after restore, with a measured recovery time of 16 seconds. The
 `read_committed` verifier observed:
 
 | Evidence | Result |
@@ -115,7 +119,11 @@ checkpoint `21` after restore, with a measured recovery time of 13 seconds. The
 | Refund amount | 4,967,000 |
 | Net revenue | 24,751,000 |
 
-The test also uncovered and fixed a retention-boundary defect: forwarding fixture
+The verifier validates every record against all six committed JSON Schemas and
+compares complete clean/session contracts, every campaign/day aggregate, the exact
+late probe, deterministic processing-DLQ lineage, and Flink's accepted/duplicate/
+late/invalid counters rather than relying on global counts alone. The test also
+uncovered and fixed a retention-boundary defect: forwarding fixture
 event timestamps as Kafka record timestamps made old replay data immediately
 eligible for seven-day deletion. Output records now use Kafka publish time while
 retaining `event_time` in their payloads for Flink event-time semantics.

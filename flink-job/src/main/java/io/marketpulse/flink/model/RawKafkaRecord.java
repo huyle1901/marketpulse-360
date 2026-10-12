@@ -4,6 +4,7 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -18,10 +19,11 @@ public record RawKafkaRecord(
 
     public RawKafkaRecord {
         key = key == null ? null : key.clone();
-        value = value.clone();
+        value = value == null ? null : value.clone();
         Map<String, byte[]> copied = new LinkedHashMap<>();
-        headers.forEach((name, bytes) -> copied.put(name, bytes.clone()));
-        headers = Map.copyOf(copied);
+        headers.forEach((name, bytes) -> copied.put(
+                name, bytes == null ? null : bytes.clone()));
+        headers = Collections.unmodifiableMap(copied);
     }
 
     @Override
@@ -31,7 +33,7 @@ public record RawKafkaRecord(
 
     @Override
     public byte[] value() {
-        return value.clone();
+        return value == null ? null : value.clone();
     }
 
     public String keyUtf8() {

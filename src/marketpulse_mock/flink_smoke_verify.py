@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 from collections import Counter, defaultdict
+from datetime import date, datetime
 import gzip
+import hashlib
 import json
 import sys
 import time
@@ -12,6 +16,8 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
+
+from .kafka_contracts import FLINK_TOPIC_CONTRACTS, load_contract_schema
 
 
 OUTPUT_TOPICS = (
@@ -22,6 +28,8 @@ OUTPUT_TOPICS = (
     "marketing.gold.campaign-metrics.v1",
     "marketing.dlq.flink-validation.v1",
 )
+LATE_PROBE_ID = "00000000-0000-5000-8000-000000000099"
+ERROR_NAMESPACE = uuid.UUID("9a3d4d70-cd8b-4b65-9b50-f86265f41915")
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,7 +45,142 @@ class FixtureOracle:
     refund_amount_minor: int
     net_revenue_minor: int
     session_metrics: dict[str, dict[str, Any]]
-    campaign_metrics: dict[str, dict[str, int]]
+    campaign_metrics: dict[str, dict[str, Any]]
+
+
+def canonical_instant(value: str) -> str:
+    parsed = parse_instant(value)
+    if parsed.microsecond == 0:
+        timespec = "seconds"
+    elif parsed.microsecond % 1000 == 0:
+        timespec = "milliseconds"
+    else:
+        timespec = "microseconds"
+    return parsed.isoformat(timespec=timespec).replace("+00:00", "Z")
+
+
+def parse_instant(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _matches_json_type(value: Any, expected: str) -> bool:
+    return {
+        "object": isinstance(value, dict),
+        "array": isinstance(value, list),
+        "string": isinstance(value, str),
+        "integer": isinstance(value, int) and not isinstance(value, bool),
+        "number": isinstance(value, (int, float)) and not isinstance(value, bool),
+        "boolean": isinstance(value, bool),
+        "null": value is None,
+    }.get(expected, False)
+
+
+def _schema_errors(value: Any, schema: dict[str, Any], path: str = "$") -> list[str]:
+    """Validate the JSON-Schema subset used by the six committed Flink contracts."""
+
+    errors: list[str] = []
+    declared_type = schema.get("type")
+    types = declared_type if isinstance(declared_type, list) else [declared_type]
+    types = [item for item in types if isinstance(item, str)]
+    if types and not any(_matches_json_type(value, item) for item in types):
+        return [f"{path} expected type {types} actual={type(value).__name__}"]
+    if "const" in schema and value != schema["const"]:
+        errors.append(f"{path} expected const {schema['const']!r} actual={value!r}")
+    if "enum" in schema and value not in schema["enum"]:
+        errors.append(f"{path} expected enum {schema['enum']!r} actual={value!r}")
+    if isinstance(value, str):
+        if len(value) < int(schema.get("minLength", 0)):
+            errors.append(f"{path} shorter than minLength")
+        try:
+            if schema.get("format") == "uuid":
+                uuid.UUID(value)
+            elif schema.get("format") == "date-time":
+                parse_instant(value)
+            elif schema.get("format") == "date":
+                date.fromisoformat(value)
+            if schema.get("contentEncoding") == "base64":
+                base64.b64decode(value, validate=True)
+        except (ValueError, binascii.Error) as error:
+            errors.append(f"{path} invalid {schema.get('format') or 'base64'}: {error}")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if "minimum" in schema and value < schema["minimum"]:
+            errors.append(f"{path} below minimum {schema['minimum']}")
+    if isinstance(value, dict):
+        required = schema.get("required", [])
+        for field in required:
+            if field not in value:
+                errors.append(f"{path}.{field} is required")
+        properties = schema.get("properties", {})
+        if schema.get("additionalProperties") is False:
+            for field in value.keys() - properties.keys():
+                errors.append(f"{path}.{field} is not allowed")
+        for field, child in properties.items():
+            if field in value:
+                errors.extend(_schema_errors(value[field], child, f"{path}.{field}"))
+    return errors
+
+
+def resolve_contract_dir() -> Path:
+    candidates = (
+        Path.cwd() / "contracts" / "kafka",
+        Path(__file__).resolve().parents[2] / "contracts" / "kafka",
+        Path("/app/contracts/kafka"),
+    )
+    contract_dir = next((path for path in candidates if path.is_dir()), None)
+    if contract_dir is None:
+        raise ValueError(f"cannot locate Kafka contracts; searched={list(candidates)}")
+    return contract_dir
+
+
+def validate_output_contracts(output_dir: Path) -> None:
+    contract_dir = resolve_contract_dir()
+    for contract in FLINK_TOPIC_CONTRACTS.values():
+        schema = load_contract_schema(contract_dir, contract)
+        for index, row in enumerate(read_dump(output_dir / f"{contract.topic}.jsonl")):
+            errors = _schema_errors(row.get("value"), schema)
+            if errors:
+                raise ValueError(
+                    f"output schema mismatch topic={contract.topic} row={index}: "
+                    + "; ".join(errors[:5])
+                )
+
+
+def expected_clean_value(row: dict[str, Any]) -> dict[str, Any]:
+    payload = row["payload"]
+    identity_key = next(
+        (
+            value
+            for value in (
+                row.get("customer_id"),
+                row.get("anonymous_id"),
+                row.get("session_id"),
+                payload.get("order_id"),
+                payload.get("message_id"),
+            )
+            if value
+        ),
+        None,
+    )
+    campaign_key = row.get("campaign_id") or payload.get("lifecycle_campaign_id")
+    return {
+        "schema_version": 1,
+        "event_id": str(row["event_id"]),
+        "event_name": row["event_name"],
+        "event_time": canonical_instant(str(row["event_time"])),
+        "ingested_at": canonical_instant(str(row["ingested_at"])),
+        "source": row["source"],
+        "channel": row["source"],
+        "customer_id": row.get("customer_id"),
+        "anonymous_id": row.get("anonymous_id"),
+        "identity_key": identity_key,
+        "session_id": row["session_id"],
+        "campaign_id": row.get("campaign_id"),
+        "campaign_key": campaign_key,
+        "consent_analytics": row["consent_analytics"],
+        "late_status": "source_marked_late" if row["is_late"] else "on_time",
+        "eligible_for_aggregates": True,
+        "payload": payload,
+    }
 
 
 def derive_fixture_oracle(fixture: Path) -> FixtureOracle:
@@ -49,7 +192,12 @@ def derive_fixture_oracle(fixture: Path) -> FixtureOracle:
 
     unique: dict[str, dict[str, Any]] = {}
     for row in rows:
-        unique.setdefault(str(row["event_id"]), row)
+        event_id = str(row["event_id"])
+        previous = unique.get(event_id)
+        if previous is None or parse_instant(str(row["event_time"])) < parse_instant(
+            str(previous["event_time"])
+        ):
+            unique[event_id] = row
     web = [row for row in unique.values() if row["source"] in {"web", "mobile"}]
     orders = [row for row in unique.values() if row["source"] == "commerce"]
     created = [row for row in orders if row["event_name"] == "order_created"]
@@ -61,6 +209,7 @@ def derive_fixture_oracle(fixture: Path) -> FixtureOracle:
         lambda: defaultdict(set)
     )
     campaign_revenue: dict[str, Counter[str]] = defaultdict(Counter)
+    campaign_metadata: dict[str, dict[str, Any]] = {}
     stage_names = {
         "page_view": "page_view_sessions",
         "view_item": "view_item_sessions",
@@ -76,6 +225,22 @@ def derive_fixture_oracle(fixture: Path) -> FixtureOracle:
         metric_key = f"{campaign_id}|{event_date}" if campaign_id else None
         if metric_key:
             campaign_sessions[metric_key]
+            metadata = campaign_metadata.setdefault(
+                metric_key,
+                {
+                    "schema_version": 1,
+                    "campaign_id": str(campaign_id),
+                    "event_date": event_date,
+                    "currency": None,
+                    "max_event_time": canonical_instant(str(row["event_time"])),
+                },
+            )
+            metadata["max_event_time"] = canonical_instant(
+                max(
+                    parse_instant(metadata["max_event_time"]),
+                    parse_instant(str(row["event_time"])),
+                ).isoformat()
+            )
         if row["source"] in {"web", "mobile"}:
             session_id = str(row["session_id"])
             current = session_metrics.setdefault(
@@ -118,17 +283,55 @@ def derive_fixture_oracle(fixture: Path) -> FixtureOracle:
                 campaign_revenue[metric_key]["gross_revenue_minor"] += int(
                     row["payload"]["gross_amount_minor"]
                 )
+                campaign_metadata[metric_key]["currency"] = row["payload"]["currency"]
             elif row["event_name"] == "order_refunded":
                 campaign_revenue[metric_key]["refund_count"] += 1
                 campaign_revenue[metric_key]["refund_amount_minor"] += int(
                     row["payload"]["refund_amount_minor"]
                 )
 
-    campaign_metrics: dict[str, dict[str, int]] = {}
+    for session_id, current in session_metrics.items():
+        session_rows = sorted(
+            (row for row in web if str(row["session_id"]) == session_id),
+            key=lambda row: (parse_instant(str(row["event_time"])), str(row["event_id"])),
+        )
+        current.update(
+            {
+                "schema_version": 1,
+                "customer_id": next(
+                    (row["customer_id"] for row in session_rows if row.get("customer_id")),
+                    None,
+                ),
+                "anonymous_id": next(
+                    (row["anonymous_id"] for row in session_rows if row.get("anonymous_id")),
+                    None,
+                ),
+                "campaign_id": next(
+                    (row["campaign_id"] for row in session_rows if row.get("campaign_id")),
+                    None,
+                ),
+                "session_start": canonical_instant(str(session_rows[0]["event_time"])),
+                "session_end": canonical_instant(str(session_rows[-1]["event_time"])),
+                "currency": next(
+                    (
+                        row["payload"].get("currency")
+                        for row in session_rows
+                        if row["event_name"] == "purchase"
+                        and row["payload"].get("currency")
+                    ),
+                    None,
+                ),
+                "status": "closed",
+            }
+        )
+
+    campaign_metrics: dict[str, dict[str, Any]] = {}
     for metric_key in set(campaign_sessions) | set(campaign_revenue):
         stages = campaign_sessions[metric_key]
         revenue = campaign_revenue[metric_key]
-        campaign_metrics[metric_key] = {
+        campaign_metrics[metric_key] = {"metric_key": metric_key} | campaign_metadata[
+            metric_key
+        ] | {
             name: len(stages[name])
             for name in (
                 "sessions",
@@ -215,7 +418,7 @@ def write_probe_records(fixture: Path, output_dir: Path) -> dict[str, Path]:
     frontier["ingested_at"] = "2030-01-01T00:00:01+00:00"
     frontier["is_late"] = False
     late = dict(base)
-    late["event_id"] = "00000000-0000-5000-8000-000000000099"
+    late["event_id"] = LATE_PROBE_ID
     late["session_id"] = "smoke-watermark-late-session"
     late["event_time"] = "2025-01-01T00:00:00+00:00"
     late["ingested_at"] = "2030-01-01T00:00:02+00:00"
@@ -307,11 +510,53 @@ def consume_outputs(
     return counts
 
 
+def publish_frontier_to_partitions(
+    bootstrap_servers: str,
+    frontier_file: Path,
+    *,
+    partitions: int = 6,
+) -> int:
+    """Advance every raw-web partition watermark with a deduplicated fixture event."""
+
+    try:
+        from confluent_kafka import Producer
+    except ImportError as error:  # pragma: no cover - exercised in the replay image
+        raise RuntimeError("install marketpulse-mock[kafka] to publish smoke probes") from error
+    value = frontier_file.read_bytes().rstrip(b"\n")
+    failures: list[str] = []
+
+    def delivered(error: object, _message: object) -> None:
+        if error is not None:
+            failures.append(str(error))
+
+    producer = Producer(
+        {
+            "bootstrap.servers": bootstrap_servers,
+            "enable.idempotence": True,
+            "acks": "all",
+        }
+    )
+    for partition in range(partitions):
+        producer.produce(
+            "marketing.raw.web-events.v1",
+            value=value,
+            partition=partition,
+            on_delivery=delivered,
+        )
+    remaining = producer.flush(30.0)
+    if failures or remaining:
+        raise RuntimeError(
+            f"frontier publication failed errors={failures} remaining={remaining}"
+        )
+    return partitions
+
+
 def verify(
     fixture: Path,
     output_dir: Path,
     input_dump: Path | None = None,
 ) -> dict[str, Any]:
+    validate_output_contracts(output_dir)
     oracle = derive_fixture_oracle(fixture)
     clean_rows = read_dump(output_dir / "marketing.clean.customer-events.v1.jsonl")
     clean = latest_by_key({**row, "key": row["value"]["event_id"]} for row in clean_rows)
@@ -328,19 +573,29 @@ def verify(
         actual = clean.get(event_id)
         if actual is None:
             continue
-        expected_late = "source_marked_late" if expected["is_late"] else "on_time"
-        if actual.get("late_status") != expected_late:
-            errors.append(
-                f"clean late_status {event_id} expected={expected_late} "
-                f"actual={actual.get('late_status')}"
-            )
-    extras = [value for key, value in clean.items() if key not in expected_ids]
-    if extras and not all(
-        value.get("late_status") == "watermark_late"
-        and value.get("eligible_for_aggregates") is False
-        for value in extras
+        for field, expected_value in expected_clean_value(expected).items():
+            if actual.get(field) != expected_value:
+                errors.append(
+                    f"clean mismatch {event_id}.{field} "
+                    f"expected={expected_value} actual={actual.get(field)}"
+                )
+    extra_keys = set(clean) - expected_ids
+    probe_rows = [
+        row for row in clean_rows if row["value"].get("event_id") == LATE_PROBE_ID
+    ]
+    probe = clean.get(LATE_PROBE_ID)
+    if extra_keys != {LATE_PROBE_ID} or len(probe_rows) != 1 or probe is None:
+        errors.append(
+            f"watermark-late probe expected exactly once actual={len(probe_rows)} "
+            f"extra_keys={sorted(extra_keys)}"
+        )
+    elif not (
+        probe.get("late_status") == "watermark_late"
+        and probe.get("eligible_for_aggregates") is False
+        and probe.get("event_time") == "2025-01-01T00:00:00Z"
+        and probe.get("session_id") == "smoke-watermark-late-session"
     ):
-        errors.append("unexpected non-fixture clean records")
+        errors.append("watermark-late probe payload mismatch")
 
     sessions = latest_by_key(read_dump(output_dir / "marketing.clean.sessions.v1.jsonl"))
     if set(sessions) != set(oracle.session_ids):
@@ -349,7 +604,7 @@ def verify(
         actual = sessions.get(session_id)
         if actual is None:
             continue
-        for field, expected_value in expected.items():
+        for field, expected_value in {"session_id": session_id, **expected}.items():
             if actual.get(field) != expected_value:
                 errors.append(
                     f"session mismatch {session_id}.{field} "
@@ -377,24 +632,49 @@ def verify(
     campaign = latest_by_key(read_dump(output_dir / "marketing.gold.campaign-metrics.v1.jsonl"))
     funnel = latest_by_key(read_dump(output_dir / "marketing.gold.funnel-metrics.v1.jsonl"))
     expected_metric_keys = set(oracle.campaign_metrics)
+    if set(revenue) != expected_metric_keys:
+        errors.append(f"revenue keys expected={len(expected_metric_keys)} actual={len(revenue)}")
     if set(campaign) != expected_metric_keys:
         errors.append(
             f"campaign keys expected={len(expected_metric_keys)} actual={len(campaign)}"
         )
     if set(funnel) != expected_metric_keys:
         errors.append(f"funnel keys expected={len(expected_metric_keys)} actual={len(funnel)}")
+    funnel_fields = (
+        "schema_version",
+        "metric_key",
+        "campaign_id",
+        "event_date",
+        "sessions",
+        "page_view_sessions",
+        "view_item_sessions",
+        "add_to_cart_sessions",
+        "checkout_sessions",
+        "purchase_sessions",
+        "max_event_time",
+    )
+    revenue_fields = (
+        "schema_version",
+        "metric_key",
+        "campaign_id",
+        "event_date",
+        "order_count",
+        "refund_count",
+        "gross_revenue_minor",
+        "refund_amount_minor",
+        "net_revenue_minor",
+        "currency",
+        "max_event_time",
+    )
     for key, expected in oracle.campaign_metrics.items():
-        for output_name, output in (("campaign", campaign), ("funnel", funnel)):
+        for output_name, output, fields in (
+            ("campaign", campaign, funnel_fields + revenue_fields[4:]),
+            ("funnel", funnel, funnel_fields),
+            ("revenue", revenue, revenue_fields),
+        ):
             if key not in output:
                 continue
-            for field in (
-                "sessions",
-                "page_view_sessions",
-                "view_item_sessions",
-                "add_to_cart_sessions",
-                "checkout_sessions",
-                "purchase_sessions",
-            ):
+            for field in fields:
                 if output[key].get(field) != expected[field]:
                     errors.append(
                         f"{output_name} mismatch {key}.{field} "
@@ -408,10 +688,48 @@ def verify(
             if campaign[key][field] != revenue_value[field]:
                 errors.append(f"campaign/revenue mismatch {key}.{field}")
 
-    dlq = [row["value"] for row in read_dump(output_dir / "marketing.dlq.flink-validation.v1.jsonl")]
-    malformed = [value for value in dlq if value.get("reason_code") == "MALFORMED_JSON"]
-    if len(malformed) != 1:
-        errors.append(f"processing DLQ expected one MALFORMED_JSON actual={len(malformed)}")
+    dlq_rows = read_dump(output_dir / "marketing.dlq.flink-validation.v1.jsonl")
+    dlq = [row["value"] for row in dlq_rows]
+    if len(dlq_rows) != 1:
+        errors.append(f"processing DLQ expected exactly one record actual={len(dlq_rows)}")
+    else:
+        row = dlq_rows[0]
+        value = row["value"]
+        failed = b"not-json"
+        expected_error_id = str(
+            uuid.uuid5(
+                ERROR_NAMESPACE,
+                f"marketing.raw.web-events.v1:{value.get('source_partition')}:"
+                f"{value.get('source_offset')}:{hashlib.sha256(failed).hexdigest()}",
+            )
+        )
+        expected_dlq = {
+            "schema_version": 1,
+            "error_id": expected_error_id,
+            "processor": "marketpulse-flink",
+            "source_topic": "marketing.raw.web-events.v1",
+            "source_key": None,
+            "reason_code": "MALFORMED_JSON",
+            "failed_value_base64": base64.b64encode(failed).decode("ascii"),
+            "failed_value_utf8": "not-json",
+        }
+        mismatched = {
+            field: (expected, value.get(field))
+            for field, expected in expected_dlq.items()
+            if value.get(field) != expected
+        }
+        if row.get("key") != expected_error_id:
+            mismatched["record_key"] = (expected_error_id, row.get("key"))
+        if not isinstance(value.get("source_partition"), int) or value.get(
+            "source_partition", -1
+        ) < 0:
+            mismatched["source_partition"] = (">=0", value.get("source_partition"))
+        if not isinstance(value.get("source_offset"), int) or value.get(
+            "source_offset", -1
+        ) < 0:
+            mismatched["source_offset"] = (">=0", value.get("source_offset"))
+        if mismatched:
+            errors.append(f"DLQ mismatch {mismatched}")
     if errors:
         raise ValueError("; ".join(errors))
     report = {
@@ -422,7 +740,7 @@ def verify(
         "source_marked_late": oracle.source_marked_late,
         "session_keys": len(sessions),
         **totals,
-        "extra_watermark_late": len(extras),
+        "extra_watermark_late": len(probe_rows),
         "processing_dlq": len(dlq),
     }
     if input_dump is not None:
@@ -434,6 +752,32 @@ def verify(
             evidence["checkpoint_before_restart"]
         ):
             raise ValueError("checkpoint did not advance after TaskManager restart")
+        before = int(evidence.get("raw_records_before_restart", 0))
+        after = int(evidence.get("raw_records_after_restart", 0))
+        if before <= 0 or after != oracle.valid_rows or after <= before:
+            raise ValueError(f"raw input did not progress across recovery: {before} -> {after}")
+        report["raw_records_before_restart"] = before
+        report["raw_records_after_restart"] = after
+        metrics = evidence.get("metrics", {})
+        required_metrics = {
+            "accepted",
+            "duplicates",
+            "source_marked_late",
+            "watermark_late",
+            "aggregate_ineligible",
+            "invalid",
+        }
+        if set(metrics) != required_metrics:
+            raise ValueError(f"Flink counter evidence is incomplete: {metrics}")
+        if (
+            int(metrics["accepted"]) <= 0
+            or int(metrics["duplicates"]) < oracle.valid_rows
+            or int(metrics["watermark_late"]) != 1
+            or int(metrics["aggregate_ineligible"]) != 1
+            or int(metrics["invalid"]) != 1
+        ):
+            raise ValueError(f"Flink counter evidence is inconsistent: {metrics}")
+        report["flink_metrics"] = metrics
     return report
 
 
@@ -443,6 +787,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input-dump", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--consume-bootstrap")
+    parser.add_argument("--publish-frontier-bootstrap")
     parser.add_argument("--consume-timeout-seconds", type=float, default=30.0)
     parser.add_argument("--write-probes", action="store_true")
     args = parser.parse_args(argv)
@@ -450,6 +795,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.write_probes:
             paths = write_probe_records(args.fixture, args.output_dir)
             print(json.dumps({key: str(path) for key, path in paths.items()}, sort_keys=True))
+            return 0
+        if args.publish_frontier_bootstrap:
+            published = publish_frontier_to_partitions(
+                args.publish_frontier_bootstrap,
+                args.output_dir / "frontier.json",
+            )
+            print(json.dumps({"frontier_partitions": published}, sort_keys=True))
             return 0
         consumed = None
         if args.consume_bootstrap:
@@ -461,7 +813,7 @@ def main(argv: list[str] | None = None) -> int:
         report = verify(args.fixture, args.output_dir, args.input_dump)
         if consumed is not None:
             report["consumed_records"] = consumed
-    except (OSError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
         print(json.dumps({"status": "FAIL", "error": str(error)}, sort_keys=True), file=sys.stderr)
         return 1
     print(json.dumps(report, sort_keys=True))

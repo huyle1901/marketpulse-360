@@ -15,10 +15,11 @@ Batch-shaped sources remain inputs to the later Dagster milestone.
 
 ## Current proof
 
-- 129 Python tests and 25 Java tests cover mock-data correctness, Kafka contracts, bounded
+- 135 Python tests and 30 Java tests cover mock-data correctness, Kafka contracts, bounded
   replay ordering, pacing, idempotent delivery, registry behavior, CLI behavior,
   Docker assets, raw-event validation, checkpointed deduplication, late events,
-  sessions, campaign KPIs, Kafka serde, and the executable Flink graph.
+  sessions, campaign KPIs, all six output schemas, Kafka serde, and the executable
+  Flink graph.
 - The committed fixture contains 615 rows in 22 compressed files.
 - The validated `demo` profile produces 1,200,225 rows in 130 files (about 90 MB)
   for seed `360`.
@@ -26,9 +27,10 @@ Batch-shaped sources remain inputs to the later Dagster milestone.
   bounds, source totals, and injected anomaly counts.
 - A real Docker smoke run delivered and consumed all 223 replay records: 199 web,
   14 order, 6 email, and 4 validation-DLQ records.
-- The MP-03 recovery smoke test restored checkpointed state after a TaskManager
-  restart, retained 217 unique event IDs and 73 session keys, rejected two duplicate
-  copies, and reconciled net revenue to `24,751,000` minor units.
+- The MP-03 recovery smoke test restarted a TaskManager while the producer remained
+  active, advanced raw Kafka input from 83 to 219 records across recovery, retained
+  217 unique event IDs and 73 session keys, rejected two duplicate copies, and
+  reconciled net revenue to `24,751,000` minor units.
 
 ## Quick start
 
@@ -74,8 +76,8 @@ curl -fsS http://localhost:8082/jobs/overview
 ```
 
 The Flink dashboard is at <http://localhost:8082>; Kafka UI remains at
-<http://localhost:8080>. The one-shot submitter is idempotent: running it again
-reports that `marketpulse-stream-v1` is already `RUNNING` instead of creating a
+<http://localhost:8080>. The one-shot submitter is idempotent: it detects the named
+job in every non-terminal state, including `RESTARTING`, instead of creating a
 second job.
 
 The smoke test uses an isolated Compose project and cleans it up. For manual

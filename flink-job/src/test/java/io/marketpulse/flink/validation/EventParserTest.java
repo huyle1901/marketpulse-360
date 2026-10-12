@@ -14,6 +14,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -82,6 +83,20 @@ class EventParserTest {
         assertEquals("MALFORMED_JSON", value.get("reason_code").asText());
         assertEquals("marketpulse-flink", value.get("processor").asText());
         assertEquals("2026-10-11T00:00:00Z", value.get("detected_at").asText());
+    }
+
+    @Test
+    void tombstoneAndNullHeaderReachDlqInsteadOfCrashing() {
+        Map<String, byte[]> headers = new LinkedHashMap<>();
+        headers.put("nullable", null);
+        RawKafkaRecord raw = new RawKafkaRecord(
+                "marketing.raw.web-events.v1", 2, 41L, null, null, headers, null);
+
+        InvalidRecord invalid = assertDoesNotThrow(() -> parser.parse(raw, DETECTED_AT)).invalid();
+
+        assertEquals(InvalidRecord.ReasonCode.MALFORMED_JSON, invalid.reasonCode());
+        assertEquals("", invalid.failedValueBase64());
+        assertNull(invalid.failedValueUtf8());
     }
 
     private void assertMutation(String resource, Consumer<ObjectNode> mutation, String reason) throws Exception {

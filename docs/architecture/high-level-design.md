@@ -276,10 +276,12 @@ on named larger profiles.
 ### 5.2 MP-03 Flink processing boundary
 
 MP-03 is designed as a Java 17 DataStream job on Apache Flink `2.2.1` with
-Kafka connector `5.0.0-2.2`. It consumes the three raw event topics, validates
-version-1 envelopes, deduplicates by `event_id`, assigns bounded event-time
-watermarks, classifies late events, creates 30-minute web sessions, and maintains
-campaign/day funnel and revenue state.
+Kafka connector `5.0.0-2.2`. It consumes the three raw event topics, assigns
+timestamps and bounded watermarks at the Kafka source so each partition/split owns
+its event-time progress, validates version-1 envelopes, deduplicates by `event_id`,
+classifies late events, creates 30-minute web sessions, and maintains campaign/day
+funnel and revenue state. Invalid or tombstone values cannot advance a watermark
+and are routed to the processing DLQ with their Kafka lineage intact.
 
 The milestone deliberately writes its clean and aggregate products back to
 versioned Kafka topics. This keeps recovery testing independent of storage work;
@@ -302,7 +304,10 @@ this prevents historical replays from being deleted immediately by topic retenti
 Flink
 checkpoints source offsets, keyed state, timers, and transactional Kafka output to
 a named local volume. The recovery demonstration restarts the TaskManager after a
-completed checkpoint and verifies exact final IDs and KPI values.
+completed checkpoint while the replay producer remains active, verifies raw input
+progress on both sides of the restart, and reconciles exact final IDs, per-campaign
+KPIs, session contracts, late-event probes, DLQ lineage, all six output schemas,
+and the job's accepted/duplicate/late/invalid counters via the Flink REST API.
 
 Implemented MP-03 slices:
 
@@ -310,11 +315,11 @@ Implemented MP-03 slices:
 |---|---|
 | Design, public output contracts, and recovery oracle | Implemented and fixture-derived |
 | Kafka topic/schema assets | Implemented: 10 versioned contracts with contract-driven retention and cleanup validation |
-| Flink raw-byte parser and validation DLQ | Implemented: Java 17 boundary preserves Kafka lineage, validates all three source envelopes, and covers 10 deterministic failure reasons in 3 JUnit tests |
+| Flink raw-byte parser and validation DLQ | Implemented: Java 17 boundary preserves Kafka lineage, safely rejects null/tombstone values, validates all three source envelopes, and covers 10 deterministic failure reasons |
 | Flink stateful transformations | Implemented: checkpoint-restored 7-day deduplication, late/correction classification, 30-minute session upserts, and unified campaign/funnel/revenue state; 12 operator-harness tests |
-| Executable Flink job | Implemented: three-topic Kafka source, validation side output, event-time/state branches, and one exactly-once dynamic Kafka sink in a 23 MB shaded JAR; 25 Java tests |
-| Dockerized Flink cluster | Implemented: pinned Java 17 multi-stage image, healthy JobManager/TaskManager, two slots, retained checkpoint volume, idempotent named-job submission, and dashboard on port 8082 |
-| Mid-replay recovery evidence | Implemented: TaskManager restart restored checkpointed state and all six `read_committed` outputs reconciled |
+| Executable Flink job | Implemented: three-topic Kafka source with partition-aware event time, validation side output, state branches, invalid-record metrics, and one exactly-once dynamic Kafka sink in a 23 MB shaded JAR; 30 Java tests |
+| Dockerized Flink cluster | Implemented: pinned Java 17 multi-stage image, healthy JobManager/TaskManager, two slots, retained checkpoint volume, named-job submission guarded across all non-terminal job states, and dashboard on port 8082 |
+| Mid-replay recovery evidence | Implemented: an active producer crossed a TaskManager restart, raw input advanced from 83 to 219, checkpointed state restored, and all six `read_committed` outputs reconciled |
 
 The local deployment was exercised against Kafka `4.3.1`: job
 `marketpulse-stream-v1` reached `RUNNING` with all 10 execution tasks running,
@@ -326,8 +331,9 @@ exceeding the five-second checkpoint interval.
 The isolated recovery proof retained 217 unique fixture event IDs, rejected two
 duplicate copies, produced 73 latest session keys, routed one malformed record to
 the processing DLQ, and preserved one watermark-late audit event without mutating
-aggregates. It restored checkpoint `20`, completed checkpoint `21`, and recovered in
-13 seconds on the verification machine. Gross revenue `29,718,000`, refunds
+aggregates. It restored checkpoint `18`, completed checkpoint `19`, and recovered in
+16 seconds while raw inputs advanced from 83 to 219 records on the verification
+machine. Gross revenue `29,718,000`, refunds
 `4,967,000`, and net revenue `24,751,000` minor units matched the fixture oracle.
 
 ## 6. Storage decision: BigQuery versus PostgreSQL

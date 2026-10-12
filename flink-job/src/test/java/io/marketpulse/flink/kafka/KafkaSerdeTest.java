@@ -42,6 +42,22 @@ class KafkaSerdeTest {
     }
 
     @Test
+    void sourceDeserializationPreservesNullableTombstoneAndHeader() throws Exception {
+        var headers = new RecordHeaders().add("nullable", null);
+        ConsumerRecord<byte[], byte[]> source = new ConsumerRecord<>(
+                "marketing.raw.web-events.v1", 1, 9L, 1234L,
+                TimestampType.CREATE_TIME, -1, -1, null, null, headers,
+                Optional.empty());
+        CapturingCollector collector = new CapturingCollector();
+
+        new RawKafkaDeserializationSchema().deserialize(source, collector);
+
+        assertNull(collector.value.key());
+        assertNull(collector.value.value());
+        assertNull(collector.value.headers().get("nullable"));
+    }
+
+    @Test
     void sinkSerializationRoutesDynamicTopicKeyValueAndHeaders() {
         byte[] json = "{\"schema_version\":1}".getBytes(StandardCharsets.UTF_8);
         OutputRecord output = new OutputRecord(

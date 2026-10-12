@@ -9,7 +9,10 @@ RUN mvn -q -f flink-job/pom.xml clean package -DskipTests
 FROM flink:2.2.1-java17
 
 USER root
-RUN mkdir -p /opt/flink/usrlib /opt/flink/checkpoints \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends jq \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /opt/flink/usrlib /opt/flink/checkpoints \
     && chown -R flink:flink /opt/flink/usrlib /opt/flink/checkpoints
 COPY --from=builder --chown=flink:flink \
     /build/flink-job/target/marketpulse-flink-job.jar \
