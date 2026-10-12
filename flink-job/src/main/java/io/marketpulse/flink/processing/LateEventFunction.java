@@ -50,8 +50,11 @@ public final class LateEventFunction extends ProcessFunction<MarketingEvent, Enr
             lateStatus = "on_time";
         }
 
-        boolean eligible = event.eventTime().toEpochMilli()
-                >= watermark - correctionHorizon.toMillis();
+        long horizonMillis = correctionHorizon.toMillis();
+        long correctionBoundary = watermark <= Long.MIN_VALUE + horizonMillis
+                ? Long.MIN_VALUE
+                : watermark - horizonMillis;
+        boolean eligible = event.eventTime().toEpochMilli() >= correctionBoundary;
         if (!eligible) {
             aggregateIneligible.inc();
         }

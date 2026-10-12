@@ -74,7 +74,7 @@ class DockerAssetTests(unittest.TestCase):
 
         for service in ("flink-jobmanager:", "flink-taskmanager:", "flink-job-submit:"):
             self.assertIn(service, compose)
-        self.assertIn('"8082:8081"', compose)
+        self.assertIn('"${FLINK_HOST_PORT:-8082}:8081"', compose)
         self.assertIn("taskmanager.numberOfTaskSlots: 2", compose)
         self.assertIn("jobmanager.memory.process.size: 768m", compose)
         self.assertIn("taskmanager.memory.process.size: 1024m", compose)
@@ -85,9 +85,9 @@ class DockerAssetTests(unittest.TestCase):
             "--bootstrap-servers=kafka:29092",
             "--group-id=marketpulse-flink-v1",
             "--checkpoint-uri=file:///opt/flink/checkpoints",
-            "--checkpoint-interval-ms=5000",
+            "--checkpoint-interval-ms=${FLINK_CHECKPOINT_INTERVAL_MS:-5000}",
             "--watermark-ms=300000",
-            "--idleness-ms=60000",
+            "--idleness-ms=${FLINK_IDLENESS_MS:-60000}",
             "--correction-horizon-ms=600000",
             "--session-gap-ms=1800000",
             "--dedup-ttl-ms=604800000",
@@ -97,6 +97,20 @@ class DockerAssetTests(unittest.TestCase):
         ):
             self.assertIn(argument, compose)
         self.assertIn("flink_checkpoints:", compose)
+
+    def test_flink_smoke_script_proves_recovery_and_read_committed_outputs(self) -> None:
+        script = (ROOT / "scripts/flink-smoke-test.sh").read_text()
+
+        self.assertIn("--events-per-second 20", script)
+        self.assertIn("restart flink-taskmanager", script)
+        self.assertIn("checkpoint_before_restart", script)
+        self.assertIn("checkpoint_after_restart", script)
+        self.assertIn("--consume-bootstrap kafka:29092", script)
+        self.assertIn("isolation.level", (
+            ROOT / "src/marketpulse_mock/flink_smoke_verify.py"
+        ).read_text())
+        self.assertIn("KEEP_STACK", script)
+        self.assertIn("down --volumes --remove-orphans", script)
 
     def test_flink_submitter_is_idempotent_for_running_named_job(self) -> None:
         script = (ROOT / "docker/flink/submit-job.sh").read_text()

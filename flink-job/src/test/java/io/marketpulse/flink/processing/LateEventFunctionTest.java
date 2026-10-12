@@ -74,7 +74,24 @@ class LateEventFunctionTest {
                     true,
                     EventTestFixtures.payload());
             harness.processElement(new StreamRecord<>(event));
-            assertEquals("source_marked_late", harness.extractOutputValues().get(0).lateStatus());
+            EnrichedEvent result = harness.extractOutputValues().get(0);
+            assertEquals("source_marked_late", result.lateStatus());
+            assertTrue(result.eligibleForAggregates());
+        }
+    }
+
+    @Test
+    void eventIsAggregateEligibleBeforeFirstWatermarkWithoutLongUnderflow() throws Exception {
+        try (var harness = harness()) {
+            MarketingEvent event = EventTestFixtures.web(
+                    "00000000-0000-0000-0000-000000000001",
+                    "page_view",
+                    Instant.parse("2026-01-01T00:00:00Z"));
+            harness.processElement(new StreamRecord<>(event));
+
+            EnrichedEvent result = harness.extractOutputValues().get(0);
+            assertEquals("on_time", result.lateStatus());
+            assertTrue(result.eligibleForAggregates());
         }
     }
 

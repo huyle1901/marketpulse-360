@@ -78,7 +78,7 @@ the exact consumed event IDs and DLQ reason codes with the fixture.
 
 ### MP-03 - Stateful stream processing with Flink
 
-**Status:** Design complete; implementation in progress on `feat/flink-stream-processing`
+**Status:** Implemented
 
 Validate, deduplicate, watermark, sessionize, enrich, and aggregate streaming events
 with Flink using event time.
@@ -94,6 +94,15 @@ with Flink using event time.
 connector `5.0.0-2.2`, transactional Kafka output, five-minute watermarks,
 seven-day deduplication state, 30-minute sessions, and versioned clean/Gold-style
 Kafka topics. Durable Iceberg sinks remain MP-04 scope.
+
+**Proof:** 129 Python tests and 25 Java tests pass. The isolated Docker recovery
+test consumed all six outputs with `read_committed` isolation after restarting the
+TaskManager: 217 unique fixture events, two rejected duplicate copies, 73 session
+keys, one malformed processing-DLQ record, and one watermark-late audit event.
+Checkpoint `20` restored into checkpoint `21` in 13 seconds on the verification
+machine. Gross `29,718,000`, refunds `4,967,000`, and net `24,751,000` minor units
+match the fixture oracle. This is a correctness/recovery proof, not a capacity
+benchmark.
 
 ### MP-04 - Bronze/Silver/Gold lakehouse
 

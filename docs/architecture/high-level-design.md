@@ -296,30 +296,39 @@ marketing.dlq.flink-validation.v1
 
 Clean events and the processing DLQ retain seven days. Sessions use compact-plus-
 delete for seven days; Gold topics use compact-plus-delete with thirty-day retention
-so the latest keyed snapshot is directly consumable. Flink
+so the latest keyed snapshot is directly consumable. Kafka assigns output record
+timestamps at publish time, while business `event_time` remains in each JSON value;
+this prevents historical replays from being deleted immediately by topic retention.
+Flink
 checkpoints source offsets, keyed state, timers, and transactional Kafka output to
 a named local volume. The recovery demonstration restarts the TaskManager after a
 completed checkpoint and verifies exact final IDs and KPI values.
 
-Implementation progress on `feat/flink-stream-processing`:
+Implemented MP-03 slices:
 
 | Slice | Status |
 |---|---|
-| Design, public output contracts, and recovery oracle | Specified and builder-reviewed |
+| Design, public output contracts, and recovery oracle | Implemented and fixture-derived |
 | Kafka topic/schema assets | Implemented: 10 versioned contracts with contract-driven retention and cleanup validation |
 | Flink raw-byte parser and validation DLQ | Implemented: Java 17 boundary preserves Kafka lineage, validates all three source envelopes, and covers 10 deterministic failure reasons in 3 JUnit tests |
 | Flink stateful transformations | Implemented: checkpoint-restored 7-day deduplication, late/correction classification, 30-minute session upserts, and unified campaign/funnel/revenue state; 12 operator-harness tests |
-| Executable Flink job | Implemented: three-topic Kafka source, validation side output, event-time/state branches, and one exactly-once dynamic Kafka sink in a 23 MB shaded JAR; 23 Java tests |
+| Executable Flink job | Implemented: three-topic Kafka source, validation side output, event-time/state branches, and one exactly-once dynamic Kafka sink in a 23 MB shaded JAR; 25 Java tests |
 | Dockerized Flink cluster | Implemented: pinned Java 17 multi-stage image, healthy JobManager/TaskManager, two slots, retained checkpoint volume, idempotent named-job submission, and dashboard on port 8082 |
-| Mid-replay recovery evidence | Planned |
+| Mid-replay recovery evidence | Implemented: TaskManager restart restored checkpointed state and all six `read_committed` outputs reconciled |
 
 The local deployment was exercised against Kafka `4.3.1`: job
 `marketpulse-stream-v1` reached `RUNNING` with all 10 execution tasks running,
-one registered TaskManager, two occupied slots, and completed checkpoint `1` at
-`file:///opt/flink/checkpoints`. Re-running the submitter returned success without
-creating a duplicate job. The Kafka producer transaction timeout is explicitly ten
-minutes so it stays below the local broker maximum while comfortably exceeding the
-five-second checkpoint interval.
+one registered TaskManager and two occupied slots. Re-running the submitter returned
+success without creating a duplicate job. The Kafka producer transaction timeout is
+explicitly ten minutes so it stays below the local broker maximum while comfortably
+exceeding the five-second checkpoint interval.
+
+The isolated recovery proof retained 217 unique fixture event IDs, rejected two
+duplicate copies, produced 73 latest session keys, routed one malformed record to
+the processing DLQ, and preserved one watermark-late audit event without mutating
+aggregates. It restored checkpoint `20`, completed checkpoint `21`, and recovered in
+13 seconds on the verification machine. Gross revenue `29,718,000`, refunds
+`4,967,000`, and net revenue `24,751,000` minor units matched the fixture oracle.
 
 ## 6. Storage decision: BigQuery versus PostgreSQL
 
@@ -368,6 +377,8 @@ locally generated data through a read-only mount. It is activated only when the
 operator invokes it, so starting the streaming profile never publishes data by
 surprise. Kafka is reachable as `localhost:9092` from the host and `kafka:29092`
 inside Compose; the UI and Registry API are exposed on ports 8080 and 8081.
+The implemented `flink` profile adds a Java 17 JobManager, TaskManager, idempotent
+one-shot submitter, retained checkpoint volume, and Web UI on port 8082.
 
 ```mermaid
 flowchart TB
@@ -376,8 +387,15 @@ flowchart TB
             K1["kafka"]
             KU["kafka-ui"]
             SR["schema-registry"]
+        end
+
+        subgraph Flink["profile: flink (MP-03 implemented)"]
             FJM["flink-jobmanager"]
             FTM["flink-taskmanager"]
+            FS["flink-job-submit"]
+        end
+
+        subgraph FutureStorage["future storage profiles"]
             MI["minio"]
             IC["iceberg-rest"]
             PG["postgres"]
@@ -413,7 +431,7 @@ flowchart TB
 Recommended laptop profiles:
 
 ```bash
-docker compose --profile streaming up -d --build --wait
+docker compose --profile streaming --profile flink up -d --build --wait
 ```
 
 Later milestones add the `batch`, `app`, and `observability` profiles. Run the

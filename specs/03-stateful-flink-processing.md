@@ -44,6 +44,9 @@ KPI computation, and checkpoint recovery.
    combined campaign view.
 9. Commit source offsets, keyed state, timers, and Kafka output atomically through
    Flink checkpoints and Kafka transactions.
+10. Store business event time in the JSON contract, but let Kafka assign output
+    record timestamps at publish time so topic retention is independent of replayed
+    historical dates.
 
 ## Topic contract
 
@@ -92,3 +95,27 @@ DLQ and is not reused for arbitrary malformed bytes.
 - Latest final aggregate JSON values compared with fixture-derived expectations.
 - Checkpoint ID before restart, recovery duration, and checkpoint ID after restart.
 - Job and container versions plus CPU/memory observations for MP-10.
+
+## Implemented evidence
+
+The clean isolated recovery run completed with checkpoint `20` before restart and
+checkpoint `21` after restore, with a measured recovery time of 13 seconds. The
+`read_committed` verifier observed:
+
+| Evidence | Result |
+|---|---:|
+| Valid fixture rows | 219 |
+| Unique fixture event IDs | 217 |
+| Duplicate copies rejected | 2 |
+| Latest session keys | 73 |
+| Source-marked late events | 3 |
+| Injected watermark-late audit events | 1 |
+| Processing DLQ records | 1 |
+| Gross revenue | 29,718,000 |
+| Refund amount | 4,967,000 |
+| Net revenue | 24,751,000 |
+
+The test also uncovered and fixed a retention-boundary defect: forwarding fixture
+event timestamps as Kafka record timestamps made old replay data immediately
+eligible for seven-day deletion. Output records now use Kafka publish time while
+retaining `event_time` in their payloads for Flink event-time semantics.

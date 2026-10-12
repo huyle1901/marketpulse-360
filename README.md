@@ -6,17 +6,16 @@ Kafka, Flink, Iceberg on MinIO, ClickHouse, PostgreSQL, Dagster, dbt, FastAPI, a
 Next.js in a Docker-based local environment. BigQuery/BigLake remains an optional
 cloud benchmark rather than a runtime dependency.
 
-The repository implements **MP-01: reproducible omnichannel mock data** and
-**MP-02: Kafka ingestion and replay controls**. MP-03 now includes the versioned
-contracts, stateful Java job, and local Flink cluster; its automated recovery proof
-is the remaining delivery slice. The project generates coherent data
+The repository implements **MP-01: reproducible omnichannel mock data**,
+**MP-02: Kafka ingestion and replay controls**, and **MP-03: stateful Flink stream
+processing with checkpoint recovery**. The project generates coherent data
 shaped like Google Ads, Meta Ads, TikTok Ads, web/mobile analytics, CRM, commerce,
 and email systems, then replays event-shaped sources to versioned Kafka topics.
 Batch-shaped sources remain inputs to the later Dagster milestone.
 
 ## Current proof
 
-- 122 Python tests and 23 Java tests cover mock-data correctness, Kafka contracts, bounded
+- 129 Python tests and 25 Java tests cover mock-data correctness, Kafka contracts, bounded
   replay ordering, pacing, idempotent delivery, registry behavior, CLI behavior,
   Docker assets, raw-event validation, checkpointed deduplication, late events,
   sessions, campaign KPIs, Kafka serde, and the executable Flink graph.
@@ -27,6 +26,9 @@ Batch-shaped sources remain inputs to the later Dagster milestone.
   bounds, source totals, and injected anomaly counts.
 - A real Docker smoke run delivered and consumed all 223 replay records: 199 web,
   14 order, 6 email, and 4 validation-DLQ records.
+- The MP-03 recovery smoke test restored checkpointed state after a TaskManager
+  restart, retained 217 unique event IDs and 73 session keys, rejected two duplicate
+  copies, and reconciled net revenue to `24,751,000` minor units.
 
 ## Quick start
 
@@ -78,7 +80,15 @@ second job.
 
 The smoke test uses an isolated Compose project and cleans it up. For manual
 replay, contract registration, pause/resume, UI inspection, and reset commands,
-follow the [local Kafka runbook](docs/runbooks/kafka-local.md).
+follow the [local Kafka runbook](docs/runbooks/kafka-local.md). For Flink job
+submission, checkpoint recovery, output inspection, and the MP-03 proof, follow
+the [local Flink runbook](docs/runbooks/flink-local.md).
+
+Run the complete isolated MP-03 recovery proof with:
+
+```bash
+./scripts/flink-smoke-test.sh
+```
 
 ## Documentation map
 
@@ -87,7 +97,9 @@ follow the [local Kafka runbook](docs/runbooks/kafka-local.md).
 - [Mock-data contract](specs/01-mock-data-foundation.md)
 - [Mock-data operations guide](data/mock/README.md)
 - [Local Kafka replay runbook](docs/runbooks/kafka-local.md)
+- [Local Flink processing runbook](docs/runbooks/flink-local.md)
 - [Kafka ingestion and replay specification](specs/02-kafka-ingestion-replay.md)
+- [Stateful Flink processing specification](specs/03-stateful-flink-processing.md)
 
 ## Data boundaries
 

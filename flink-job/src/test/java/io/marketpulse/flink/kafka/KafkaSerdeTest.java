@@ -2,6 +2,7 @@ package io.marketpulse.flink.kafka;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.marketpulse.flink.model.OutputRecord;
@@ -58,6 +59,7 @@ class KafkaSerdeTest {
         assertArrayEquals(
                 "id-1".getBytes(StandardCharsets.UTF_8),
                 result.headers().lastHeader("event_id").value());
+        assertNull(result.timestamp(), "Kafka retention must use publish time, not event time");
     }
 
     @Test

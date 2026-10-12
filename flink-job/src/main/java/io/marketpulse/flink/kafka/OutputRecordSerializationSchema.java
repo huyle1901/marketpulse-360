@@ -34,7 +34,7 @@ public final class OutputRecordSerializationSchema
         return new ProducerRecord<>(
                 record.topic(),
                 null,
-                timestamp,
+                null,
                 record.key().getBytes(StandardCharsets.UTF_8),
                 record.value(),
                 headers);
