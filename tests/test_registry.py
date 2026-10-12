@@ -32,6 +32,12 @@ class RegistryTests(unittest.TestCase):
             "order-events-v1.json": {"title": "Order"},
             "email-events-v1.json": {"title": "Email"},
             "validation-dlq-v1.json": {"title": "DLQ"},
+            "customer-events-v1.json": {"title": "Clean"},
+            "sessions-v1.json": {"title": "Sessions"},
+            "funnel-metrics-v1.json": {"title": "Funnel"},
+            "revenue-metrics-v1.json": {"title": "Revenue"},
+            "campaign-metrics-v1.json": {"title": "Campaign"},
+            "flink-validation-dlq-v1.json": {"title": "Flink DLQ"},
         }
         for name, schema in schemas.items():
             (self.contract_dir / name).write_text(json.dumps(schema))
@@ -52,9 +58,9 @@ class RegistryTests(unittest.TestCase):
             "http://registry:8080", self.contract_dir, opener=opener
         )
 
-        self.assertEqual(4, summary.created)
+        self.assertEqual(10, summary.created)
         posts = [request for request in requests if request.method == "POST"]
-        self.assertEqual(4, len(posts))
+        self.assertEqual(10, len(posts))
         payload = json.loads(posts[0].data)
         self.assertEqual("JSON", payload["artifactType"])
         self.assertEqual("1", payload["firstVersion"]["version"])
@@ -67,6 +73,12 @@ class RegistryTests(unittest.TestCase):
             "order-events-v1": {"title": "Order"},
             "email-events-v1": {"title": "Email"},
             "validation-dlq-v1": {"title": "DLQ"},
+            "customer-events-v1": {"title": "Clean"},
+            "sessions-v1": {"title": "Sessions"},
+            "funnel-metrics-v1": {"title": "Funnel"},
+            "revenue-metrics-v1": {"title": "Revenue"},
+            "campaign-metrics-v1": {"title": "Campaign"},
+            "flink-validation-dlq-v1": {"title": "Flink DLQ"},
         }
 
         def opener(request: object, timeout: float) -> Response:
@@ -77,7 +89,7 @@ class RegistryTests(unittest.TestCase):
             "http://registry:8080", self.contract_dir, opener=opener
         )
 
-        self.assertEqual(4, summary.unchanged)
+        self.assertEqual(10, summary.unchanged)
         self.assertEqual(0, summary.created)
         self.assertTrue(summary.success)
 
@@ -98,8 +110,8 @@ class RegistryTests(unittest.TestCase):
             "http://registry:8080", self.contract_dir, opener=opener
         )
 
-        self.assertEqual(4, summary.versioned)
-        self.assertEqual(4, methods.count("POST"))
+        self.assertEqual(10, summary.versioned)
+        self.assertEqual(10, methods.count("POST"))
 
     def test_registry_transport_failure_is_reported(self) -> None:
         def opener(request: object, timeout: float) -> Response:
@@ -109,7 +121,7 @@ class RegistryTests(unittest.TestCase):
             "http://registry:8080", self.contract_dir, opener=opener
         )
 
-        self.assertEqual(4, summary.failed)
+        self.assertEqual(10, summary.failed)
         self.assertFalse(summary.success)
 
 

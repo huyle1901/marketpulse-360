@@ -10,7 +10,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from .kafka_contracts import TOPIC_CONTRACTS, load_contract_schema
+from .kafka_contracts import ALL_TOPIC_CONTRACTS, load_contract_schema
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +43,7 @@ def register_contracts(
     group = quote(group_id, safe="")
     created = unchanged = versioned = failed = 0
     errors: list[str] = []
-    for contract in TOPIC_CONTRACTS.values():
+    for contract in ALL_TOPIC_CONTRACTS.values():
         schema = load_contract_schema(contract_dir, contract)
         artifact = quote(contract.artifact_id, safe="")
         content_url = (

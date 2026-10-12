@@ -273,6 +273,69 @@ records, and excludes paused time from throughput. This small fixture measuremen
 proves the control path and exact accounting; MP-10 will perform capacity benchmarks
 on named larger profiles.
 
+### 5.2 MP-03 Flink processing boundary
+
+MP-03 is designed as a Java 17 DataStream job on Apache Flink `2.2.1` with
+Kafka connector `5.0.0-2.2`. It consumes the three raw event topics, assigns
+timestamps and bounded watermarks at the Kafka source so each partition/split owns
+its event-time progress, validates version-1 envelopes, deduplicates by `event_id`,
+classifies late events, creates 30-minute web sessions, and maintains campaign/day
+funnel and revenue state. Invalid or tombstone values cannot advance a watermark
+and are routed to the processing DLQ with their Kafka lineage intact.
+
+The milestone deliberately writes its clean and aggregate products back to
+versioned Kafka topics. This keeps recovery testing independent of storage work;
+MP-04 attaches MinIO and Iceberg sinks to the same clean contracts.
+
+```text
+marketing.clean.customer-events.v1
+marketing.clean.sessions.v1
+marketing.gold.funnel-metrics.v1
+marketing.gold.revenue-metrics.v1
+marketing.gold.campaign-metrics.v1
+marketing.dlq.flink-validation.v1
+```
+
+Clean events and the processing DLQ retain seven days. Sessions use compact-plus-
+delete for seven days; Gold topics use compact-plus-delete with thirty-day retention
+so the latest keyed snapshot is directly consumable. Kafka assigns output record
+timestamps at publish time, while business `event_time` remains in each JSON value;
+this prevents historical replays from being deleted immediately by topic retention.
+Flink
+checkpoints source offsets, keyed state, timers, and transactional Kafka output to
+a named local volume. The recovery demonstration restarts the TaskManager after a
+completed checkpoint while the replay producer remains active, verifies raw input
+progress on both sides of the restart, and reconciles exact final IDs, per-campaign
+KPIs, session contracts, late-event probes, DLQ lineage, all six output schemas,
+and the job's accepted/duplicate/late/invalid counters via the Flink REST API.
+
+Implemented MP-03 slices:
+
+| Slice | Status |
+|---|---|
+| Design, public output contracts, and recovery oracle | Implemented and fixture-derived |
+| Kafka topic/schema assets | Implemented: 10 versioned contracts with contract-driven retention and cleanup validation |
+| Flink raw-byte parser and validation DLQ | Implemented: Java 17 boundary preserves Kafka lineage, safely rejects null/tombstone values, validates all three source envelopes, and covers 10 deterministic failure reasons |
+| Flink stateful transformations | Implemented: checkpoint-restored 7-day deduplication, late/correction classification, 30-minute session upserts, and unified campaign/funnel/revenue state; 12 operator-harness tests |
+| Executable Flink job | Implemented: three-topic Kafka source with partition-aware event time, validation side output, state branches, invalid-record metrics, and one exactly-once dynamic Kafka sink in a 23 MB shaded JAR; 30 Java tests |
+| Dockerized Flink cluster | Implemented: pinned Java 17 multi-stage image, healthy JobManager/TaskManager, two slots, retained checkpoint volume, named-job submission guarded across all non-terminal job states, and dashboard on port 8082 |
+| Mid-replay recovery evidence | Implemented: an active producer crossed a TaskManager restart, raw input advanced from 83 to 219, checkpointed state restored, and all six `read_committed` outputs reconciled |
+
+The local deployment was exercised against Kafka `4.3.1`: job
+`marketpulse-stream-v1` reached `RUNNING` with all 10 execution tasks running,
+one registered TaskManager and two occupied slots. Re-running the submitter returned
+success without creating a duplicate job. The Kafka producer transaction timeout is
+explicitly ten minutes so it stays below the local broker maximum while comfortably
+exceeding the five-second checkpoint interval.
+
+The isolated recovery proof retained 217 unique fixture event IDs, rejected two
+duplicate copies, produced 73 latest session keys, routed one malformed record to
+the processing DLQ, and preserved one watermark-late audit event without mutating
+aggregates. It restored checkpoint `18`, completed checkpoint `19`, and recovered in
+16 seconds while raw inputs advanced from 83 to 219 records on the verification
+machine. Gross revenue `29,718,000`, refunds
+`4,967,000`, and net revenue `24,751,000` minor units matched the fixture oracle.
+
 ## 6. Storage decision: BigQuery versus PostgreSQL
 
 BigQuery and PostgreSQL do not solve the same problem and should not be treated
@@ -320,6 +383,8 @@ locally generated data through a read-only mount. It is activated only when the
 operator invokes it, so starting the streaming profile never publishes data by
 surprise. Kafka is reachable as `localhost:9092` from the host and `kafka:29092`
 inside Compose; the UI and Registry API are exposed on ports 8080 and 8081.
+The implemented `flink` profile adds a Java 17 JobManager, TaskManager, idempotent
+one-shot submitter, retained checkpoint volume, and Web UI on port 8082.
 
 ```mermaid
 flowchart TB
@@ -328,8 +393,15 @@ flowchart TB
             K1["kafka"]
             KU["kafka-ui"]
             SR["schema-registry"]
+        end
+
+        subgraph Flink["profile: flink (MP-03 implemented)"]
             FJM["flink-jobmanager"]
             FTM["flink-taskmanager"]
+            FS["flink-job-submit"]
+        end
+
+        subgraph FutureStorage["future storage profiles"]
             MI["minio"]
             IC["iceberg-rest"]
             PG["postgres"]
@@ -365,7 +437,7 @@ flowchart TB
 Recommended laptop profiles:
 
 ```bash
-docker compose --profile streaming up -d --build --wait
+docker compose --profile streaming --profile flink up -d --build --wait
 ```
 
 Later milestones add the `batch`, `app`, and `observability` profiles. Run the

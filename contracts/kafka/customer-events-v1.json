@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketpulse:kafka:customer-events:v1",
+  "title": "MarketPulse clean customer event v1",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_name", "event_time", "ingested_at", "processed_at", "source", "channel", "customer_id", "anonymous_id", "identity_key", "session_id", "campaign_id", "campaign_key", "consent_analytics", "late_status", "eligible_for_aggregates", "payload", "lineage"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "event_id": {"type": "string", "format": "uuid"},
+    "event_name": {"type": "string", "minLength": 1},
+    "event_time": {"type": "string", "format": "date-time"},
+    "ingested_at": {"type": "string", "format": "date-time"},
+    "processed_at": {"type": "string", "format": "date-time"},
+    "source": {"enum": ["web", "mobile", "commerce", "email"]},
+    "channel": {"enum": ["web", "mobile", "commerce", "email"]},
+    "customer_id": {"type": ["string", "null"]},
+    "anonymous_id": {"type": ["string", "null"]},
+    "identity_key": {"type": "string", "minLength": 1},
+    "session_id": {"type": "string", "minLength": 1},
+    "campaign_id": {"type": ["string", "null"]},
+    "campaign_key": {"type": ["string", "null"]},
+    "consent_analytics": {"type": "boolean"},
+    "late_status": {"enum": ["on_time", "source_marked_late", "watermark_late"]},
+    "eligible_for_aggregates": {"type": "boolean"},
+    "payload": {"type": "object"},
+    "lineage": {
+      "type": "object",
+      "required": ["topic", "partition", "offset", "record_timestamp", "record_key"],
+      "properties": {
+        "topic": {"type": "string", "minLength": 1},
+        "partition": {"type": "integer", "minimum": 0},
+        "offset": {"type": "integer", "minimum": 0},
+        "record_timestamp": {"type": ["integer", "null"]},
+        "record_key": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

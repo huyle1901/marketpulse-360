@@ -26,6 +26,7 @@ htmlcov/
 # Local scratch files
 tmp/
 .worktrees/
+flink-job/target/
 
 # Course brief kept as a local reference
 DE_Presentation and Project Descriptions and Requirements-Semester 1-2026-2027 (1).pdf
