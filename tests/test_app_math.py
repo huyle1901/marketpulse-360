@@ -49,3 +49,7 @@ class AppMathTests(unittest.TestCase):
         self.assertEqual(evaluate_rule(spike, {"spend_minor": 300})["outcome"], "insufficient_data")
         budget = AlertRule("b", "a", "budget_overrun", Decimal(1))
         self.assertEqual(evaluate_rule(budget, {"spend_minor": 100, "budget_minor": 100})["outcome"], "clear")
+
+    def test_high_precision_threshold_compares_without_rounding(self):
+        rule = AlertRule("r", "a", "refund_share", Decimal("0.0999999999999999999999999999999"))
+        self.assertEqual(evaluate_rule(rule, {"gross_revenue_minor": 10, "refund_amount_minor": 1})["outcome"], "triggered")

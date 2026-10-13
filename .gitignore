@@ -46,4 +46,5 @@ web/.next/
 web/test-results/
 web/playwright-report/
 web/tsconfig.tsbuildinfo
+web/next-env.d.ts
 *.egg-info/

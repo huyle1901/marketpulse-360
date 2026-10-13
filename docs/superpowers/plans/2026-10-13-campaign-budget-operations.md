@@ -4,6 +4,16 @@
 > inline, as requested, in the current source tree. No new worktree or implementer
 > subagents. A fresh reviewer checks the design and the final branch.
 
+> **Execution record:** Completed inline in the existing source tree on 2026-10-13.
+> Scope/plan committed before code (`369560b`); tasks 1–5: `b322501`, `79c0c47`,
+> `8252b89`, `b795744`, `11aa66d`. Final proof/review fixes are in the final MP-06
+> acceptance commit. All nine reviewer findings were reproduced and fixed;
+> 333 Python tests OK (27 opt-in skips), 27 app tests with real integrations,
+> nine browser tests/typecheck/build and refreshed Docker proof passed.
+> Actual commands/results/limits: `docs/runbooks/campaign-operations.md`.
+> DDL for streaming remains in LiveStore; Next's generated environment types stay
+> ignored. User's one-tree constraint overrides the skill's worktree default.
+
 **Goal:** Deliver four usable MP-06 capabilities with exact, traceable metrics and persistent app configuration.
 
 **Architecture:** FastAPI reads certified and provisional analytical data from ClickHouse, using one MP-05 release per request. A read_committed serving worker copies MP-03 keyed snapshots and evaluates rules; a dedicated PostgreSQL stores app settings and alert history. Next.js polls the API through same-origin handlers.
@@ -50,18 +60,18 @@ enabled: bool = True, version: int = 0)`.
 `simulate(baselines: Mapping[str,tuple[int,int]], allocations: Mapping[str,int], total_budget_minor: int) -> dict[str,object]`;
 `evaluate_rule(rule: AlertRule, operands: Mapping[str,object]) -> dict[str,object]`.
 
-- [ ] Write failing unittest cases: interval 0/367 days rejected; boolean/float money
+- [x] Write failing unittest cases: interval 0/367 days rejected; boolean/float money
   rejected; amount 9007199254740993 preserved; no baseline/negative net/zero allocation;
   pacing B=1000,D=10,K=2,S=300 -> expected 200, remaining 700, projection 1500;
   gap day 2 -> insufficient_data; future period -> null forecast; ended complete
   period -> S; refund_share 1/10 >0.05 triggers, gross 0 insufficient; spike 300/100
   >2 triggers, absent prior calendar day insufficient; spend==budget is clear.
-- [ ] Run `PYTHONPATH=src python3 -m unittest discover -s tests -p 'test_app_*.py' -v`;
+- [x] Run `PYTHONPATH=src python3 -m unittest discover -s tests -p 'test_app_*.py' -v`;
   Expected: new interfaces unavailable, tests fail.
-- [ ] Implement strict dependency-free dataclasses and Decimal formulas; no clocks,
+- [x] Implement strict dependency-free dataclasses and Decimal formulas; no clocks,
   I/O, HTTP or operational persistence in domain modules.
-- [ ] Run focused tests and complete Python suite; Expected: no failures.
-- [ ] Update architecture with proposed MP-06 boundary, run diff check, commit
+- [x] Run focused tests and complete Python suite; Expected: no failures.
+- [x] Update architecture with proposed MP-06 boundary, run diff check, commit
   `feat: define campaign budget contracts and exact scenario math`.
 
 ## Task 2: Strict replay-safe Kafka serving adapter
@@ -77,20 +87,20 @@ received_at: datetime) -> CampaignSnapshot`;
 `write(snapshot: CampaignSnapshot) -> None`, `latest() -> list[dict[str,object]]`;
 `deliver(message: Any, store: LiveStore, consumer: Any, now: datetime) -> None`.
 
-- [ ] Write RED tests for wrong key, unknown/missing fields, naive timestamp,
+- [x] Write RED tests for wrong key, unknown/missing fields, naive timestamp,
   bool/negative counter, Int64 overflow, currency-null zero money, inconsistent net;
   repeated/out-of-order cumulative snapshots select highest offset, not sum;
   whole nullable tuple preserved; conflicting position and moved partition rejected;
   failed write commits nothing; acknowledgement retry preserves first received_at;
   changed cluster/topic identity fails. Use opt-in real ClickHouse integration for
   projection SQL/conflicts (no test-only paths in production).
-- [ ] Run streaming tests; Expected: missing new interfaces FAIL.
-- [ ] Implement synchronous append/collapse/latest queries and consume loop with
+- [x] Run streaming tests; Expected: missing new interfaces FAIL.
+- [x] Implement synchronous append/collapse/latest queries and consume loop with
   read_committed/manual commits, bounded payloads, stable Kafka source identity;
   validate before writing/committing. No changes to Flink.
-- [ ] Run focused/full suites and real serving projection tests; Expected: PASS,
+- [x] Run focused/full suites and real serving projection tests; Expected: PASS,
   latest totals unaffected by duplicate storage or arrival order.
-- [ ] Update architecture, diff check and commit
+- [x] Update architecture, diff check and commit
   `feat: serve committed Flink campaign snapshots without replay inflation`.
 
 ## Task 3: Persistent settings, versioned rules and alert evaluation
@@ -107,17 +117,17 @@ expected_version: int) -> CampaignSetting`, `rules() -> list[AlertRule]`,
 `evaluate_alerts(analytics: Analytics, store: AppStore, today: date) -> dict[str,object]`
 uses Task 4's request-pinned data. Wire after Task 4 supplies Analytics.
 
-- [ ] Write failing tests using a dedicated `mp06_test` database: additive migration;
+- [x] Write failing tests using a dedicated `mp06_test` database: additive migration;
   setting create version 1; concurrent stale update ->409/conflict; no generated
   state at startup; versioned rules; repeated/concurrent evaluation same key ->one
   result/occurrence; threshold or setting edits preserve old evidence; DB restart
   retains exact operands. Unit cases exercise incomplete/future days and fixture refunds.
-- [ ] Run focused tests (integration explicitly opt-in); Expected: missing interfaces FAIL.
-- [ ] Implement schema-scoped migrations, parameterized transactions and immutable
+- [x] Run focused tests (integration explicitly opt-in); Expected: missing interfaces FAIL.
+- [x] Implement schema-scoped migrations, parameterized transactions and immutable
   unique evaluation evidence; separate real app DB from Dagster/catalog.
-- [ ] Run focused/full suite and PostgreSQL integration; Expected: PASS; test-owned
+- [x] Run focused/full suite and PostgreSQL integration; Expected: PASS; test-owned
   schema reset guards reject the application DB.
-- [ ] Update architecture, diff check, commit
+- [x] Update architecture, diff check, commit
   `feat: persist campaign configuration and idempotent alert evidence`.
 
 ## Task 4: Request-pinned analytical service and FastAPI
@@ -135,19 +145,19 @@ routes; runtime dependency injection provides live clients. `load_settings(envir
 Mapping[str,str]) -> AppSettings` keeps secrets out of repr; worker coordinates
 stream ingestion and 5-second evaluations, tolerating unavailable publication.
 
-- [ ] Write RED tests for parameterized hostile filter values; release changes
+- [x] Write RED tests for parameterized hostile filter values; release changes
   between subqueries still use original release; currency-separated totals;
   configured market semantics; unknown/empty selections; unmapped stream rows;
   >2**53 response money strings; day-resolution freshness and historical stale state;
   simulation invalid currency/sums/IDs; stale edit ->409; bad body ->422;
   absent publication ->409; dependency down ->503 with stable code/no secrets.
-- [ ] Run API/query tests; Expected: missing interfaces FAIL.
-- [ ] Resolve/pin FastAPI/Uvicorn/Pydantic test-client dependencies, add app extra;
+- [x] Run API/query tests; Expected: missing interfaces FAIL.
+- [x] Resolve/pin FastAPI/Uvicorn/Pydantic test-client dependencies, add app extra;
   implement route models, exact serialization, allowlisted parameterized queries,
   settings validation and worker entry points. Finish Task 3 evaluation wiring.
-- [ ] Run focused/full suite and real HTTP/DB/ClickHouse operations; Expected: PASS,
+- [x] Run focused/full suite and real HTTP/DB/ClickHouse operations; Expected: PASS,
   no-store headers and one-release provenance across dashboard/pacing/simulation.
-- [ ] Update architecture/spec, diff check and commit
+- [x] Update architecture/spec, diff check and commit
   `feat: expose campaign operations through FastAPI`.
 
 ## Task 5: Usable Next.js Marketing Command Center and Compose app runtime
@@ -162,22 +172,22 @@ requirements.lock}`, `tests/test_app_runtime.py`; modify Compose, ignores,
 statuses, query parameters and no-store. Poll lifecycle ignores aborted/older
 responses; formatting uses string/BigInt, not Number for money.
 
-- [ ] Write RED browser tests: dashboard source panels/filtering/historical label;
+- [x] Write RED browser tests: dashboard source panels/filtering/historical label;
   >2**53 exact display; config save and rule create; alert explanation;
   pacing insufficient-data state; allocation sum validation and before/after;
   failed poll keeps labeled previous success; old filter response cannot overwrite
   current; mobile layout and keyboard form navigation. Write runtime asset tests
   for profiles, private DB, nonroot processes, secret exclusion and health checks.
-- [ ] Run tests; Expected: absent UI/runtime FAIL.
-- [ ] Resolve/pin Next.js/React/Node and Playwright, implement the single Command
+- [x] Run tests; Expected: absent UI/runtime FAIL.
+- [x] Resolve/pin Next.js/React/Node and Playwright, implement the single Command
   Center and proxy, lock dependencies; add app-postgres/API/worker/web services,
   additive secret initializer, app volume and resource limits. `.dockerignore`
   must exclude web node_modules/.next while admitting actual web sources.
-- [ ] Run frontend tests, TypeScript and production build, full Python suite and
+- [x] Run frontend tests, TypeScript and production build, full Python suite and
   `docker compose --profile app --profile serving --profile streaming config -q`;
   Expected: PASS without printing secrets. Build/start actual app services on the
   existing proof network, with port overrides preserved.
-- [ ] Inspect actual UI desktop/mobile screenshots; fix functional/layout errors;
+- [x] Inspect actual UI desktop/mobile screenshots; fix functional/layout errors;
   update architecture, diff check and commit
   `feat: add the campaign command center and local app runtime`.
 
@@ -187,23 +197,23 @@ responses; formatting uses string/BigInt, not Number for money.
 `docs/architecture/mp06-decisions.md`, tests for proof assertions;
 modify architecture, backlog and MP-06 spec/plan status.
 
-- [ ] Write RED proof assertions for source-position deduplication, provisional
+- [x] Write RED proof assertions for source-position deduplication, provisional
   vs certified separation, persisted versions/alert identities and benchmark
   nearest-rank p95. Run proof unit tests; Expected: new assertions FAIL.
-- [ ] Implement the proof against an explicitly selected existing project; read
+- [x] Implement the proof against an explicitly selected existing project; read
   actual Kafka/ClickHouse independently, configure demo budget/refund rule by HTTP,
   exercise filters/pacing/simulation, repeat evaluation and restart only new app
   services. Test fault paths in owned test relations/DB only; retain prior projects.
-- [ ] Run real Docker acceptance plus 20 warmup/100 uncached HTTP measurements each
+- [x] Run real Docker acceptance plus 20 warmup/100 uncached HTTP measurements each
   for dashboard/pacing/simulation; Expected: no failures, fixture p95 <=500ms,
   unchanged certified totals, identical persisted state after restart. Run browser
   checks on the production Docker UI; retain ignored evidence and disclose scale.
-- [ ] Run complete Python suite, source fixture validation, Compose/health checks
+- [x] Run complete Python suite, source fixture validation, Compose/health checks
   and git diff --check/status. Expected: all required checks pass; existing opt-in
   integrations reported explicitly rather than counted as executed.
-- [ ] Request one fresh whole-branch review against base `a8843ae`; address Important
+- [x] Request one fresh whole-branch review against base `a8843ae`; address Important
   findings via RED/GREEN regressions and full suite; record decisions/limitations.
-- [ ] Mark implemented/verified only where actual evidence exists, write reproducible
+- [x] Mark implemented/verified only where actual evidence exists, write reproducible
   start/demo/stop instructions and commit `feat: verify MP-06 campaign operations`.
 
 ## Self-review and execution handoff

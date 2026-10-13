@@ -3,6 +3,7 @@
 MP-06 adds a FastAPI + Next.js Marketing Command Center, a committed Kafka
 campaign-serving adapter, and separate PostgreSQL app settings/alert evidence.
 Its scope is in [the MP-06 specification](specs/06-live-campaign-and-budget-operations.md).
+Startup, demo tasks and evidence are in [the campaign operations runbook](docs/runbooks/campaign-operations.md).
 Run Python application checks in an environment with the app/test extras:
 `uv venv --python 3.12 .venv` then
 `uv pip install --python .venv/bin/python -e '.[app,app-test]'`.

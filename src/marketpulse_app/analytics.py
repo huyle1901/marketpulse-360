@@ -130,7 +130,13 @@ class Analytics:
                     rows.append(wire(row | {"received_at": item["received_at"], "partition": item["partition"], "offset": item["offset"],
                         "mapped": dimension is not None, "event_age_seconds": event_age,
                         "transport_age_seconds": int((now-item["received_at"]).total_seconds()), "stale": event_age > 300}))
-                streaming = streaming | {"status": "available" if rows else "empty", "rows": rows}
+                partitions = sorted({int(row["partition"]) for row in rows})
+                bounds = [{"partition": str(partition),
+                    "from_offset": str(min(int(row["offset"]) for row in rows if int(row["partition"]) == partition)),
+                    "to_offset": str(max(int(row["offset"]) for row in rows if int(row["partition"]) == partition)+1)} for partition in partitions]
+                streaming = streaming | {"status": "available" if rows else "empty", "rows": rows,
+                    "source_identity": session.live_store.source_identity(), "offset_bounds": bounds,
+                    "offset_scope": "Bounds of latest selected keyed snapshots; gaps may exist"}
         return wire({"filters": vars_filter(filters), "certified": {"rows": list(groups.values()),
             "totals": [{"currency": currency, **values} for currency, values in sorted(totals.items())],
             "provenance": provenance, "freshness": freshness}, "streaming": streaming, "campaigns": campaigns})
