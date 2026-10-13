@@ -339,13 +339,14 @@ This is a correctness/reproducibility proof, not a capacity benchmark. Operator
 commands and evidence locations are documented in
 [`lakehouse-local.md`](../runbooks/lakehouse-local.md).
 
-### 4.4 MP-05 batch/serving boundary (implementation in progress)
+### 4.4 MP-05 batch/serving boundary (implemented, local proof verified)
 
 The scope in `specs/05-batch-orchestration-and-serving.md` adds scheduled Dagster
 assets for ad reports, CRM, historical/master files and bounded Kafka ingestion.
 MP-04 Spark transformations continue to build snapshot-pinned Silver/Gold; dbt
 Core with dbt-clickhouse builds and tests serving relations from exported snapshot
-copies. Runtime bootstrap is implemented; Gold serving proof is pending, not a performance claim.
+copies. The local correctness, query and recovery proof is verified; remote CI
+and GitGuardian remain release gates.
 
 Implemented first: optional daily file-ingest selection preserves the MP-04
 all-file default. It requires nonempty configured report platforms and CRM;
@@ -382,8 +383,11 @@ passed; changed monetary rows with unchanged counts and injected missing campaig
 references were rejected. A real queued Dagster refresh completed ingestion,
 pinned Bronze, owned Silver/Gold, export, copy, dbt, certification and generation-1
 publication. A receipt-only historical job rebuilt and certified in isolation,
-without publication; native backfill tags also block promotion. Query latency
-and final restart/failure acceptance remain pending.
+without publication; native backfill tags also block promotion. Six independent
+query oracles and 20-warmup/100-sample uncached benchmarks passed, including after
+a restart of ClickHouse, PostgreSQL and the three Dagster services. Test-owned
+lost-acknowledgement recovery preserves one logical publication; active identity,
+snapshots, row counts and exact money remain equal before/after restart.
 
 ClickHouse receives isolated candidate release databases. All five Gold rowsets
 must pass schema/key/checksum/financial reconciliation and dbt tests before a
@@ -399,6 +403,17 @@ Reader requests pin a single certified
 database; retries do not append duplicate rows into an active dataset. Historical
 rebuilds do not promote by default. Iceberg/MinIO remains the durable truth.
 
+The CLI exposes six parameterized query workloads; values are bound and relation
+names are allowlisted. Dates use UTC `[from,to)`. Campaign financial queries group
+by currency. Attribution/customer Gold schemas do not encode currency, so their
+queries reject mixed-currency releases. Customer drill money is explicitly
+snapshot-lifetime, filtered by last activity; cohort filtering uses activity month.
+Funnel rows remain per campaign to avoid incorrectly summing unique sessions.
+Verification binds the resolved journal release to its PostgreSQL bundle,
+certification and immutable export, and computes independent Python query answers
+from validated export objects. The recovery script operates on an explicitly
+selected test-owned project; bootstrap/replay is documented separately.
+
 The implemented `batch` and `serving` Compose profiles contain authenticated
 ClickHouse, Dagster webserver/daemon/code location, and separate PostgreSQL
 operational metadata. Jobs run in the code-location container without mounting a
@@ -408,8 +423,10 @@ script builds the local Spark base before the batch image. Missing MP-05 secrets
 fail service startup without breaking disabled-profile MP-04 workflows. The
 code location exposes the marketing asset graph and three jobs. An isolated
 proof runs Dagster on localhost:43000 and ClickHouse on localhost:48123; runtime
-health, ledger tests, queued refresh and historical rebuild passed; final
-latency/restart/recovery acceptance is not yet claimed. Dagster explicitly uses
+health, ledger tests, queued refresh, historical rebuild and local
+latency/restart/recovery checks passed. The fixture has 239 rows across seven
+copied relations and 22 source files/615 rows; measured fixture timings do not
+establish large-scale capacity. Dagster explicitly uses
 psycopg2 for notification compatibility with SQLAlchemy 2.1; the operational
 ledger uses psycopg3. The tracked instance config is mounted read-only over the
 persistent instance volume. See `docs/runbooks/batch-serving.md`.
@@ -643,7 +660,7 @@ Recommended laptop profiles:
 docker compose --profile streaming --profile flink up -d --build --wait
 ```
 
-Later milestones add the `batch`, `app`, and `observability` profiles. Run the
+MP-05 adds `batch` and `serving`; later milestones add `app` and `observability`. Run the
 Kafka Streams alternative separately when memory is limited.
 
 Credential configuration is local-only: the committed `.env.example` contains

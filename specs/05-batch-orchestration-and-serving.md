@@ -1,11 +1,14 @@
 # MP-05 - Batch orchestration and analytical serving
 
-**Status:** In progress. Daily source selection and immutable local preparation
+**Status:** Implemented with local acceptance proof; final review and remote
+GitGuardian/CI pending. Daily source selection and immutable local preparation
 receipt contracts, authenticated Docker runtime and PostgreSQL operational ledger
 implemented; exact pinned snapshot export and isolated ClickHouse copy verified.
 dbt models/tests and complete certification gates verified;
 real queued Dagster refresh, certified publication and isolated historical
-rebuild verified; query benchmark/final restart/recovery proof still pending.
+rebuild verified; six query oracles, 20/100-sample benchmarks and server restart /
+lost-acknowledgement recovery verified. See the
+[operator runbook](../docs/runbooks/batch-serving.md) for commands and limitations.
 **Dependency:** MP-04, merged in PR #4.
 
 ## Outcome
