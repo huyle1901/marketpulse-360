@@ -514,11 +514,11 @@ it excludes HTTP and is separate from historical business event age. No capacity
 or event-to-dashboard SLA is implied. See the [runbook](../runbooks/campaign-operations.md)
 and [decisions](mp06-decisions.md).
 
-### 4.6 MP-07 analysis boundary (specified; implementation pending)
+### 4.6 MP-07 analysis boundary (locally verified; final review pending)
 
 MP-07 implements a tested request-pinned analytical read service for
 channel/campaign stage reach and exact three-model/global reconciliation.
-Read-only HTTP, bounded journeys and a race-safe `/analysis` workspace are implemented and exercised on Docker; final independent proof is pending. It extends the FastAPI/Next.js application with channel/campaign stage reach,
+Read-only HTTP, bounded journeys and a race-safe `/analysis` workspace are implemented and exercised on Docker; independent export/Silver/HTTP and restart proof has passed; final review is pending. It extends the FastAPI/Next.js application with channel/campaign stage reach,
 first/last/linear attribution comparison and representative order journeys.
 Its [spec](../../specs/07-funnel-and-attribution-analysis.md) and
 [plan](../superpowers/plans/2026-10-13-funnel-attribution-analysis.md) preserve
@@ -542,6 +542,14 @@ view over the complete projection. Commerce events retain the bot-session flag
 per MP-04 policy; web/mobile bot activity and consent-denied rows are rejected.
 Partial/missing/conflicting sidecars never appear as complete journey data.
 No source generation/replay or earlier pipeline reimplementation is required.
+
+Independent pinned exports and sidecar-recomputed Gold establish full-row equality;
+all three models reconcile gross/refund/net. On the 191-event fixture, p95 HTTP
+latency was 26.58/18.96/77.84 ms for funnel/attribution/five journeys, each with
+20 warmups/100 uncached samples and zero failures. API/web restart preserved MP-06
+operational state and MP-07 outputs. Desktop/mobile/drill visual checks and all
+fourteen browser tests passed. See [decisions/evidence](mp07-decisions.md) and
+[runbook](../runbooks/funnel-attribution.md) for bounds and explicit publication.
 
 ## 5. Kafka design
 
