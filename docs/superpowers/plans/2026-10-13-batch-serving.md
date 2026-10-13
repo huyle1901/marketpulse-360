@@ -1,6 +1,12 @@
 # MP-05 Batch Serving Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Proposed execution: native, in the main source directory, pending user review.
+> **Execution record:** Tasks 1–6 implemented inline in the main source directory,
+> authorized by user continuation. Commits: `b269bbf`, `f7c3726`, `b26d5d0`,
+> `3145887`, `716dc24`, `f4dcdba`. The original task checklists below preserve the
+> planned sequence; current verification and operational commands are recorded
+> in `docs/runbooks/batch-serving.md`. The fresh whole-branch review's three
+> Important findings were fixed and verified; decisions and the deferred scratch
+> cleanup are recorded in `docs/architecture/mp05-decisions.md`.
 
 **Goal:** Run observable batch refreshes and serve certified, retry-safe marketing datasets through ClickHouse.
 

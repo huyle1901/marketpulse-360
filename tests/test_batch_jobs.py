@@ -7,10 +7,23 @@ from pathlib import Path
 
 from marketpulse_batch.contracts import BatchSelection, PreparationReceipt
 from marketpulse_batch.receipts import preparation_identity, write_receipt
-from marketpulse_batch.jobs import resolve_rebuild_receipts, model_digest, ordered_asset_outputs
+from marketpulse_batch.jobs import resolve_rebuild_receipts, model_digest, ordered_asset_outputs, resolve_run_artifact
 
 
 class BackfillContractTests(unittest.TestCase):
+    def test_reexecution_uses_only_its_recorded_parent_chain(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            state = Path(root)
+            for run_id in ("original", "unrelated-newer"):
+                directory = state / "dagster-runs" / run_id
+                directory.mkdir(parents=True)
+                (directory / "candidate.json").write_text(run_id)
+            parents = {"retry": "retry-parent", "retry-parent": "original", "original": None}
+            path = resolve_run_artifact(state, "retry", "candidate", parents.get)
+            self.assertEqual(path.read_text(), "original")
+            with self.assertRaisesRegex(ValueError, "artifact"):
+                resolve_run_artifact(state, "unrelated-run", "candidate", parents.get)
+
     def test_reused_dbt_outputs_follow_dependencies(self) -> None:
         self.assertEqual(ordered_asset_outputs({"dashboard": "dashboard", "base": "base"},
                                                 {"dashboard": {"base"}, "base": {"external_raw"}}),

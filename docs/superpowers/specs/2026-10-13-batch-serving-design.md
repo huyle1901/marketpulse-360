@@ -149,7 +149,9 @@ columns are exported. No raw CRM email/phone/payload enters ClickHouse.
 Spark writes partitioned JSONEachRow-compatible files to worker scratch (32
 partitions, max 50,000 records per file), then streams conditional uploads to an
 owned MinIO prefix. The local runtime does not add a Hadoop s3a connector; worker
-scratch must fit one relation's export. Transport rows are capped at 1 MiB.
+scratch must fit the cumulative seven-relation export: completed relation files
+remain until the export temporary directory is closed. Transport rows are capped
+at 1 MiB. Per-relation scratch cleanup is deferred.
 An export manifest records object URIs/hashes/bytes/rows, source snapshot
 IDs, ordered physical schemas and canonical business checksums. Enumerate only the
 successful job's output, not arbitrary warehouse files. Stream objects into

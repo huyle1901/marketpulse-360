@@ -67,6 +67,8 @@ from unittest.mock import patch
 class LostAcknowledgementTests(unittest.TestCase):
     def test_uncertain_ack_restart_no_inflation(self):
         from dataclasses import replace
+        import json
+        import re
         import psycopg
         from marketpulse_batch.settings import load_settings
         from marketpulse_batch.resources import clickhouse_client
@@ -76,6 +78,11 @@ class LostAcknowledgementTests(unittest.TestCase):
         from marketpulse_batch.jobs import local_receipt_path
 
         settings = load_settings(os.environ)
+        phase = os.environ.get("BATCH_RECOVERY_PHASE")
+        recovery_id = os.environ.get("BATCH_RECOVERY_ID", "")
+        if phase not in {"pending", "recover"} or re.fullmatch(r"[0-9a-f]{32}", recovery_id) is None:
+            raise RuntimeError("recovery proof needs pending/recover phase and explicit unique ID")
+        evidence_path = settings.state_path / "recovery" / f"{recovery_id}.json"
         client = clickhouse_client(settings)
         try:
             active = resolve_active(client)
@@ -84,18 +91,20 @@ class LostAcknowledgementTests(unittest.TestCase):
             bundle = real.get_certified_bundle(active.identity)
             cert = read_certification(local_receipt_path(bundle.certification_uri))
             dsn = replace(settings, ledger_database="mp05_test").ledger_dsn
-            with psycopg.connect(settings.ledger_dsn, autocommit=True) as connection:
-                if not connection.execute("SELECT 1 FROM pg_database WHERE datname = %s", ("mp05_test",)).fetchone():
-                    connection.execute("CREATE DATABASE mp05_test")
-            # Only the dedicated test database is reset. Active release DBs are read-only.
-            with psycopg.connect(dsn) as connection:
-                if connection.execute("SELECT current_database()").fetchone()[0] != "mp05_test":
-                    raise RuntimeError("recovery proof requires mp05_test")
-                connection.execute("DROP SCHEMA IF EXISTS marketpulse_ops CASCADE")
+            if phase == "pending":
+                with psycopg.connect(settings.ledger_dsn, autocommit=True) as connection:
+                    if not connection.execute("SELECT 1 FROM pg_database WHERE datname = %s", ("mp05_test",)).fetchone():
+                        connection.execute("CREATE DATABASE mp05_test")
+                # Only the dedicated test database is reset, before the pending publisher.
+                with psycopg.connect(dsn) as connection:
+                    if connection.execute("SELECT current_database()").fetchone()[0] != "mp05_test":
+                        raise RuntimeError("recovery proof requires mp05_test")
+                    connection.execute("DROP SCHEMA IF EXISTS marketpulse_ops CASCADE")
             ledger = BatchLedger(dsn)
             ledger.initialize()
-            ledger.record_receipt(receipt, uri)
-            journal = PublicationJournal(client, "mp05_test_recovery_" + uuid.uuid4().hex)
+            if phase == "pending":
+                ledger.record_receipt(receipt, uri)
+            journal = PublicationJournal(client, "mp05_test_recovery_" + recovery_id)
 
             class LostAck:
                 def reserve_publication(self, *args):
@@ -105,13 +114,27 @@ class LostAcknowledgementTests(unittest.TestCase):
                     raise ConnectionError("injected acknowledgement loss")
 
             with patch("marketpulse_batch.publication.PublicationJournal", return_value=journal):
-                with self.assertRaises(ConnectionError):
-                    publish_certified(client, LostAck(), receipt, cert)
-                published = journal.resolve()
-                # Reconstruct clients as after a process restart; the shell proof also restarts servers.
-                restarted = BatchLedger(dsn)
-                recovered = publish_certified(client, restarted, receipt, cert)
-            self.assertEqual(recovered, published)
+                if phase == "pending":
+                    with self.assertRaises(ConnectionError):
+                        publish_certified(client, LostAck(), receipt, cert)
+                    published = journal.resolve()
+                    with psycopg.connect(dsn) as connection:
+                        self.assertIsNone(connection.execute("SELECT acknowledged_at FROM marketpulse_ops.publications WHERE generation=%s", (published.generation,)).fetchone()[0])
+                    evidence_path.parent.mkdir(parents=True, exist_ok=True)
+                    evidence_path.write_text(json.dumps({"acknowledged": False, "generation": published.generation,
+                        "identity": published.identity, "database": published.database, "proof_digest": published.proof_digest}))
+                    # End this publisher process while its reservation is still unacknowledged.
+                else:
+                    pending = json.loads(evidence_path.read_text())
+                    self.assertIs(pending["acknowledged"], False)
+                    with psycopg.connect(dsn) as connection:
+                        self.assertIsNone(connection.execute("SELECT acknowledged_at FROM marketpulse_ops.publications WHERE generation=%s", (pending["generation"],)).fetchone()[0])
+                    recovered = publish_certified(client, ledger, receipt, cert)
+                    for field in ("generation", "identity", "database", "proof_digest"):
+                        self.assertEqual(getattr(recovered, field), pending[field])
+                    with psycopg.connect(dsn) as connection:
+                        self.assertIsNotNone(connection.execute("SELECT acknowledged_at FROM marketpulse_ops.publications WHERE generation=%s", (recovered.generation,)).fetchone()[0])
+                    evidence_path.write_text(json.dumps(pending | {"acknowledged": True}))
             self.assertEqual(client.query(f"SELECT count() FROM {journal.table}").first_row[0], 1)
             self.assertEqual(resolve_active(client), active)
         finally:

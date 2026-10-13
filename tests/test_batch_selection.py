@@ -100,4 +100,3 @@ class BatchSelectionTests(unittest.TestCase):
         for datasets in (("other",), ("crm", "crm"), ()):
             with self.subTest(datasets=datasets), self.assertRaises(ValueError):
                 select_source_datasets(self.plan, datasets)
-

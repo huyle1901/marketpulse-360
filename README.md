@@ -8,15 +8,17 @@ cloud benchmark rather than a runtime dependency.
 
 The repository implements **MP-01: reproducible omnichannel mock data**,
 **MP-02: Kafka ingestion and replay controls**, and **MP-03: stateful Flink stream
-processing with checkpoint recovery**, and **MP-04: governed Iceberg lakehouse**.
+processing with checkpoint recovery**, **MP-04: governed Iceberg lakehouse**, and
+**MP-05: Dagster/dbt orchestration and certified ClickHouse serving**.
 The project generates coherent data
 shaped like Google Ads, Meta Ads, TikTok Ads, web/mobile analytics, CRM, commerce,
 and email systems, then replays event-shaped sources to versioned Kafka topics.
-Batch-shaped sources remain inputs to the later Dagster milestone.
+Dagster ingests batch sources, builds pinned lakehouse snapshots and publishes
+validated analytical releases for the future application.
 
 ## Current proof
 
-- 221 Python tests and 30 Java tests cover mock-data correctness, Kafka contracts, bounded
+- The Python suite and 30 Java tests cover mock-data correctness, Kafka contracts, bounded
   replay ordering, pacing, idempotent delivery, registry behavior, CLI behavior,
   Docker assets, raw-event validation, checkpointed deduplication, late events,
   sessions, campaign KPIs, all six output schemas, Kafka serde, and the executable
@@ -39,6 +41,12 @@ Batch-shaped sources remain inputs to the later Dagster milestone.
   model reconciles to governed net revenue of `22,193,000` minor units; all three
   contain paid-click attribution. A Spark regression checks conflicting recovered
   click IDs, including nulls, without changing deterministic winner selection.
+- MP-05 runs a queued Dagster refresh and isolated historical rebuild, builds
+  eight dbt models with 28 tests, and reconciles seven ClickHouse relations to
+  pinned export rows. Six query workloads pass independent Python oracles and
+  20-warmup/100-sample benchmarks. A server restart and lost acknowledgement
+  preserve release identity, row counts and exact financial totals. See the
+  [batch/serving runbook](docs/runbooks/batch-serving.md) for scope and evidence.
 
 ## Quick start
 
@@ -123,6 +131,12 @@ snapshot verification, storage/catalog restart, and an isolated rebuild, with:
 The [lakehouse runbook](docs/runbooks/lakehouse-local.md) describes retained
 evidence, inspection commands, demo URLs, and cleanup.
 
+For MP-05, initialize the additional local passwords and build/start the batch
+runtime using the [batch/serving runbook](docs/runbooks/batch-serving.md). Dagster
+defaults to <http://localhost:3000> and authenticated ClickHouse HTTP to port 8123.
+The retained isolated development proof uses ports 43000 and 48123 respectively.
+The application UI/API remain later milestones.
+
 ## Documentation map
 
 - [High-level architecture](docs/architecture/high-level-design.md)
@@ -131,6 +145,7 @@ evidence, inspection commands, demo URLs, and cleanup.
 - [Mock-data operations guide](data/mock/README.md)
 - [Local Kafka replay runbook](docs/runbooks/kafka-local.md)
 - [Local Flink processing runbook](docs/runbooks/flink-local.md)
+- [Batch orchestration and ClickHouse runbook](docs/runbooks/batch-serving.md)
 - [Kafka ingestion and replay specification](specs/02-kafka-ingestion-replay.md)
 - [Stateful Flink processing specification](specs/03-stateful-flink-processing.md)
 
