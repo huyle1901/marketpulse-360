@@ -33,3 +33,4 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 marketpulse_batch = ["sql/*.sql"]
+marketpulse_app = ["sql/*.sql"]

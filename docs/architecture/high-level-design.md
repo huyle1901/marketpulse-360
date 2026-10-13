@@ -468,6 +468,10 @@ No metric adds both sources or mixes live revenue with daily batch spend.
 
 A dedicated application PostgreSQL database/schema stores user-created campaign
 market/budget settings, versioned alert rules and immutable evaluation evidence.
+Their additive migrations and concurrency/idempotency tests run against a
+dedicated `mp06_test` PostgreSQL database. The evaluator uses the global latest
+closed release date, requires actual calendar baselines and hashes immutable
+release/rule/setting/window identities; no polling timestamp changes that key.
 It contains no generated source customers, analytical warehouse copy or seeded
 application accounts. Existing Gold has no market dimension: the UI filter means
 configured campaign market, with unassigned values explicitly unknown.
