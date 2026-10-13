@@ -3,17 +3,19 @@ requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "marketpulse-mock"
-version = "0.1.0"
-description = "Deterministic omnichannel marketing data generator for MarketPulse 360"
+name = "marketpulse-360-data"
+version = "0.2.0"
+description = "Reproducible marketing source simulation and governed lakehouse tools"
 requires-python = ">=3.12"
 dependencies = []
 
 [project.optional-dependencies]
 kafka = ["confluent-kafka==2.16.0"]
+lakehouse = ["boto3==1.43.111", "confluent-kafka==2.16.0"]
 
 [project.scripts]
 marketpulse-mock = "marketpulse_mock.cli:main"
+marketpulse-lakehouse = "marketpulse_lakehouse.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
