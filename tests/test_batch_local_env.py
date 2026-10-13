@@ -4,6 +4,7 @@ import os
 import stat
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 from marketpulse_batch.local_env import initialize_batch_secrets
@@ -13,7 +14,7 @@ class LocalEnvTests(unittest.TestCase):
     def test_preserves_existing_and_generates_only_missing(self) -> None:
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / ".env"
-            original = b"# keep this\nMINIO_ROOT_PASSWORD=fake-existing-test-value\n"
+            original = f"# keep this\nMINIO_ROOT_PASSWORD={uuid.uuid4().hex}\n".encode()
             path.write_bytes(original)
             names = initialize_batch_secrets(path)
             self.assertEqual(set(names), {"CLICKHOUSE_PASSWORD", "DAGSTER_POSTGRES_PASSWORD"})

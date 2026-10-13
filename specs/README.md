@@ -125,7 +125,8 @@ Persist immutable raw data and governed tables with MinIO and Apache Iceberg.
 receipt contracts, Docker runtime and operational ledger implemented;
 snapshot export and isolated ClickHouse copy verified;
 dbt models/tests and certification verified;
-business orchestration/publication acceptance still pending.
+queued Dagster refresh, publication and isolated backfill verified;
+query benchmark/final restart/recovery acceptance still pending.
 
 Detailed scope: [`05-batch-orchestration-and-serving.md`](05-batch-orchestration-and-serving.md).
 

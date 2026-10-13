@@ -4,15 +4,15 @@ import unittest
 import json
 import os
 import subprocess
+import uuid
 
 from marketpulse_batch.settings import load_settings
 
 
 class BatchRuntimeTests(unittest.TestCase):
     def environment(self) -> dict[str, str]:
-        return {"CLICKHOUSE_PASSWORD": "fake-clickhouse-test-value",
-                "DAGSTER_POSTGRES_PASSWORD": "fake-ledger-test-value",
-                "MINIO_ROOT_PASSWORD": "fake-minio-test-value"}
+        return {name: uuid.uuid4().hex for name in
+                ("CLICKHOUSE_PASSWORD", "DAGSTER_POSTGRES_PASSWORD", "MINIO_ROOT_PASSWORD")}
 
     def test_missing_secret_fails_without_echo(self) -> None:
         for name in ("CLICKHOUSE_PASSWORD", "DAGSTER_POSTGRES_PASSWORD", "MINIO_ROOT_PASSWORD"):
@@ -22,8 +22,9 @@ class BatchRuntimeTests(unittest.TestCase):
                 load_settings(values)
 
     def test_repr_redacts(self) -> None:
-        settings = load_settings(self.environment())
-        for secret in self.environment().values():
+        values = self.environment()
+        settings = load_settings(values)
+        for secret in values.values():
             self.assertNotIn(secret, repr(settings))
         self.assertIn("clickhouse", repr(settings))
 
@@ -42,7 +43,7 @@ class BatchRuntimeTests(unittest.TestCase):
 
     def compose_services(self) -> dict[str, object]:
         # Capture rendered configuration: never print expanded credentials.
-        env = os.environ | self.environment() | {"LAKEHOUSE_POSTGRES_PASSWORD": "fake-compose-test-value"}
+        env = os.environ | self.environment() | {"LAKEHOUSE_POSTGRES_PASSWORD": uuid.uuid4().hex}
         result = subprocess.run(["docker", "compose", "--profile", "batch", "--profile", "serving",
                                  "config", "--format", "json"], env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, "Compose validation failed")

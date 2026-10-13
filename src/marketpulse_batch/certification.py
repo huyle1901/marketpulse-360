@@ -77,6 +77,7 @@ class Certification:
     manifest_digest: str
     dbt_invocation_id: str
     checked_relations: tuple[str, ...]
+    proof_path: Path | None = None
 
     def __post_init__(self) -> None:
         for name in ("identity", "proof_digest", "manifest_digest"):
@@ -96,13 +97,13 @@ def _ratio(numerator: int, denominator: int) -> Decimal | None:
         return (Decimal(numerator) / Decimal(denominator)).quantize(Decimal("0.000001"), rounding=ROUND_DOWN)
 
 
-def _dashboard_proof(client: Any, database: str, manifest: ExportManifest) -> dict[str, object]:
-    performance = next(r for r in manifest.relations if r.name == "gold.campaign_performance_daily")
-    names = tuple(name for name, _, _ in performance.columns)
+def _dashboard_proof(client: Any, database: str, *, columns: tuple[tuple[str, str, bool], ...],
+                     row_count: int, checksum: str) -> dict[str, object]:
+    names = tuple(name for name, _, _ in columns)
     with client.query_rows_stream(f"SELECT {','.join(names)} FROM {database}.campaign_dashboard",
                                   query_tz="UTC", tz_mode="aware") as stream:
-        observed = rowset_checksum(performance.columns, (dict(zip(names, row)) for row in stream))
-    if observed != (performance.row_count, performance.business_checksum):
+        observed = rowset_checksum(columns, (dict(zip(names, row)) for row in stream))
+    if observed != (row_count, checksum):
         raise ValueError("dashboard base fields do not equal certified performance")
     query = (f"SELECT d.campaign_id,d.impressions,d.clicks,d.spend_minor,d.ctr,d.cpc_minor,"
              f"d.campaign_name,d.campaign_status,c.name,c.status FROM {database}.campaign_dashboard d "
@@ -114,7 +115,7 @@ def _dashboard_proof(client: Any, database: str, manifest: ExportManifest) -> di
             expected_name = "Unattributed" if campaign == "__unattributed__" else reference_name
             if (ctr, cpc, name, status) != (_ratio(clicks, impressions), _ratio(spend, clicks), expected_name, reference_status):
                 raise ValueError("dashboard independent ratio/dimension oracle failed")
-    if count != performance.row_count:
+    if count != row_count:
         raise ValueError("dashboard row-count oracle failed")
     return {"row_count": count, "base_checksum": observed[1], "ratio_policy": "decimal6-truncate-toward-zero"}
 
@@ -145,7 +146,9 @@ def certify_candidate(client: Any, receipt: PreparationReceipt, manifest: Export
             raise ValueError(f"served business rowset mismatch: {model}")
         checks.append({"relation": relation.name, "snapshot_id": relation.snapshot_id,
                        "row_count": count, "checksum": checksum, "schema": expected})
-    dashboard = _dashboard_proof(client, database, manifest)
+    performance = next(r for r in manifest.relations if r.name == "gold.campaign_performance_daily")
+    dashboard = _dashboard_proof(client, database, columns=performance.columns,
+                                 row_count=performance.row_count, checksum=performance.business_checksum)
     proof = {"version": 1, "identity": receipt.identity, "database": database,
              "preparation_digest": receipt.proof_digest, "export_digest": manifest.digest,
              "dbt_invocation_id": invocation,
@@ -164,4 +167,54 @@ def certify_candidate(client: Any, receipt: PreparationReceipt, manifest: Export
         if path.read_bytes() != content:
             raise ValueError("immutable certification proof conflict")
     return Certification(receipt.identity, database, digest, manifest.digest, invocation,
-                         tuple(r.name for r in manifest.relations))
+                         tuple(r.name for r in manifest.relations), path.resolve())
+
+
+def read_certification(path: Path) -> Certification:
+    try:
+        content = path.read_bytes()
+        proof = json.loads(content)
+        return Certification(proof["identity"], proof["database"], hashlib.sha256(content).hexdigest(),
+                             proof["export_digest"], proof["dbt_invocation_id"],
+                             tuple(row["relation"] for row in proof["relations"]), path.resolve())
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise ValueError("cannot read persisted certification proof") from error
+
+
+def verify_certification_current(client: Any, receipt: PreparationReceipt, certification: Certification) -> None:
+    path = certification.proof_path
+    if path is None:
+        raise ValueError("publication requires persisted certification proof")
+    observed = read_certification(path)
+    if observed != certification or certification.identity != receipt.identity:
+        raise ValueError("persisted certification proof identity/digest mismatch")
+    proof = json.loads(path.read_bytes())
+    if proof.get("version") != 1 or proof.get("preparation_digest") != receipt.proof_digest:
+        raise ValueError("certification proof preparation mismatch")
+    invocation = validate_dbt_artifacts(path.parent, certification.database)
+    if invocation != certification.dbt_invocation_id:
+        raise ValueError("certification dbt invocation mismatch")
+    for artifact, key in (("manifest.json", "dbt_manifest_sha256"), ("run_results.json", "dbt_results_sha256")):
+        if hashlib.sha256((path.parent / artifact).read_bytes()).hexdigest() != proof.get(key):
+            raise ValueError("certification dbt artifacts changed")
+    for relation in proof["relations"]:
+        name = relation["relation"]
+        if receipt.output_snapshots.get(name) != relation["snapshot_id"]:
+            raise ValueError("certification snapshots changed")
+        columns = business_schema(name)
+        model = name.split(".")[1]
+        physical = client.query(f"DESCRIBE TABLE {certification.database}.{model}").result_rows
+        expected = [(field, clickhouse_type(kind, nullable).replace(" ", "")) for field, kind, nullable in columns]
+        if [(row[0], row[1].replace(" ", "")) for row in physical] != expected:
+            raise ValueError("certified table schema changed")
+        fields = [field for field, _, _ in columns]
+        with client.query_rows_stream(f"SELECT * FROM {certification.database}.{model}", query_tz="UTC", tz_mode="aware") as stream:
+            actual = rowset_checksum(columns, (dict(zip(fields, row)) for row in stream))
+        if actual != (relation["row_count"], relation["checksum"]):
+            raise ValueError("certified table business rowset changed")
+    performance = next(r for r in proof["relations"] if r["relation"] == "gold.campaign_performance_daily")
+    dashboard = _dashboard_proof(client, certification.database,
+                                 columns=business_schema("gold.campaign_performance_daily"),
+                                 row_count=performance["row_count"], checksum=performance["checksum"])
+    if dashboard != proof["dashboard"]:
+        raise ValueError("certified dashboard proof changed")

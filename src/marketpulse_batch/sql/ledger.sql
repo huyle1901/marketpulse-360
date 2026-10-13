@@ -20,3 +20,11 @@ CREATE TABLE IF NOT EXISTS marketpulse_ops.publications (
     reserved_at timestamptz NOT NULL DEFAULT now(),
     acknowledged_at timestamptz
 );
+CREATE TABLE IF NOT EXISTS marketpulse_ops.certified_bundles (
+    identity text PRIMARY KEY REFERENCES marketpulse_ops.preparations(identity),
+    database_name text NOT NULL,
+    proof_digest text NOT NULL CHECK(proof_digest ~ '^[0-9a-f]{64}$'),
+    export_manifest_uri text NOT NULL,
+    certification_uri text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);

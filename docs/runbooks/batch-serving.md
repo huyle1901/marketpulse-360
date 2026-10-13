@@ -1,9 +1,9 @@
 # MP-05 local batch / serving
 
 Status: runtime bootstrap, operational ledger, pinned snapshot export and isolated
-ClickHouse raw copy, dbt models/tests and certification implemented. Business
-Dagster assets and publication/query proof are still in progress.
-An empty asset graph at this stage is intentional, not a completed MP-05 demo.
+ClickHouse raw copy, dbt models/tests, certification, marketing Dagster graph and
+publication implemented. Real queued refresh and isolated historical rebuild
+passed; query benchmark and final restart/recovery proof remain in progress.
 
 ## Build and start
 
@@ -27,8 +27,35 @@ published. PostgreSQL and code-location gRPC remain internal. Never paste secret
 into command history or print an interpolated Compose config.
 
 Missing batch/serving passwords fail service startup; they do not block an
-MP-04-only Compose configuration. The schedule/business assets are added by the
-orchestration task, not by bootstrap. No host Docker socket is mounted.
+MP-04-only Compose configuration. The daily schedule starts stopped; marketing
+assets are visible in Dagster. No host Docker socket is mounted.
+
+## Refresh a fixture partition
+
+Source services must also be running: Kafka/topics/registry, the Flink job, and
+MinIO/Nessie. Replay the source fixture into Kafka and allow Flink's committed
+outcomes to catch up. For a complete two-day fixture demo, first archive all
+historical files with the existing `spark-lakehouse ingest-files` command so both
+days' CRM/report history is represented. Then launch through the configured queue:
+
+```bash
+docker compose --profile batch exec -T dagster-webserver \
+  dagster job launch -w /opt/marketpulse/workspace.yaml \
+  -j marketing_refresh_job --tags '{"dagster/partition":"2026-01-02"}'
+```
+
+The graph shows source/master/ad/CRM/Kafka ingestion, pinned Bronze, Silver/Gold,
+snapshot export, seven raw copies, eight dbt models/checks, certification and
+active publication. Failed/partial candidates never enter active queries.
+An identical refresh reuses its recorded certified bundle and dbt invocation;
+Dagster labels these results as reused, not newly executed tests. Serving rows are
+re-verified before the existing generation is acknowledged again.
+Preparation receipts and per-run results are persisted under `batch_state`.
+Use `historical_rebuild_job` with explicit
+`ops.pinned_bronze.config.receipt_mapping` mapping each partition date to its
+recorded `file:///.../receipt.json` URI. Missing mappings fail; there is no implicit
+latest receipt. Historical jobs do not publish. Model-version mismatch fails
+rather than rebuilding an old receipt with different transformation code.
 
 ## Current isolated developer proof
 

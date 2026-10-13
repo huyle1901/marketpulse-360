@@ -1,6 +1,7 @@
 storage:
   postgres:
     postgres_db:
+      scheme: postgresql+psycopg2
       username:
         env: DAGSTER_POSTGRES_USER
       password:

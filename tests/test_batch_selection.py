@@ -10,7 +10,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 from marketpulse_batch.contracts import BatchSelection
-from marketpulse_batch.selection import select_daily_sources
+from marketpulse_batch.selection import select_daily_sources, select_source_datasets
 from marketpulse_lakehouse.source_files import (
     SourceArchivePlan, build_source_archive_plan, normalize_source_file,
 )
@@ -89,4 +89,15 @@ class BatchSelectionTests(unittest.TestCase):
         # All-file archive planning still includes both dates without batch selection.
         self.assertEqual(len(self.plan.source_files), 12)
         self.assertEqual({f.source_date for f in self.plan.source_files}, {None, DAY, date(2026, 1, 2)})
+
+    def test_dataset_assets_select_only_their_own_files(self) -> None:
+        selected = select_source_datasets(self.plan, ("master/campaigns", "master/customers", "master/ads", "master/products"))
+        self.assertEqual(len(selected.source_files), 4)
+        self.assertEqual(len(selected.archive_objects), 5)
+        self.assertTrue(all(f.source_dataset.startswith("master/") for f in selected.source_files))
+
+    def test_dataset_filter_unknown_or_duplicate_rejected(self) -> None:
+        for datasets in (("other",), ("crm", "crm"), ()):
+            with self.subTest(datasets=datasets), self.assertRaises(ValueError):
+                select_source_datasets(self.plan, datasets)
 

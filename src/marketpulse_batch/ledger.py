@@ -15,6 +15,19 @@ from .receipts import receipt_from_payload, receipt_payload
 PUBLISHER_LOCK = 36005
 
 
+class UnknownPreparationReceipt(ValueError):
+    """A preparation identity has not completed yet."""
+
+
+@dataclass(frozen=True, slots=True)
+class CertifiedBundle:
+    identity: str
+    database: str
+    proof_digest: str
+    export_manifest_uri: str
+    certification_uri: str
+
+
 @dataclass(frozen=True, slots=True)
 class PublicationReservation:
     generation: int
@@ -78,7 +91,7 @@ class BatchLedger:
                 "SELECT receipt,receipt_uri FROM marketpulse_ops.preparations WHERE identity=%s", (identity,)
             ).fetchone()
             if row is None:
-                raise ValueError("unknown preparation receipt")
+                raise UnknownPreparationReceipt("unknown preparation receipt")
             return receipt_from_payload(row[0]), row[1]
 
     def allocate_attempt(self, identity: str, stage: str) -> int:
@@ -136,3 +149,32 @@ class BatchLedger:
             ).fetchone()
             if row is None:
                 raise ValueError("publication acknowledgement payload conflict")
+
+    def get_certified_bundle(self, identity: str) -> CertifiedBundle | None:
+        validate_digest(identity, "identity")
+        with self._connect() as connection:
+            row = connection.execute("SELECT identity,database_name,proof_digest,export_manifest_uri,certification_uri "
+                                      "FROM marketpulse_ops.certified_bundles WHERE identity=%s", (identity,)).fetchone()
+            return CertifiedBundle(*row) if row else None
+
+    def record_certified_bundle(self, identity: str, database: str, proof_digest: str,
+                                export_manifest_uri: str, certification_uri: str) -> None:
+        validate_digest(identity, "identity")
+        validate_digest(proof_digest, "proof_digest")
+        if re.fullmatch(rf"mp_release_{identity}_[1-9][0-9]*", database) is None:
+            raise ValueError("certified database does not belong to identity")
+        if not all(isinstance(uri, str) and uri.startswith("file:///") for uri in (export_manifest_uri, certification_uri)):
+            raise ValueError("certified bundle requires persisted local artifact URIs")
+        payload = (identity, database, proof_digest, export_manifest_uri, certification_uri)
+        with self._connect() as connection:
+            connection.execute("SELECT pg_advisory_xact_lock(%s)", (PUBLISHER_LOCK,))
+            reserved = connection.execute("SELECT database_name,proof_digest FROM marketpulse_ops.publications WHERE identity=%s",
+                                           (identity,)).fetchone()
+            if reserved and reserved != (database, proof_digest):
+                raise ValueError("certification conflicts with reserved publication")
+            connection.execute("INSERT INTO marketpulse_ops.certified_bundles(identity,database_name,proof_digest,export_manifest_uri,certification_uri) "
+                               "VALUES(%s,%s,%s,%s,%s) ON CONFLICT(identity) DO NOTHING", payload)
+            row = connection.execute("SELECT identity,database_name,proof_digest,export_manifest_uri,certification_uri "
+                                      "FROM marketpulse_ops.certified_bundles WHERE identity=%s", (identity,)).fetchone()
+            if row != payload:
+                raise ValueError("immutable certified bundle conflict")

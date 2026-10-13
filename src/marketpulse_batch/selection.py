@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from marketpulse_lakehouse.source_files import (
-    SourceArchivePlan, iter_source_file_rows, verify_source_archive_object,
+    ALLOWED_SOURCE_DATASETS, SourceArchivePlan, iter_source_file_rows, verify_source_archive_object,
 )
 from .contracts import BatchSelection, REPORT_PLATFORMS
 
@@ -46,6 +46,19 @@ def select_daily_sources(plan: SourceArchivePlan, selection: BatchSelection) -> 
         raise ValueError(f"missing or empty daily sources: {', '.join(sorted(missing))}")
     files = tuple(selected)
     manifests = tuple(obj for obj in plan.archive_objects if obj.source_dataset == "_manifest")
+    if len(manifests) != 1:
+        raise ValueError("source plan must contain exactly one immutable manifest")
+    return SourceArchivePlan(plan.manifest_sha256, (*manifests, *files), files)
+
+
+def select_source_datasets(plan: SourceArchivePlan, datasets: tuple[str, ...]) -> SourceArchivePlan:
+    if not datasets or len(datasets) != len(set(datasets)) or not set(datasets) <= ALLOWED_SOURCE_DATASETS:
+        raise ValueError("dataset selection must be distinct allowlisted source names")
+    files = tuple(source for source in plan.source_files if source.source_dataset in datasets)
+    missing = set(datasets) - {source.source_dataset for source in files}
+    if missing:
+        raise ValueError(f"missing selected source datasets: {','.join(sorted(missing))}")
+    manifests = tuple(source for source in plan.archive_objects if source.source_dataset == "_manifest")
     if len(manifests) != 1:
         raise ValueError("source plan must contain exactly one immutable manifest")
     return SourceArchivePlan(plan.manifest_sha256, (*manifests, *files), files)

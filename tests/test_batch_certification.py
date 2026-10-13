@@ -5,11 +5,26 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from marketpulse_batch.certification import validate_dbt_artifacts
+from marketpulse_batch.certification import validate_dbt_artifacts, verify_certification_current, Certification
+from marketpulse_batch.contracts import BatchSelection, PreparationReceipt
+from marketpulse_batch.receipts import preparation_identity
+from marketpulse_batch.export import EXPORTED_RELATIONS
+from datetime import date
 from marketpulse_lakehouse.contracts import TABLE_CONTRACTS
 
 
 class DbtArtifactTests(unittest.TestCase):
+    def test_missing_persisted_proof_blocks_publication(self) -> None:
+        day = date(2026, 1, 1)
+        bronze = {"bronze.kafka_records": 101}
+        identity = preparation_identity(BatchSelection(day), bronze, "a" * 64)
+        receipt = PreparationReceipt(identity, day, "a" * 64, bronze, {"gold.funnel_daily": 201},
+                                     f"mp_batch_{identity}_1", "b" * 64)
+        cert = Certification(identity, f"mp_release_{identity}_1", "c" * 64, "d" * 64,
+                             "00000000-0000-0000-0000-000000000001", EXPORTED_RELATIONS)
+        with self.assertRaisesRegex(ValueError, "proof"):
+            verify_certification_current(None, receipt, cert)
+
     def artifacts(self, root: Path) -> None:
         names = ("funnel_daily", "attribution_daily", "customer_360", "cohort_retention",
                  "campaign_performance_daily", "campaigns", "customers", "campaign_dashboard")

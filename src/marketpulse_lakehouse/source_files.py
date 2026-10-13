@@ -469,6 +469,7 @@ def ingest_source_files(
     ingested_at: datetime,
     client: S3Client | None = None,
     selection: BatchSelection | None = None,
+    datasets: tuple[str, ...] | None = None,
 ) -> dict[str, object]:
     if not run_id:
         raise ValueError("run_id must not be empty")
@@ -477,6 +478,10 @@ def ingest_source_files(
         from marketpulse_batch.selection import select_daily_sources
 
         plan = select_daily_sources(plan, selection)
+    if datasets is not None:
+        from marketpulse_batch.selection import select_source_datasets
+
+        plan = select_source_datasets(plan, datasets)
     uploaded, existing_objects = archive_source_objects(plan, client=client)
     file_records = tuple(
         source_file_record(

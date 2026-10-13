@@ -31,6 +31,7 @@ x-batch-runtime: &batch-runtime
     - ./data:/opt/marketpulse/data:ro
     - batch_state:/opt/marketpulse/batch-state
     - dagster_home:/opt/marketpulse/dagster-home
+    - ./docker/batch/dagster.yaml:/opt/marketpulse/dagster-home/dagster.yaml:ro
 
 services:
   clickhouse:

@@ -4,7 +4,8 @@
 receipt contracts, authenticated Docker runtime and PostgreSQL operational ledger
 implemented; exact pinned snapshot export and isolated ClickHouse copy verified.
 dbt models/tests and complete certification gates verified;
-business orchestration/publication/query proof still pending.
+real queued Dagster refresh, certified publication and isolated historical
+rebuild verified; query benchmark/final restart/recovery proof still pending.
 **Dependency:** MP-04, merged in PR #4.
 
 ## Outcome

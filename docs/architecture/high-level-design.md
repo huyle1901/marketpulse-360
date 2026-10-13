@@ -358,8 +358,10 @@ integration of the receipt contracts is implemented: the separate batch
 PostgreSQL `marketpulse_ops` schema stores immutable preparation receipts,
 attempt counters and frozen publication reservations. Reservations use a
 transactional advisory lock and unique identity; older logical days and payload
-changes are rejected. Publication acknowledgement is idempotent. Business
-orchestration and the ClickHouse publication journal remain pending.
+changes are rejected. Publication acknowledgement is idempotent. The append-only
+ClickHouse journal resolves the greatest published generation, collapses identical
+deliveries and rejects conflicting generation/identity payloads. Publication
+re-verifies persisted certification artifacts and current served rowsets first.
 
 Implemented export/copy: Spark reads exact receipt snapshots, verifies source
 schemas and emits bounded JSON partition files on worker scratch. Files are
@@ -377,14 +379,22 @@ financial conservation. Certification verifies the successful complete dbt
 invocation, every typed served rowset and independent Decimal CTR/CPC/dimension
 oracles, then writes an immutable proof digest. Actual eight-model/28-test build
 passed; changed monetary rows with unchanged counts and injected missing campaign
-references were rejected. Publication/orchestration and performance acceptance
-remain pending; candidates are not active releases.
+references were rejected. A real queued Dagster refresh completed ingestion,
+pinned Bronze, owned Silver/Gold, export, copy, dbt, certification and generation-1
+publication. A receipt-only historical job rebuilt and certified in isolation,
+without publication; native backfill tags also block promotion. Query latency
+and final restart/failure acceptance remain pending.
 
 ClickHouse receives isolated candidate release databases. All five Gold rowsets
 must pass schema/key/checksum/financial reconciliation and dbt tests before a
 certified generation can enter an append-only publication journal. PostgreSQL
 reserves immutable generation payloads; readers select the greatest published
 generation, so a delayed older publisher cannot roll back a newer release.
+The operational ledger also freezes certified bundle URIs/database/digest by
+preparation identity. A new refresh of identical inputs reuses the certified
+export, database and dbt invocation, re-verifies their contents, and acknowledges
+the same generation. It never rebuilds a sealed serving database or attempts to
+replace its reservation. Reused dbt outputs follow the actual asset DAG order.
 Reader requests pin a single certified
 database; retries do not append duplicate rows into an active dataset. Historical
 rebuilds do not promote by default. Iceberg/MinIO remains the durable truth.
@@ -396,10 +406,13 @@ host Docker socket. All credentials remain in ignored `.env`. App/API/UI behavio
 and continuous Flink-to-ClickHouse updates are outside MP-05. An explicit build
 script builds the local Spark base before the batch image. Missing MP-05 secrets
 fail service startup without breaking disabled-profile MP-04 workflows. The
-current code location is bootstrap-only (no marketing assets yet). An isolated
+code location exposes the marketing asset graph and three jobs. An isolated
 proof runs Dagster on localhost:43000 and ClickHouse on localhost:48123; runtime
-health and five real PostgreSQL ledger tests passed, but Gold/dbt/latency/recovery
-acceptance is not yet claimed. See `docs/runbooks/batch-serving.md`.
+health, ledger tests, queued refresh and historical rebuild passed; final
+latency/restart/recovery acceptance is not yet claimed. Dagster explicitly uses
+psycopg2 for notification compatibility with SQLAlchemy 2.1; the operational
+ledger uses psycopg3. The tracked instance config is mounted read-only over the
+persistent instance volume. See `docs/runbooks/batch-serving.md`.
 
 ## 5. Kafka design
 

@@ -55,17 +55,20 @@ class SnapshotExportIntegrationTests(unittest.TestCase):
             if os.environ.get("BATCH_TEST_DBT"):
                 from pathlib import Path
                 from marketpulse_batch.dbt_runner import run_dbt_build
-                from marketpulse_batch.certification import certify_candidate
+                from marketpulse_batch.certification import certify_candidate, verify_certification_current
                 artifact_root = Path(settings.state_path) / f"dbt-proof-{identity}"
                 print(f"dbt proof artifacts: {artifact_root}", flush=True)
                 artifacts = run_dbt_build(candidate, settings=settings, artifact_root=artifact_root)
                 certification = certify_candidate(client, receipt, manifest, candidate, artifacts)
                 self.assertEqual(len(certification.checked_relations), 7)
+                verify_certification_current(client, receipt, certification)
                 # Same count, altered amount: full-row equality must reject the change.
                 client.command(f"ALTER TABLE {candidate}.campaign_performance_daily UPDATE net_revenue_minor=net_revenue_minor+1 WHERE 1",
                                settings={"mutations_sync": 2})
                 with self.assertRaisesRegex(ValueError, "rowset"):
                     certify_candidate(client, receipt, manifest, candidate, artifacts)
+                with self.assertRaisesRegex(ValueError, "rowset"):
+                    verify_certification_current(client, receipt, certification)
                 bad_candidate = load_candidate(client, manifest, attempt=2, s3=create_s3_client())
                 bad_fields = ",".join("'missing-test-campaign' AS campaign_id" if name == "campaign_id" else f"`{name}`"
                                       for name, _, _ in next(r for r in manifest.relations if r.name == "gold.campaign_performance_daily").columns)

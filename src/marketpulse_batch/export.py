@@ -101,6 +101,22 @@ class ExportManifest:
                           "row_count": o.row_count} for o in r.objects]} for r in self.relations
         ]}
 
+    @classmethod
+    def from_payload(cls, value: object) -> "ExportManifest":
+        try:
+            if not isinstance(value, dict) or set(value) != {"version", "identity", "relations"} or value["version"] != 1:
+                raise ValueError("invalid export manifest version/fields")
+            relations = []
+            for row in value["relations"]:
+                if set(row) != {"name", "snapshot_id", "columns", "objects", "row_count", "business_checksum"}:
+                    raise ValueError("invalid export relation fields")
+                objects = tuple(ExportObject(**obj) for obj in row["objects"])
+                relations.append(ExportRelation(row["name"], row["snapshot_id"], tuple(tuple(c) for c in row["columns"]),
+                                                objects, row["row_count"], row["business_checksum"]))
+            return cls(value["identity"], tuple(relations))
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError("invalid persisted export manifest") from error
+
     @property
     def digest(self) -> str:
         return hashlib.sha256(json.dumps(self.payload(), sort_keys=True, separators=(",", ":")).encode()).hexdigest()
