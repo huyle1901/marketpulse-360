@@ -222,8 +222,9 @@ validator; therefore the fixture is not a simplified parallel implementation.
 1. Dagster retrieves campaign spend, CRM snapshots, and historical files.
 2. Exact compressed source files are copied to a content-addressed Bronze archive
    on MinIO before their rows are parsed into Iceberg.
-3. MP-04 Spark jobs build deterministic Silver and Gold tables; MP-05 later ports
-   orchestration and model tests into Dagster/dbt without changing the contracts.
+3. MP-04 Spark jobs build deterministic Silver and Gold tables; MP-05 runs them
+   through Dagster and uses dbt to build/test the serving copies without changing
+   lakehouse contracts.
 4. Gold aggregates required by interactive pages are published to ClickHouse.
 5. Backfills and reprocessing use recorded historical Iceberg snapshots rather than the
    application database.
@@ -338,6 +339,112 @@ raw ancestors differ only in click ID, including null versus a paid click.
 This is a correctness/reproducibility proof, not a capacity benchmark. Operator
 commands and evidence locations are documented in
 [`lakehouse-local.md`](../runbooks/lakehouse-local.md).
+
+### 4.4 MP-05 batch/serving boundary (implemented, local proof verified)
+
+The scope in `specs/05-batch-orchestration-and-serving.md` adds scheduled Dagster
+assets for ad reports, CRM, historical/master files and bounded Kafka ingestion.
+MP-04 Spark transformations continue to build snapshot-pinned Silver/Gold; dbt
+Core with dbt-clickhouse builds and tests serving relations from exported snapshot
+copies. The local correctness, query and recovery proof is verified; GitGuardian
+Security Checks passed on PR #5. There is no separate GitHub Actions CI workflow
+configured; regression/integration evidence is from the observed local runs.
+
+Implemented first: optional daily file-ingest selection preserves the MP-04
+all-file default. It requires nonempty configured report platforms and CRM;
+checks Google `segments_date`, Meta `date_start`/`date_stop`, TikTok `stat_time_day`
+and CRM `snapshot_date` against the UTC file partition; retains shared master
+files and original row lineage. Preparation identities hash selected day/platforms,
+model digest and pinned Bronze snapshots. Local receipt files use exclusive atomic
+creation, immutable snapshot maps and conflict detection; PostgreSQL/Dagster
+integration of the receipt contracts is implemented: the separate batch
+PostgreSQL `marketpulse_ops` schema stores immutable preparation receipts,
+attempt counters and frozen publication reservations. Reservations use a
+transactional advisory lock and unique identity; older logical days and payload
+changes are rejected. Publication acknowledgement is idempotent. The append-only
+ClickHouse journal resolves the greatest published generation, collapses identical
+deliveries and rejects conflicting generation/identity payloads. Publication
+re-verifies persisted certification artifacts and current served rowsets first.
+
+Implemented export/copy: Spark reads exact receipt snapshots, verifies source
+schemas and emits bounded JSON partition files on worker scratch. Files are
+conditionally uploaded into owned MinIO `batch-exports/<identity>/<attempt>`
+prefixes; manifests bind source IDs, typed columns, bytes/hashes/counts and full
+business rowset checksums. Disk-backed sorted row hashes preserve duplicates
+without collecting the whole dataset in Python. Fresh Atomic ClickHouse
+candidate databases receive typed MergeTree raw copies in bounded chunks;
+partial attempts are never reused. Exact integers/decimals/nulls/UTC timestamps
+survive transfer. The seven-table real Spark/MinIO/ClickHouse roundtrip and
+pinned-snapshot-after-head-change proof passed. dbt now builds five exact Gold
+tables, two reference dimensions and `campaign_dashboard`; its 28 tests cover
+required fields/keys/domains/relationships, consent, cohort/funnel invariants and
+financial conservation. Certification verifies the successful complete dbt
+invocation, every typed served rowset and independent Decimal CTR/CPC/dimension
+oracles, then writes an immutable proof digest. Actual eight-model/28-test build
+passed; changed monetary rows with unchanged counts and injected missing campaign
+references were rejected. A real queued Dagster refresh completed ingestion,
+pinned Bronze, owned Silver/Gold, export, copy, dbt, certification and generation-1
+publication. A receipt-only historical job rebuilt and certified in isolation,
+without publication; native backfill tags also block promotion. Six independent
+query oracles and 20-warmup/100-sample uncached benchmarks passed, including after
+a restart of ClickHouse, PostgreSQL and the three Dagster services. Test-owned
+lost-acknowledgement recovery leaves the reservation unacknowledged, ends the
+publisher process, restarts services, then repairs it in a new process while
+preserving one logical publication; active identity,
+snapshots, row counts and exact money remain equal before/after restart.
+
+ClickHouse receives isolated candidate release databases. All five Gold rowsets
+must pass schema/key/checksum/financial reconciliation and dbt tests before a
+certified generation can enter an append-only publication journal. PostgreSQL
+reserves immutable generation payloads; readers select the greatest published
+generation, so a delayed older publisher cannot roll back a newer release.
+The operational ledger also freezes certified bundle URIs/database/digest by
+preparation identity. A new refresh of identical inputs reuses the certified
+export, database and dbt invocation, re-verifies their contents, and acknowledges
+the same generation. It never rebuilds a sealed serving database or attempts to
+replace its reservation. Reused dbt outputs follow the actual asset DAG order.
+All daily asset stages explicitly use one partition per backfill run. Partial
+re-execution resolves dbt candidate handoffs through the current run and its
+exact recorded parent ancestry. Certification/publication pin the same candidate
+even when partition IO has a later materialization; dbt results stay beside that
+candidate. Publication gets the receipt by certified identity from the ledger.
+Run metadata/artifact retention is part
+of recovery. Source-history job backfills perform first-time ingestion, while
+normal asset backfills remain receipt-only.
+Actual two-day native job/asset backfills completed successfully, and GraphQL
+re-executions from dbt failure, certification and publication all succeeded after
+those backfills without changing the active generation.
+Reader requests pin a single certified
+database; retries do not append duplicate rows into an active dataset. Historical
+rebuilds do not promote by default. Iceberg/MinIO remains the durable truth.
+
+The CLI exposes six parameterized query workloads; values are bound and relation
+names are allowlisted. Dates use UTC `[from,to)`. Campaign financial queries group
+by currency. Attribution/customer Gold schemas do not encode currency, so their
+queries reject mixed-currency releases. Customer drill money is explicitly
+snapshot-lifetime, filtered by last activity; cohort filtering uses activity month.
+Funnel rows remain per campaign to avoid incorrectly summing unique sessions.
+Verification binds the resolved journal release to its PostgreSQL bundle,
+certification and immutable export, and computes independent Python query answers
+from validated export objects. The recovery script operates on an explicitly
+selected test-owned project; bootstrap/replay is documented separately.
+
+The implemented `batch` and `serving` Compose profiles contain authenticated
+ClickHouse, Dagster webserver/daemon/code location, and separate PostgreSQL
+operational metadata. Jobs run in the code-location container without mounting a
+host Docker socket. All credentials remain in ignored `.env`. App/API/UI behavior
+and continuous Flink-to-ClickHouse updates are outside MP-05. An explicit build
+script builds the local Spark base before the batch image. Missing MP-05 secrets
+fail service startup without breaking disabled-profile MP-04 workflows. The
+code location exposes the marketing asset graph and three jobs. An isolated
+proof runs Dagster on localhost:43000 and ClickHouse on localhost:48123; runtime
+health, ledger tests, queued refresh, historical rebuild and local
+latency/restart/recovery checks passed. The fixture has 239 rows across seven
+copied relations and 22 source files/615 rows; measured fixture timings do not
+establish large-scale capacity. Dagster explicitly uses
+psycopg2 for notification compatibility with SQLAlchemy 2.1; the operational
+ledger uses psycopg3. The tracked instance config is mounted read-only over the
+persistent instance volume. See `docs/runbooks/batch-serving.md`.
 
 ## 5. Kafka design
 
@@ -532,22 +639,26 @@ flowchart TB
             SPL["spark-lakehouse one-shot"]
         end
 
-        subgraph FutureServing["future analytical serving"]
+        subgraph Serving["profile: serving (MP-05)"]
             CH["clickhouse"]
         end
 
-        subgraph Batch["profile: batch"]
-            DG["dagster"]
-            DBT2["dbt-runner"]
+        subgraph Batch["profile: batch (MP-05)"]
+            DG["dagster-webserver + dagster-daemon"]
+            DBT2["batch-code: Spark + dbt subprocesses"]
+            BPG["batch-postgres: Dagster + operational ledger"]
+            DG --> DBT2
+            DG --> BPG
+            DBT2 --> CH
         end
 
-        subgraph App["profile: app"]
+        subgraph App["future profile: app"]
             BE["fastapi"]
             FE["nextjs"]
             EG["event-generator"]
         end
 
-        subgraph Observe["profile: observability"]
+        subgraph Observe["future profile: observability"]
             PR["prometheus"]
             GR["grafana"]
         end
@@ -568,7 +679,7 @@ Recommended laptop profiles:
 docker compose --profile streaming --profile flink up -d --build --wait
 ```
 
-Later milestones add the `batch`, `app`, and `observability` profiles. Run the
+MP-05 adds `batch` and `serving`; later milestones add `app` and `observability`. Run the
 Kafka Streams alternative separately when memory is limited.
 
 Credential configuration is local-only: the committed `.env.example` contains

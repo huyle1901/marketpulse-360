@@ -1,6 +1,127 @@
 name: marketpulse-360
 
+x-batch-runtime: &batch-runtime
+  image: marketpulse-360/batch:mp05
+  build:
+    context: .
+    dockerfile: docker/batch/Dockerfile
+  profiles: [batch]
+  environment: &batch-environment
+    DAGSTER_POSTGRES_USER: ${DAGSTER_POSTGRES_USER:-dagster}
+    DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB:-dagster}
+    DAGSTER_POSTGRES_PASSWORD: "${DAGSTER_POSTGRES_PASSWORD:-}"
+    CLICKHOUSE_HOST: clickhouse
+    CLICKHOUSE_PORT: "8123"
+    CLICKHOUSE_USER: ${CLICKHOUSE_USER:-marketpulse}
+    CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-}"
+    MINIO_ENDPOINT: http://minio:9000
+    MINIO_REGION: us-east-1
+    AWS_REGION: us-east-1
+    MINIO_ROOT_USER: ${MINIO_ROOT_USER:-marketpulse}
+    MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:?}"
+    NESSIE_URI: http://nessie:19120/api/v2
+    NESSIE_REF: main
+    ICEBERG_WAREHOUSE: s3://marketpulse-lakehouse/warehouse
+    KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    SPARK_MASTER: local[2]
+    SPARK_DRIVER_MEMORY: 2g
+    SPARK_SQL_SHUFFLE_PARTITIONS: "2"
+    BATCH_SOURCE_ROOT: ${BATCH_SOURCE_ROOT:-/opt/marketpulse/data/mock/fixtures/seed-360}
+  volumes:
+    - ./data:/opt/marketpulse/data:ro
+    - batch_state:/opt/marketpulse/batch-state
+    - dagster_home:/opt/marketpulse/dagster-home
+    - ./docker/batch/dagster.yaml:/opt/marketpulse/dagster-home/dagster.yaml:ro
+
 services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.8.25.14@sha256:dd81097e2c38827a438287d8ae5d4dc8afafbdd0e61e83376fdd7ed4580673b9
+    profiles: [serving]
+    ports:
+      - "127.0.0.1:${CLICKHOUSE_HOST_PORT:-8123}:8123"
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-marketpulse}
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-}"
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./docker/batch/clickhouse-entrypoint.sh:/opt/marketpulse/clickhouse-entrypoint.sh:ro
+    entrypoint: ["/bin/bash", "/opt/marketpulse/clickhouse-entrypoint.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user \"$${CLICKHOUSE_USER}\" --password \"$${CLICKHOUSE_PASSWORD}\" --query 'SELECT 1' >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+
+  batch-postgres:
+    image: postgres:17.6-alpine
+    profiles: [batch]
+    environment:
+      POSTGRES_USER: ${DAGSTER_POSTGRES_USER:-dagster}
+      POSTGRES_DB: ${DAGSTER_POSTGRES_DB:-dagster}
+      POSTGRES_PASSWORD: "${DAGSTER_POSTGRES_PASSWORD:-}"
+    volumes:
+      - batch_metadata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  batch-code:
+    <<: *batch-runtime
+    depends_on:
+      batch-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "dagster", "api", "grpc-health-check", "-h", "localhost", "-p", "4000"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 4096M
+
+  dagster-webserver:
+    <<: *batch-runtime
+    command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "/opt/marketpulse/workspace.yaml"]
+    ports:
+      - "127.0.0.1:${DAGSTER_HOST_PORT:-3000}:3000"
+    depends_on:
+      batch-postgres:
+        condition: service_healthy
+      batch-code:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3000/server_info', timeout=5)"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  dagster-daemon:
+    <<: *batch-runtime
+    command: ["dagster-daemon", "run", "-w", "/opt/marketpulse/workspace.yaml"]
+    depends_on:
+      batch-postgres:
+        condition: service_healthy
+      batch-code:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
   kafka:
     image: apache/kafka:4.3.1
     profiles:
@@ -325,3 +446,7 @@ volumes:
   lakehouse_data:
   lakehouse_catalog:
   lakehouse_evidence:
+  clickhouse_data:
+  batch_metadata:
+  batch_state:
+  dagster_home:
