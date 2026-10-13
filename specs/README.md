@@ -174,7 +174,10 @@ and budget simulation.
 
 ### MP-07 - Funnel and attribution analysis
 
-**Status:** Planned; depends on MP-05
+**Status:** Specified; implementation pending. Depends on MP-05; stacked on pushed MP-06.
+
+Scope: [`07-funnel-and-attribution-analysis.md`](07-funnel-and-attribution-analysis.md).
+Plan: [`2026-10-13-funnel-attribution-analysis.md`](../docs/superpowers/plans/2026-10-13-funnel-attribution-analysis.md).
 
 Show cross-channel funnels and compare first-touch, last-touch, and linear
 attribution without changing the underlying orders.
