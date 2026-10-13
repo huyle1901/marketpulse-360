@@ -346,8 +346,9 @@ The scope in `specs/05-batch-orchestration-and-serving.md` adds scheduled Dagste
 assets for ad reports, CRM, historical/master files and bounded Kafka ingestion.
 MP-04 Spark transformations continue to build snapshot-pinned Silver/Gold; dbt
 Core with dbt-clickhouse builds and tests serving relations from exported snapshot
-copies. The local correctness, query and recovery proof is verified; remote CI
-and GitGuardian remain release gates.
+copies. The local correctness, query and recovery proof is verified; GitGuardian
+Security Checks passed on PR #5. There is no separate GitHub Actions CI workflow
+configured; regression/integration evidence is from the observed local runs.
 
 Implemented first: optional daily file-ingest selection preserves the MP-04
 all-file default. It requires nonempty configured report platforms and CRM;
