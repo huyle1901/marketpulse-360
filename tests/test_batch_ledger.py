@@ -71,3 +71,17 @@ class BatchLedgerTests(unittest.TestCase):
         row = self.reserve(self.receipt())
         with self.assertRaises(ValueError):
             self.ledger.acknowledge(replace(row, proof_digest="d" * 64))
+
+    def test_certified_bundle_reusable_and_immutable(self) -> None:
+        receipt = self.receipt()
+        self.ledger.record_receipt(receipt, "file:///batch-state/receipt.json")
+        database = f"mp_release_{receipt.identity}_1"
+        self.assertIsNone(self.ledger.get_certified_bundle(receipt.identity))
+        self.ledger.record_certified_bundle(receipt.identity, database, "c" * 64,
+                                             "file:///batch-state/export.json", "file:///batch-state/certification.json")
+        bundle = self.ledger.get_certified_bundle(receipt.identity)
+        self.assertEqual(bundle.database, database)
+        self.assertEqual(bundle.certification_uri, "file:///batch-state/certification.json")
+        with self.assertRaisesRegex(ValueError, "conflict"):
+            self.ledger.record_certified_bundle(receipt.identity, database, "d" * 64,
+                                                 "file:///batch-state/export.json", "file:///batch-state/certification.json")
