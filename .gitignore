@@ -22,6 +22,8 @@ __pycache__/
 .coverage
 htmlcov/
 .docker-build/
+.lakehouse/
+spark-warehouse/
 
 # Local scratch files
 tmp/

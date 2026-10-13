@@ -13,6 +13,7 @@ The recommended core deployment is fully reproducible with Docker Compose:
 
 - Apache Kafka in KRaft mode as the event backbone.
 - Apache Flink for stateful stream processing.
+- Apache Spark for bounded Bronze ingestion and snapshot-pinned Silver/Gold builds.
 - MinIO and Apache Iceberg for the lakehouse.
 - ClickHouse for low-latency analytical queries.
 - PostgreSQL for application and platform metadata, not as the main analytical warehouse.
@@ -35,6 +36,7 @@ state explicitly which technologies belong to each category:
 | Data management | PostgreSQL | Transactional application and platform metadata only |
 | Data management alternative | BigQuery/BigLake | Managed cloud warehouse/lakehouse benchmark |
 | Data processing | Apache Flink | Main stateful stream-processing engine |
+| Data processing | Apache Spark | Bounded lakehouse ingestion, snapshot builds, verification, and reproducible backfills |
 | Data processing alternative | Kafka Streams | Controlled alternative for Kafka-native processing |
 | Messaging/ingestion infrastructure | Apache Kafka | Durable event transport; Kafka itself is not Kafka Streams |
 | Batch transformation/orchestration | dbt Core + Dagster | SQL business models, tests, scheduling, and backfills |
@@ -79,10 +81,12 @@ flowchart LR
         REGISTRY["Apicurio Schema Registry"]
         DAGSTER["Dagster batch ingestion"]
         DLQ["Kafka dead-letter topics"]
+        CLEAN["Versioned clean Kafka topics"]
     end
 
     subgraph Processing["Data processing"]
         FLINK["Apache Flink SQL / DataStream"]
+        SPARK["Apache Spark bounded jobs<br/>Bronze ingestion / Silver / Gold / proof"]
         DBT["dbt Core models and tests"]
         RULES["Validation, deduplication, watermark,<br/>sessionization, enrichment"]
     end
@@ -116,7 +120,12 @@ flowchart LR
     KAFKA --> FLINK
     FLINK --> RULES
     RULES --> DLQ
-    RULES --> ICEBERG
+    RULES --> CLEAN
+    CLEAN --> SPARK
+    DLQ --> SPARK
+    KAFKA --> SPARK
+    SPARK --> ICEBERG
+    SPARK --> MINIO
     RULES --> CLICKHOUSE
     DAGSTER --> MINIO
     MINIO --> ICEBERG
@@ -201,19 +210,134 @@ validator; therefore the fixture is not a simplified parallel implementation.
 3. Flink applies event-time processing, watermarks, deduplication, sessionization,
    identity enrichment, and campaign aggregation.
 4. Invalid records are written to dead-letter topics with an error reason.
-5. Valid records are written to Iceberg Silver tables.
-6. Low-latency campaign aggregates are upserted to ClickHouse using stable event
+5. Valid records are written to versioned clean Kafka topics. MP-04 archives bounded
+   raw plus clean/DLQ offsets into Iceberg Bronze and builds governed Silver tables
+   from the proved MP-03 clean contract.
+6. Low-latency campaign aggregates are later upserted to ClickHouse using stable event
    and aggregate keys so retries do not inflate KPIs.
 7. The application reads live KPI and drill-down data from ClickHouse.
 
 ### 4.2 Batch path
 
 1. Dagster retrieves campaign spend, CRM snapshots, and historical files.
-2. Immutable source files are stored in the Bronze zone on MinIO.
-3. dbt builds tested Silver and Gold business models over Iceberg data.
+2. Exact compressed source files are copied to a content-addressed Bronze archive
+   on MinIO before their rows are parsed into Iceberg.
+3. MP-04 Spark jobs build deterministic Silver and Gold tables; MP-05 later ports
+   orchestration and model tests into Dagster/dbt without changing the contracts.
 4. Gold aggregates required by interactive pages are published to ClickHouse.
-5. Backfills and reprocessing use the historical Iceberg tables rather than the
+5. Backfills and reprocessing use recorded historical Iceberg snapshots rather than the
    application database.
+
+### 4.3 MP-04 lakehouse boundary
+
+MP-04 uses Spark `4.0.4`, Iceberg `1.12.0`, MinIO, and Nessie `0.109.0` with a
+dedicated PostgreSQL `JDBC2` version store. PostgreSQL contains catalog metadata
+only; table data and Iceberg metadata files live in MinIO. Spark uses native
+`NessieCatalog` plus `S3FileIO`.
+
+Bronze has three immutable contracts: exact Kafka records, archived compressed
+source files, and parsed file rows. Kafka archival covers the three MP-02 raw topics
+plus MP-03 clean customer events and processing DLQ. Each bounded ingest uses a
+versioned topic-partition `[start,end)` manifest, preserves exact bytes and lineage,
+and rejects Kafka position/content collisions. CRM, three platform ad reports, and
+master data are archived by content hash before parsing; ground truth and replayable
+event files are not business inputs.
+
+Kafka Bronze rows also retain `ingestion_manifest_sha256`, the canonical offset
+manifest digest for the first insertion. Evidence binds that digest and the actual
+topic/partition bounds to the recorded Kafka snapshot, and binds file counts,
+content hashes, and manifest hashes to all three recorded Bronze snapshots. Offset
+gaps from transaction markers/aborted values remain explicit `read_committed`
+ingestion evidence. The smoke waits for source processing and a later completed
+Flink checkpoint, then counts committed messages rather than Kafka positions.
+
+Silver consumes the MP-03 clean contract, re-deduplicates deterministically, applies
+session identity stitching, consent, late eligibility, and whole-session bot rules,
+and joins typed customer/campaign/ad-spend dimensions.
+The MP-03 clean v1 envelope omits the original top-level `click_id`. Silver
+recovers it by joining the clean record's exact raw topic/partition/offset lineage
+to the same Bronze snapshot, verifies event identity, and reads the raw envelope
+field. This preserves real paid touches without changing the MP-03 contract.
+Payload-conflict detection compares the clean logical hash together with this
+recovered click ID using a null-safe struct; different paid-touch identities are
+reported as conflicts even when the clean v1 envelopes are otherwise identical.
+Gold exposes funnel, first/last/linear attribution, Customer 360, cohort retention, and campaign
+performance tables. Evidence records both MP-03 source totals and consent-governed
+Gold totals, because those layers intentionally answer different questions.
+Gross revenue counts only `order_created`; refund amounts count only
+`order_refunded`. Refund payloads retain the original order gross as context, so
+that value must not be counted as a second sale in evidence, customer profiles,
+campaign performance, or attribution.
+
+Every build records input/output snapshot IDs, fingerprints of the physical Iceberg
+name/type/nullability schemas, complete canonical-row checksums, quality counts, and
+financial reconciliations. Evidence embeds the exact offset/file manifests with
+their SHA-256 values. Verification reads the documented baseline through Iceberg
+`VERSION AS OF`, walks snapshot `parent_id` links to prove the baseline is an
+ancestor of the recorded current head, and recomputes every rowset, quality block,
+and revenue block. The backfill proof reads the exact Bronze snapshot IDs and writes
+to a new `rebuild_<run_id>_<identity>` namespace; it refuses existing or original
+namespaces and asserts that original table heads do not change.
+
+MP-04 implementation progress:
+
+| Slice | Status |
+|---|---|
+| Ordered Iceberg contracts | Implemented: 13 Bronze/Silver/Gold table contracts with keys, types, partitions, and business-checksum columns |
+| Deterministic primitives | Implemented: Kafka/file ingest IDs, namespaced profile identity, lossless integer attribution allocation, schema fingerprints, canonical rowset checksums, and table-evidence comparison |
+| Local storage/catalog stack | Implemented: Compose profiles provide PostgreSQL 17.6 (`lakehouse_catalog`), checksum-verified MinIO `RELEASE.2025-04-22T22-12-26Z` (`lakehouse_data`), one-shot `mc`, Nessie 0.109.0, and an on-demand non-root Python 3.12/Spark 4.0.4/Iceberg 1.12.0 tool with a portable `lakehouse_evidence` volume; the API/console/catalog ports are 9000/9001/19120 |
+| Immutable Bronze ingestion | Implemented: CLI bootstrap, complete `read_committed` Kafka offset manifests, exact Kafka byte/header archival, cryptographically verified content-addressed source-file archival, insert-only Iceberg merges, collision checks, and offset-gap evidence |
+| Governed Silver build | Implemented: explicit Bronze snapshot reads, complete clean/DLQ validation, bidirectional raw-outcome reconciliation, windowed total-order deduplication, conflict evidence, session identity stitching, consent/late/bot exclusions, distributed latest-CRM and campaign/ad joins, and source-specific spend conversion |
+| Marketing Gold models | Implemented: snapshot-pinned Spark builds publish distinct-session funnels, deterministic first/last/linear attribution, customer 360, cohort retention, and full-outer campaign performance |
+| Evidence and rebuild proof | Implemented: schema v1 manifests record baseline/later snapshot pairs, embedded input provenance, physical schema fingerprints, full canonical business-row checksums, recomputed quality/revenue reconciliation, parent-chain historical verification, and collision-safe isolated rebuild comparison |
+
+The storage persistence smoke test writes an Iceberg row, restarts MinIO, Nessie,
+and their PostgreSQL version store, and reads the same row and snapshot metadata
+back successfully. The isolated Bronze integration proof created all 13 tables,
+archived the fixture manifest plus 12 eligible compressed files, inserted 12 file
+records and 380 canonical file rows, and ingested 219 Kafka records from the three
+raw topics. Repeating both bounded inputs inserted zero records: the same file run
+reported 13 existing archive objects, 12/380 no-op table rows, and unchanged
+snapshot IDs; the same Kafka manifest reported 219 no-ops and no offset gaps.
+A transactional Kafka probe added one committed and one aborted clean record. Bronze
+observed only the committed value, reported the aborted offset as one explicit gap,
+rejected a conflicting same-batch immutable key without changing the 220-row table,
+and inserted zero rows when the same manifest was retried. MP-04 has focused
+contract, ingestion, governance, Gold, evidence, and Docker-asset tests. The exact
+suite count is reported by fresh verification rather than treated as an architecture
+invariant.
+
+The Silver fixture oracle resolves 100 latest customer profiles, six campaigns,
+12 daily platform-spend rows, 1,000 impressions, 73 clicks, `551,737` VND minor
+units of spend, and `29,718,000` conversion-value minor units. A real snapshot-
+bounded Spark build materialized all five Silver Iceberg tables through distributed
+transforms and atomic `INSERT OVERWRITE`; a one-event integration probe produced
+one governed event and one quality row alongside the complete fixture dimensions.
+The same integration produced all five Gold tables twice, retained the earlier
+Iceberg snapshots for time-travel reads, generated evidence for all ten Silver/Gold
+tables, verified physical schemas and every recorded historical checksum, and
+rebuilt the same ten business rowsets in a collision-resistant isolated namespace
+without changing the original snapshot heads. Linear attribution uses integral
+Spark `DIV` plus deterministic remainder assignment, including amounts beyond
+floating-point precision; `__unattributed__` is reserved at the Silver boundary.
+
+The full MP-04 fixture proof on 2026-10-13 archived 439 raw Kafka records and 217
+clean records (zero processing-DLQ records), accepted 191 governed events, excluded
+12 bot and 14 consent-denied events, and accounted for 222 duplicates. It verified
+and rebuilt all ten Silver/Gold rowsets after later output snapshots and a
+catalog/storage restart. All 13 archived source objects were retrieved with exact
+size/hash/bytes, and broker samples independently matched Bronze keys, values,
+ordered duplicate/null/binary headers, timestamps, and offset provenance.
+Source gross/refund/net totals were `29,718,000 / 4,967,000 / 24,751,000` minor units;
+governed totals were `27,160,000 / 4,967,000 / 22,193,000`. First-touch, last-touch,
+and linear attribution each reconciled to the governed totals and contained paid
+attribution. The anonymous Customer 360 profiles retained three orders and
+`4,046,000` gross minor units. A real Spark regression additionally verifies a
+deterministic winner plus conflict evidence for identical clean payloads whose
+raw ancestors differ only in click ID, including null versus a paid click.
+This is a correctness/reproducibility proof, not a capacity benchmark. Operator
+commands and evidence locations are documented in
+[`lakehouse-local.md`](../runbooks/lakehouse-local.md).
 
 ## 5. Kafka design
 
@@ -401,10 +525,14 @@ flowchart TB
             FS["flink-job-submit"]
         end
 
-        subgraph FutureStorage["future storage profiles"]
+        subgraph Lakehouse["profiles: lakehouse + lakehouse-tools (MP-04)"]
             MI["minio"]
-            IC["iceberg-rest"]
-            PG["postgres"]
+            NS["nessie"]
+            PG["lakehouse-postgres"]
+            SPL["spark-lakehouse one-shot"]
+        end
+
+        subgraph FutureServing["future analytical serving"]
             CH["clickhouse"]
         end
 
@@ -442,6 +570,64 @@ docker compose --profile streaming --profile flink up -d --build --wait
 
 Later milestones add the `batch`, `app`, and `observability` profiles. Run the
 Kafka Streams alternative separately when memory is limited.
+
+Credential configuration is local-only: the committed `.env.example` contains
+empty password fields, while ignored `.env` supplies separate PostgreSQL and MinIO
+passwords. Compose requires both values with no fallback, even when resolving
+streaming-only profiles. Spark and source archival reject missing/blank MinIO
+passwords rather than silently using a shared default. `.env` is excluded from
+Docker build contexts and credentials are not evidence fields. Existing catalog
+volumes retain their initialized password; editing `.env` does not rotate it.
+Local credential rotation preserves volumes: change the existing PostgreSQL role
+with `psql`'s encrypted password prompt, then recreate the catalog/object services
+to reload MinIO and Nessie credentials and terminate old database sessions. The
+acceptance check requires new credentials to work and former credentials to fail;
+health status alone is insufficient. Production secrets delivery, TLS, and
+automated production rotation remain outside the local-runtime scope.
+The user-authorized MP-04 history cleanup consolidates the feature changes on the
+unchanged remote-main base without historical development-password commits. Local
+recovery references are not pushed. Earlier clones and cached pull-request views
+may still retain revoked values; rewriting a branch cannot revoke credentials.
+
+MP-04 storage starts independently; Spark is invoked only as a tool:
+
+```bash
+docker compose --profile lakehouse up -d --wait
+docker compose --profile lakehouse --profile lakehouse-tools run --rm spark-lakehouse probe-write
+```
+
+The implemented Bronze commands use the same one-shot Spark image. File ingestion
+archives source bytes before parsing. Kafka capture records an immutable, canonical
+manifest for all five governed topics; ingestion refuses topic/partition drift,
+retention loss, a different Kafka cluster, and an existing key with different
+content. Kafka isolation is explicitly `read_committed`, matching MP-03's
+transactional outputs. Source objects are uploaded from a stable staged copy and
+streamed back from MinIO for a body SHA-256 check before Iceberg rows can commit;
+object metadata and length alone are not trusted.
+
+```bash
+docker compose --profile streaming --profile lakehouse up -d --wait kafka topic-init lakehouse-postgres minio minio-init nessie
+docker compose --profile streaming --profile lakehouse --profile lakehouse-tools run --rm spark-lakehouse bootstrap
+docker compose --profile streaming --profile lakehouse --profile lakehouse-tools run --rm spark-lakehouse ingest-files --run-id files-1 --input /opt/marketpulse/data/mock/fixtures/seed-360
+docker compose --profile streaming --profile lakehouse --profile lakehouse-tools run --rm spark-lakehouse capture-offsets --run-id kafka-1 --output /opt/marketpulse/evidence/offsets.json
+docker compose --profile streaming --profile lakehouse --profile lakehouse-tools run --rm spark-lakehouse ingest-kafka --run-id kafka-1 --offset-manifest /opt/marketpulse/evidence/offsets.json
+```
+
+MinIO's API and console are exposed on `9000` and `9001`. Nessie's API is exposed
+on `19120`, while Compose checks its internal management health endpoint on port
+`9000`. MinIO and `mc` are built for amd64/arm64 from pinned official release
+binaries whose SHA-256 checksums are verified during the build. The reproducible
+persistence proof is:
+
+```bash
+scripts/lakehouse-smoke-test.sh
+```
+
+The full MP-04 smoke proof temporarily runs the MP-03 Flink profile to produce and
+reconcile clean/DLQ topics, archives bounded Kafka offsets, then stops Flink before
+the one-shot Spark transforms to keep peak laptop memory bounded. Operator commands,
+demo URLs, expected totals, evidence inspection, and cleanup are documented in
+`docs/runbooks/lakehouse-local.md`.
 
 ## 8. Business capabilities shown by the application
 
