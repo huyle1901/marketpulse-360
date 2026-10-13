@@ -63,6 +63,9 @@ the [runbook](../runbooks/batch-serving.md) contains executable operator command
   validation, Compose validation and whitespace checks passed. Current local
   credential values were absent from tracked files; remote secret scanning is
   a separate check and is not implied by this local scan.
+- GitGuardian Security Checks on GitHub PR #5 returned `SUCCESS`. No separate
+  GitHub Actions CI workflow is configured; the regression/integration results
+  above come from the actual local executions.
 
 Earlier failed development runs remain visible in Dagster as diagnostic history;
 they do not change the active release. They exposed and led to fixes for driver

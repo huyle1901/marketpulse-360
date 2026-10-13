@@ -5,8 +5,9 @@ ClickHouse raw copy, dbt models/tests, certification, marketing Dagster graph an
 publication implemented. Real queued refresh, isolated historical rebuild,
 six independent query oracles, benchmark and restart/lost-acknowledgement proof
 passed locally. The final review's Important findings were fixed with regression
-tests and actual native backfill/re-execution checks. Remote GitGuardian/CI remain
-separate release checks.
+tests and actual native backfill/re-execution checks. GitGuardian Security Checks
+passed on PR #5. Regression/integration suites were run locally; no separate
+GitHub Actions CI workflow is configured.
 
 ## Build and start
 
