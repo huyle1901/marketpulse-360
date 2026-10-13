@@ -1,6 +1,7 @@
 'use client';
 
 import {useEffect,useRef,useState} from 'react';
+import Link from 'next/link';
 import type {Alert,Campaign,Dashboard,Pace,Rule,Scenario,Setting} from './types';
 
 const money=(value:string|null|undefined)=>value==null?'Unavailable':BigInt(value).toLocaleString('en-US');
@@ -111,6 +112,7 @@ export default function CommandCenter() {
   };
 
   return <main>
+    <nav className="workspace-nav" aria-label="Workspaces"><Link href="/" aria-current="page">Campaign Operations</Link><Link href="/analysis">Funnel &amp; Attribution</Link></nav>
     <header className="masthead"><div><div className="brand">MARKETPULSE <span>360</span></div><h1>Marketing Command Center</h1><p>Campaign performance, decisions and budget scenarios</p></div><div className="status"><span className="dot"/> Updates every 5 seconds<br/><small>Last successful read: {lastSuccess||'Waiting'}</small></div></header>
     <section className="filters" aria-label="Campaign filters">
       <label>From (UTC)<input type="date" value={filters.from_date} onChange={e=>setFilters({...filters,from_date:e.target.value})}/></label>
