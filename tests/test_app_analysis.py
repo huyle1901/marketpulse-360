@@ -80,3 +80,11 @@ class AnalysisQueryTests(unittest.TestCase):
         with self.assertRaises(AnalysisError) as error:
             service.attribution(DashboardFilter(date(2026,1,1),date(2026,1,3)),[])
         self.assertEqual(error.exception.code,'unsupported_currency')
+
+class AnalysisProvenanceTests(unittest.TestCase):
+    def test_actual_maximum_day_is_exposed_even_for_historical_data(self):
+        from marketpulse_app.analysis import provenance
+        session=SimpleNamespace(provenance=lambda:{'identity':'a'*64})
+        result=provenance(session,'funnel_daily',[{'event_date':date(2026,1,2)}])
+        self.assertEqual(result['max_event_date'],'2026-01-02')
+        self.assertEqual(result['data_through'],'2026-01-03T00:00:00+00:00')

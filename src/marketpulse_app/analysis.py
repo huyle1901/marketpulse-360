@@ -125,6 +125,7 @@ def provenance(session: Analytics, model: str, rows: Sequence[Mapping[str, objec
     through = datetime.combine(maximum+timedelta(days=1), time.min, timezone.utc) if maximum else None
     now = datetime.now(timezone.utc)
     return session.provenance() | {"model": "gold."+model, "serving_relation": model,
+        "max_event_date": maximum.isoformat() if maximum else None,
         "data_through": through.isoformat() if through else None, "timestamp_resolution": "day", "observed_at": now.isoformat(),
         "historical": maximum is not None and maximum < now.date()-timedelta(days=1)}
 
