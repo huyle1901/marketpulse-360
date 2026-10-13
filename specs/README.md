@@ -143,7 +143,11 @@ and publishing selected Gold models to ClickHouse.
 
 ### MP-06 - Live campaign and budget operations
 
-**Status:** Planned; depends on MP-03 and MP-05
+**Status:** Specified; implementation pending. Depends on MP-03 and MP-05
+(PR #5 merged into main). User delegated scope decisions to this backlog.
+
+Detailed scope: [`06-live-campaign-and-budget-operations.md`](06-live-campaign-and-budget-operations.md).
+Execution plan: [`2026-10-13-campaign-budget-operations.md`](../docs/superpowers/plans/2026-10-13-campaign-budget-operations.md).
 
 Provide live KPI monitoring, abnormal-spend alerts, budget pacing, and a what-if
 budget allocation view for marketing leaders and performance managers.

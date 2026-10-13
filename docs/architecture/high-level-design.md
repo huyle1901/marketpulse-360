@@ -446,6 +446,34 @@ psycopg2 for notification compatibility with SQLAlchemy 2.1; the operational
 ledger uses psycopg3. The tracked instance config is mounted read-only over the
 persistent instance volume. See `docs/runbooks/batch-serving.md`.
 
+### 4.5 MP-06 campaign operations boundary (specified; implementation pending)
+
+The user delegated MP-06 scope to the ordered backlog. Its binding specification
+is [06-live-campaign-and-budget-operations.md](../../specs/06-live-campaign-and-budget-operations.md)
+and its [implementation plan](../superpowers/plans/2026-10-13-campaign-budget-operations.md)
+executes in the existing source tree, based on merged MP-05 PR #5.
+
+FastAPI and Next.js will expose live KPI monitoring, explainable campaign alerts,
+budget pacing and what-if allocation. Certified campaign finance remains in the
+MP-05 immutable ClickHouse releases. A serving adapter will consume committed
+MP-03 campaign snapshots into a separate `marketpulse_live` projection, selecting
+whole latest keyed snapshots by Kafka offset and collapsing retries. Provisional
+streaming counts/money are displayed separately from consent/bot-governed Gold.
+No metric adds both sources or mixes live revenue with daily batch spend.
+
+A dedicated application PostgreSQL database/schema stores user-created campaign
+market/budget settings, versioned alert rules and immutable evaluation evidence.
+It contains no generated source customers, analytical warehouse copy or seeded
+application accounts. Existing Gold has no market dimension: the UI filter means
+configured campaign market, with unassigned values explicitly unknown.
+Daily spend supports closed-day pacing only; gaps/zero baselines produce explicit
+insufficient-data states. Simulations are read-only linear historical-ROAS
+scenarios. Every metric records its model/source and actual data timestamp;
+historical replay, API polling and retry delivery cannot masquerade as fresh
+business events. New app services will use the Compose `app` profile and separate
+persistent app metadata. This paragraph describes the accepted scope, not deployed
+or verified services. MP-01–05 contracts and pipelines remain intact.
+
 ## 5. Kafka design
 
 Suggested topic naming:
