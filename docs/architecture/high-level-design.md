@@ -448,7 +448,10 @@ persistent instance volume. See `docs/runbooks/batch-serving.md`.
 
 ### 4.5 MP-06 campaign operations boundary (specified; implementation pending)
 
-The user delegated MP-06 scope to the ordered backlog. Its binding specification
+The user delegated MP-06 scope to the ordered backlog. Strict dependency-free
+application contracts and exact Decimal pacing/scenario/alert primitives are
+implemented and unit-tested; service/persistence/UI verification remains pending.
+Its binding specification
 is [06-live-campaign-and-budget-operations.md](../../specs/06-live-campaign-and-budget-operations.md)
 and its [implementation plan](../superpowers/plans/2026-10-13-campaign-budget-operations.md)
 executes in the existing source tree, based on merged MP-05 PR #5.
