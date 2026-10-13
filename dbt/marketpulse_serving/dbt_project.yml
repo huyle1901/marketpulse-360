@@ -1,0 +1,12 @@
+name: marketpulse_serving
+version: '1.0.0'
+config-version: 2
+profile: marketpulse_serving
+model-paths: [models]
+test-paths: [tests]
+macro-paths: [macros]
+models:
+  marketpulse_serving:
+    +materialized: table
+    +engine: MergeTree()
+    +order_by: tuple()

@@ -121,7 +121,15 @@ Persist immutable raw data and governed tables with MinIO and Apache Iceberg.
 
 ### MP-05 - Batch orchestration and analytical serving
 
-**Status:** Planned; depends on MP-04
+**Status:** Complete; local acceptance and final review fixes verified,
+GitGuardian Security Checks passed on PR #5. Depends on MP-04. Daily source selection and immutable
+receipt contracts, Docker runtime and operational ledger implemented;
+snapshot export and isolated ClickHouse copy verified;
+dbt models/tests and certification verified;
+queued Dagster refresh, publication and isolated backfill verified;
+six independent query oracles, fixture benchmarks and restart/recovery verified.
+
+Detailed scope: [`05-batch-orchestration-and-serving.md`](05-batch-orchestration-and-serving.md).
 
 Use Dagster and dbt Core for scheduled ingestion, transformations, tests, backfills,
 and publishing selected Gold models to ClickHouse.

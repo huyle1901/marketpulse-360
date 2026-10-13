@@ -1,0 +1,12 @@
+version: 2
+sources:
+  - name: pinned_gold
+    schema: "{{ env_var('BATCH_CANDIDATE_DATABASE') }}"
+    tables:
+      - name: raw_funnel_daily
+      - name: raw_attribution_daily
+      - name: raw_customer_360
+      - name: raw_cohort_retention
+      - name: raw_campaign_performance_daily
+      - name: raw_campaigns
+      - name: raw_customers
