@@ -339,6 +339,38 @@ This is a correctness/reproducibility proof, not a capacity benchmark. Operator
 commands and evidence locations are documented in
 [`lakehouse-local.md`](../runbooks/lakehouse-local.md).
 
+### 4.4 MP-05 batch/serving boundary (implementation in progress)
+
+The scope in `specs/05-batch-orchestration-and-serving.md` adds scheduled Dagster
+assets for ad reports, CRM, historical/master files and bounded Kafka ingestion.
+MP-04 Spark transformations continue to build snapshot-pinned Silver/Gold; dbt
+Core with dbt-clickhouse builds and tests serving relations from exported snapshot
+copies. Runtime services and serving proof are pending, not a performance claim.
+
+Implemented first: optional daily file-ingest selection preserves the MP-04
+all-file default. It requires nonempty configured report platforms and CRM;
+checks Google `segments_date`, Meta `date_start`/`date_stop`, TikTok `stat_time_day`
+and CRM `snapshot_date` against the UTC file partition; retains shared master
+files and original row lineage. Preparation identities hash selected day/platforms,
+model digest and pinned Bronze snapshots. Local receipt files use exclusive atomic
+creation, immutable snapshot maps and conflict detection; PostgreSQL/Dagster
+integration of these contracts is still pending.
+
+ClickHouse receives isolated candidate release databases. All five Gold rowsets
+must pass schema/key/checksum/financial reconciliation and dbt tests before a
+certified generation can enter an append-only publication journal. PostgreSQL
+reserves immutable generation payloads; readers select the greatest published
+generation, so a delayed older publisher cannot roll back a newer release.
+Reader requests pin a single certified
+database; retries do not append duplicate rows into an active dataset. Historical
+rebuilds do not promote by default. Iceberg/MinIO remains the durable truth.
+
+The proposed `batch` and `serving` Compose profiles contain authenticated
+ClickHouse, Dagster webserver/daemon/code location, and separate PostgreSQL
+operational metadata. Jobs run in the code-location container without mounting a
+host Docker socket. All credentials remain in ignored `.env`. App/API/UI behavior
+and continuous Flink-to-ClickHouse updates are outside MP-05.
+
 ## 5. Kafka design
 
 Suggested topic naming:
