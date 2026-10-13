@@ -60,3 +60,7 @@ class BatchRuntimeTests(unittest.TestCase):
         ports = services["clickhouse"].get("ports", [])
         self.assertEqual({p["target"] for p in ports}, {8123})
         self.assertTrue(all(p["host_ip"] == "127.0.0.1" for p in ports))
+
+    def test_spark_batch_region_explicit(self) -> None:
+        services = self.compose_services()
+        self.assertEqual(services["batch-code"]["environment"].get("AWS_REGION"), "us-east-1")

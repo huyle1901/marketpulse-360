@@ -1,7 +1,8 @@
 # MP-05 local batch / serving
 
-Status: runtime bootstrap and operational ledger implemented. Gold export, dbt
-models, business Dagster assets and publication/query proof are still in progress.
+Status: runtime bootstrap, operational ledger, pinned snapshot export and isolated
+ClickHouse raw copy implemented. dbt models, business Dagster assets and
+publication/query proof are still in progress.
 An empty asset graph at this stage is intentional, not a completed MP-05 demo.
 
 ## Build and start

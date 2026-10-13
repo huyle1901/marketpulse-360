@@ -146,8 +146,11 @@ Export all five MP-04 Gold models, plus `silver.campaigns` and `silver.customers
 reference dimensions, from the receipt's exact snapshots. Only contract business
 columns are exported. No raw CRM email/phone/payload enters ClickHouse.
 
-Spark writes partitioned JSONEachRow-compatible export objects to an owned MinIO
-prefix. An export manifest records object URIs/hashes/bytes/rows, source snapshot
+Spark writes partitioned JSONEachRow-compatible files to worker scratch (32
+partitions, max 50,000 records per file), then streams conditional uploads to an
+owned MinIO prefix. The local runtime does not add a Hadoop s3a connector; worker
+scratch must fit one relation's export. Transport rows are capped at 1 MiB.
+An export manifest records object URIs/hashes/bytes/rows, source snapshot
 IDs, ordered physical schemas and canonical business checksums. Enumerate only the
 successful job's output, not arbitrary warehouse files. Stream objects into
 ClickHouse in bounded chunks; never collect the full export dataset in Python RAM.

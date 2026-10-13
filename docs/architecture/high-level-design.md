@@ -361,6 +361,18 @@ transactional advisory lock and unique identity; older logical days and payload
 changes are rejected. Publication acknowledgement is idempotent. Business
 orchestration and the ClickHouse publication journal remain pending.
 
+Implemented export/copy: Spark reads exact receipt snapshots, verifies source
+schemas and emits bounded JSON partition files on worker scratch. Files are
+conditionally uploaded into owned MinIO `batch-exports/<identity>/<attempt>`
+prefixes; manifests bind source IDs, typed columns, bytes/hashes/counts and full
+business rowset checksums. Disk-backed sorted row hashes preserve duplicates
+without collecting the whole dataset in Python. Fresh Atomic ClickHouse
+candidate databases receive typed MergeTree raw copies in bounded chunks;
+partial attempts are never reused. Exact integers/decimals/nulls/UTC timestamps
+survive transfer. The seven-table real Spark/MinIO/ClickHouse roundtrip and
+pinned-snapshot-after-head-change proof passed. dbt/certification/publication
+and performance acceptance remain pending; candidates are not active releases.
+
 ClickHouse receives isolated candidate release databases. All five Gold rowsets
 must pass schema/key/checksum/financial reconciliation and dbt tests before a
 certified generation can enter an append-only publication journal. PostgreSQL
