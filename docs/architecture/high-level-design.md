@@ -458,9 +458,11 @@ executes in the existing source tree, based on merged MP-05 PR #5.
 
 FastAPI and Next.js will expose live KPI monitoring, explainable campaign alerts,
 budget pacing and what-if allocation. Certified campaign finance remains in the
-MP-05 immutable ClickHouse releases. A serving adapter will consume committed
+MP-05 immutable ClickHouse releases. A validated serving adapter synchronously appends
 MP-03 campaign snapshots into a separate `marketpulse_live` projection, selecting
-whole latest keyed snapshots by Kafka offset and collapsing retries. Provisional
+whole latest keyed snapshots by Kafka offset and collapsing retries. Real ClickHouse
+integration verifies duplicate/out-of-order delivery, null currency, conflicting
+positions and changed source identity rejection. Worker runtime remains pending. Provisional
 streaming counts/money are displayed separately from consent/bot-governed Gold.
 No metric adds both sources or mixes live revenue with daily batch spend.
 
