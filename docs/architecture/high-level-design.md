@@ -345,7 +345,7 @@ The scope in `specs/05-batch-orchestration-and-serving.md` adds scheduled Dagste
 assets for ad reports, CRM, historical/master files and bounded Kafka ingestion.
 MP-04 Spark transformations continue to build snapshot-pinned Silver/Gold; dbt
 Core with dbt-clickhouse builds and tests serving relations from exported snapshot
-copies. Runtime services and serving proof are pending, not a performance claim.
+copies. Runtime bootstrap is implemented; Gold serving proof is pending, not a performance claim.
 
 Implemented first: optional daily file-ingest selection preserves the MP-04
 all-file default. It requires nonempty configured report platforms and CRM;
@@ -354,7 +354,12 @@ and CRM `snapshot_date` against the UTC file partition; retains shared master
 files and original row lineage. Preparation identities hash selected day/platforms,
 model digest and pinned Bronze snapshots. Local receipt files use exclusive atomic
 creation, immutable snapshot maps and conflict detection; PostgreSQL/Dagster
-integration of these contracts is still pending.
+integration of the receipt contracts is implemented: the separate batch
+PostgreSQL `marketpulse_ops` schema stores immutable preparation receipts,
+attempt counters and frozen publication reservations. Reservations use a
+transactional advisory lock and unique identity; older logical days and payload
+changes are rejected. Publication acknowledgement is idempotent. Business
+orchestration and the ClickHouse publication journal remain pending.
 
 ClickHouse receives isolated candidate release databases. All five Gold rowsets
 must pass schema/key/checksum/financial reconciliation and dbt tests before a
@@ -365,11 +370,17 @@ Reader requests pin a single certified
 database; retries do not append duplicate rows into an active dataset. Historical
 rebuilds do not promote by default. Iceberg/MinIO remains the durable truth.
 
-The proposed `batch` and `serving` Compose profiles contain authenticated
+The implemented `batch` and `serving` Compose profiles contain authenticated
 ClickHouse, Dagster webserver/daemon/code location, and separate PostgreSQL
 operational metadata. Jobs run in the code-location container without mounting a
 host Docker socket. All credentials remain in ignored `.env`. App/API/UI behavior
-and continuous Flink-to-ClickHouse updates are outside MP-05.
+and continuous Flink-to-ClickHouse updates are outside MP-05. An explicit build
+script builds the local Spark base before the batch image. Missing MP-05 secrets
+fail service startup without breaking disabled-profile MP-04 workflows. The
+current code location is bootstrap-only (no marketing assets yet). An isolated
+proof runs Dagster on localhost:43000 and ClickHouse on localhost:48123; runtime
+health and five real PostgreSQL ledger tests passed, but Gold/dbt/latency/recovery
+acceptance is not yet claimed. See `docs/runbooks/batch-serving.md`.
 
 ## 5. Kafka design
 

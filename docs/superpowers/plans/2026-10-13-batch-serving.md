@@ -77,7 +77,7 @@ modify `src/marketpulse_lakehouse/source_files.py`; test
 **Interfaces:**
 - Frozen `BatchSettings` contains MinIO/Nessie/Kafka endpoints, source root, state path, ClickHouse host/port/user/password and ledger DSN; `load_settings(environ: Mapping[str, str]) -> BatchSettings` rejects empty required secrets; repr redacts secrets.
 - Frozen `PublicationReservation(generation: int, identity: str, database: str, logical_day: date, proof_digest: str)`.
-- `BatchLedger(dsn: str)` methods `reserve_publication(receipt: PreparationReceipt, database: str) -> PublicationReservation`, `acknowledge(reservation: PublicationReservation) -> None`, `record_receipt(receipt: PreparationReceipt, uri: str) -> None`, `get_receipt(identity: str) -> tuple[PreparationReceipt, str]`; transactional advisory lock and uniqueness constraints own generation/payload immutability.
+- `BatchLedger(dsn: str)` methods `reserve_publication(receipt: PreparationReceipt, database: str, proof_digest: str) -> PublicationReservation`, `acknowledge(reservation: PublicationReservation) -> None`, `record_receipt(receipt: PreparationReceipt, uri: str) -> None`, `get_receipt(identity: str) -> tuple[PreparationReceipt, str]`; transactional advisory lock and uniqueness constraints own generation/payload immutability. proof_digest binds served certification, not preparation alone.
 - Persist preparation attempts and receipt identity; reservation high-water mark rejects older logical days. A retry gets the same generation and exact frozen payload.
 
 - [ ] Write RED tests `test_missing_secret_fails_without_echo`, `test_repr_redacts`, `test_no_docker_socket`, `test_serving_native_port_not_published`, `test_reservation_retry_same_generation`, `test_reservation_payload_conflict`, `test_older_day_rejected`.
