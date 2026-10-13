@@ -1,0 +1,12 @@
+**
+!pyproject.toml
+!src/
+!src/**
+!contracts/
+!contracts/**
+!flink-job/
+!flink-job/pom.xml
+!flink-job/src/
+!flink-job/src/**
+!docker/
+!docker/**
