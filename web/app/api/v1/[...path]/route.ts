@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 
 function allowed(path:string,method:string):boolean {
-  if(method==='GET') return /^(dashboard|campaign-settings|alert-rules|alerts|health\/(live|ready)|budget-pacing\/[^/]+)$/.test(path);
+  if(method==='GET') return /^(dashboard|campaign-settings|alert-rules|alerts|health\/(live|ready)|budget-pacing\/[^/]+|analysis\/(funnel|attribution|journeys))$/.test(path);
   if(method==='POST') return /^(alert-rules|alerts\/evaluate|budget-simulation)$/.test(path);
   return method==='PUT' && /^(campaign-settings|alert-rules)\/[^/]+$/.test(path);
 }

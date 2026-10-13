@@ -182,6 +182,8 @@ def create_app(analytics: Any, store: Any) -> FastAPI:
         return result | {"currency": body.currency, "from_date": body.from_date.isoformat(), "to_date": body.to_date.isoformat(),
                          "provenance": session.provenance()}
 
+    from .analysis_api import register_analysis_routes
+    register_analysis_routes(app, analytics, store)
     return app
 
 
