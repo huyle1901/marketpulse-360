@@ -99,13 +99,14 @@ rows. Existing MP-05 export/certification/publication contracts are unchanged.
 
 Projection fields: release-scoped SHA-256 `profile_ref` instead of profile_key,
 opaque synthetic event/session/click/order UUIDs, event name/time/date, source,
-campaign ID, nullable currency and exact gross/refund amounts, false bot flag.
+campaign ID, nullable currency and exact gross/refund amounts, preserved bot-session flag.
 No customer/anonymous ID, contact fields, URLs, payload JSON or raw PII. Internal
 opaque event/click IDs preserve existing tie order; HTTP journey references hash
 them with release identity. This synthetic-data pseudonymization is not a claim
-of production privacy protection. Refuse consent-denied/bot rows or duplicate
-event identities at the governed input boundary rather than silently changing
-the policy. The projection preserves all governed events, including history
+of production privacy protection. Refuse consent-denied rows, web/mobile bot rows
+or duplicate event identities. MP-04 intentionally retains commerce/email events
+sharing a bot-marked session; preserve those rows and their flag so financial
+totals remain unchanged. The projection preserves all governed events, including history
 needed for pre-interval touches and original purchases of in-interval refunds.
 
 Under an MP-07 PostgreSQL advisory lock (operational coordination only), copy in
