@@ -12,7 +12,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterator, Protocol
+from typing import TYPE_CHECKING, Any, Iterator, Protocol
+
+if TYPE_CHECKING:
+    from marketpulse_batch.contracts import BatchSelection
 
 from .bronze import _spark_schema, current_snapshot_id, merge_insert_only
 from .contracts import TABLE_CONTRACTS
@@ -211,23 +214,20 @@ def build_source_archive_plan(
     )
 
 
-def _parsed_rows(source: SourceArchiveObject) -> list[dict[str, Any]]:
+def iter_source_file_rows(source: SourceArchiveObject) -> Iterator[dict[str, Any]]:
+    """Read validated row shapes incrementally, preserving source row order."""
     try:
         with gzip.open(source.local_path, mode="rt", encoding="utf-8", newline="") as stream:
             if source.format_name == "csv":
                 reader = csv.DictReader(stream)
                 if not reader.fieldnames or len(reader.fieldnames) != len(set(reader.fieldnames)):
                     raise ValueError(f"invalid CSV header: {source.source_file}")
-                rows: list[dict[str, Any]] = []
                 for row in reader:
                     if None in row or any(value is None for value in row.values()):
                         raise ValueError(f"invalid CSV row shape: {source.source_file}")
-                    rows.append(
-                        {key: None if value == "" else value for key, value in row.items()}
-                    )
-                return rows
+                    yield {key: None if value == "" else value for key, value in row.items()}
+                return
 
-            rows = []
             for line_number, line in enumerate(stream, start=1):
                 if not line.strip():
                     raise ValueError(
@@ -238,8 +238,7 @@ def _parsed_rows(source: SourceArchiveObject) -> list[dict[str, Any]]:
                     raise ValueError(
                         f"JSONL row {line_number} is not an object: {source.source_file}"
                     )
-                rows.append(value)
-            return rows
+                yield value
     except (OSError, EOFError, gzip.BadGzipFile, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError(f"cannot parse source file: {source.source_file}") from error
 
@@ -272,7 +271,7 @@ def normalize_source_file(
     if not run_id:
         raise ValueError("run_id must not be empty")
     verify_source_archive_object(source)
-    rows = _parsed_rows(source)
+    rows = list(iter_source_file_rows(source))
     if len(rows) != source.row_count:
         raise ValueError(
             f"row-count mismatch: {source.source_file}; "
@@ -469,10 +468,15 @@ def ingest_source_files(
     run_id: str,
     ingested_at: datetime,
     client: S3Client | None = None,
+    selection: BatchSelection | None = None,
 ) -> dict[str, object]:
     if not run_id:
         raise ValueError("run_id must not be empty")
     plan = build_source_archive_plan(root)
+    if selection is not None:
+        from marketpulse_batch.selection import select_daily_sources
+
+        plan = select_daily_sources(plan, selection)
     uploaded, existing_objects = archive_source_objects(plan, client=client)
     file_records = tuple(
         source_file_record(
