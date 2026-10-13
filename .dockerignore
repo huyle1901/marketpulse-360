@@ -10,3 +10,5 @@
 !flink-job/src/**
 !docker/
 !docker/**
+!dbt/
+!dbt/**

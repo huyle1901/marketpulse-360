@@ -1,0 +1,84 @@
+version: 2
+models:
+  - name: funnel_daily
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [event_date, campaign_id]
+      - required_fields:
+          arguments:
+            columns: [event_date, campaign_id, sessions, page_view_sessions, view_item_sessions, add_to_cart_sessions, checkout_sessions, purchase_sessions]
+    columns:
+      - name: campaign_id
+        data_tests: [not_null]
+  - name: attribution_daily
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [model, event_date, campaign_id]
+      - required_fields:
+          arguments:
+            columns: [model, event_date, campaign_id, is_attributed, allocated_order_count, allocated_gross_minor, allocated_refund_minor, allocated_net_minor]
+    columns:
+      - name: model
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [first_touch, last_touch, linear]
+  - name: customer_360
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [profile_key]
+      - required_fields:
+          arguments:
+            columns: [profile_key, profile_type, first_activity_at, last_activity_at, event_count, session_count, order_count, refund_count, gross_revenue_minor, refund_amount_minor, net_revenue_minor, cohort_month, consent_analytics]
+    columns:
+      - name: profile_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [customer, anonymous, session]
+  - name: cohort_retention
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [cohort_month, activity_month, profile_type]
+      - required_fields:
+          arguments:
+            columns: [cohort_month, activity_month, profile_type, month_number, cohort_size, active_profiles, retained_rate]
+  - name: campaign_performance_daily
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [event_date, campaign_id]
+      - required_fields:
+          arguments:
+            columns: [event_date, campaign_id, currency, impressions, clicks, vendor_conversions, spend_minor, sessions, page_view_sessions, view_item_sessions, add_to_cart_sessions, checkout_sessions, purchase_sessions, orders, refunds, gross_revenue_minor, refund_amount_minor, net_revenue_minor, first_touch_gross_minor, first_touch_refund_minor, first_touch_net_minor, last_touch_gross_minor, last_touch_refund_minor, last_touch_net_minor, linear_gross_minor, linear_refund_minor, linear_net_minor]
+  - name: campaigns
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [campaign_id]
+      - required_fields:
+          arguments:
+            columns: [campaign_id, platform, platform_campaign_id, name, objective, status, start_date, end_date, daily_budget_minor, currency, ad_count, source_file, source_row_number]
+    columns:
+      - name: campaign_id
+        data_tests: [not_null]
+  - name: customers
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [customer_id]
+      - required_fields:
+          arguments:
+            columns: [customer_id, created_at, snapshot_date, loyalty_tier, lifetime_value_minor, consent_analytics, consent_marketing, source_file, source_row_number]
+    columns:
+      - name: customer_id
+        data_tests: [not_null]
+  - name: campaign_dashboard
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [event_date, campaign_id]

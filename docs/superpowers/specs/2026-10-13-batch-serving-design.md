@@ -176,6 +176,9 @@ are never included in reader queries and are not automatically deleted.
 dbt builds the five exact served Gold relations and reference dimensions from these
 sources, plus `campaign_dashboard` joining campaign names/status to performance
 and deriving null-safe CTR/CPC metrics without changing source monetary totals.
+CTR and CPC use Decimal(38,6), truncate toward zero at six places, and are null
+when their denominator is zero. Governed platform values are `google`, `meta`,
+`tiktok`, distinct from external dataset names ending in `_ads`.
 Use `DbtCliResource`/dbt artifacts to expose actual model/test outcomes in Dagster;
 asset keys stay stable even when physical candidate database names change. Generate
 the manifest after runtime credential injection, never with baked-in build secrets.
