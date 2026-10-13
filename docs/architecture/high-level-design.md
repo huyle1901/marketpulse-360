@@ -446,7 +446,7 @@ psycopg2 for notification compatibility with SQLAlchemy 2.1; the operational
 ledger uses psycopg3. The tracked instance config is mounted read-only over the
 persistent instance volume. See `docs/runbooks/batch-serving.md`.
 
-### 4.5 MP-06 campaign operations boundary (specified; implementation pending)
+### 4.5 MP-06 campaign operations boundary (implementation; acceptance pending)
 
 The user delegated MP-06 scope to the ordered backlog. Strict dependency-free
 application contracts and exact Decimal pacing/scenario/alert primitives are
@@ -459,7 +459,7 @@ executes in the existing source tree, based on merged MP-05 PR #5.
 FastAPI now exposes request-pinned dashboard, settings/rules, alert evaluation,
 pacing and read-only simulation routes; its contract tests cover exact money,
 parameterized queries, configured-market filtering, stale writes and missing releases.
-Next.js will expose live KPI monitoring, explainable campaign alerts,
+Next.js implements the Marketing Command Center with live KPI monitoring, explainable campaign alerts,
 budget pacing and what-if allocation. Certified campaign finance remains in the
 MP-05 immutable ClickHouse releases. A validated serving adapter synchronously appends
 MP-03 campaign snapshots into a separate `marketpulse_live` projection, selecting
@@ -484,8 +484,14 @@ insufficient-data states. Simulations are read-only linear historical-ROAS
 scenarios. Every metric records its model/source and actual data timestamp;
 historical replay, API polling and retry delivery cannot masquerade as fresh
 business events. New app services will use the Compose `app` profile and separate
-persistent app metadata. This paragraph describes the accepted scope, not deployed
-or verified services. MP-01–05 contracts and pipelines remain intact.
+persistent app metadata. FastAPI 0.143.0/Uvicorn 0.54.0/Pydantic 2.14.1 use a
+hashed Python lock; Next.js 16.4.0/React 19.3.0 use an npm lock and Node 24.21.0.
+Nonroot API/worker/web images have built successfully; TypeScript/production build
+and five browser behavior tests pass, including discarding an old pending scenario
+after its interval changes. All four app services are healthy in the existing
+MP-05 proof project; actual desktop/mobile UI inspection shows 14 separate live
+keys and unchanged certified totals. Restart/benchmark acceptance remains pending.
+MP-01–05 contracts and pipelines remain intact.
 
 ## 5. Kafka design
 
@@ -693,10 +699,16 @@ flowchart TB
             DBT2 --> CH
         end
 
-        subgraph App["future profile: app"]
-            BE["fastapi"]
-            FE["nextjs"]
-            EG["event-generator"]
+        subgraph App["profile: app (MP-06)"]
+            BE["FastAPI campaign operations"]
+            FE["Next.js Command Center"]
+            AW["Kafka serving + alert worker"]
+            APG["app-postgres: configuration + alert evidence"]
+            FE --> BE
+            BE --> CH
+            BE --> APG
+            AW --> CH
+            AW --> APG
         end
 
         subgraph Observe["future profile: observability"]
