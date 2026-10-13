@@ -1,0 +1,15 @@
+import type {Campaign} from '../types';
+export type Model='first_touch'|'last_touch'|'linear';
+export const stages=['sessions','page_view_sessions','view_item_sessions','add_to_cart_sessions','checkout_sessions','purchase_sessions'] as const;
+export type Stage=typeof stages[number];
+export type Counts=Record<Stage,string>;
+export type Provenance={identity:string;generation:string;proof_digest:string;model:string;serving_relation:string;max_event_date:string|null;data_through:string|null;timestamp_resolution:string;observed_at:string;historical:boolean;silver_snapshot_id?:string;projection_version?:string;projection_checksum?:string;projection_row_count?:string};
+export type FunnelRow=Counts&{channel:string;campaign_id?:string;campaign_name?:string};
+export type Funnel={totals:Counts;reach_ratios:Partial<Record<Stage,string|null>>;unit:string;definition:string;channels:FunnelRow[];campaigns:FunnelRow[];campaign_options:Campaign[];filters:{from_date:string;to_date:string};provenance:Provenance};
+export type Finance={gross_revenue_minor:string;refund_amount_minor:string;net_revenue_minor:string;allocated_order_count:string};
+export type Credit=Finance&{model:Model;definition?:string;channel?:string;campaign_id?:string;campaign_name?:string;net_contribution_ratio?:string|null};
+export type Attribution={models:Credit[];channels:Credit[];campaigns:Credit[];currency:string;definitions:Record<Model,string>;provenance:Provenance;global_reconciliation:{balanced:boolean;scope:string;source_totals:Finance;model_totals:Credit[]}};
+export type Allocation={model:Model;event_date:string;campaign_id:string;campaign_name:string;channel:string;allocated_gross_minor:string;allocated_refund_minor:string;allocated_net_minor:string;allocated_order_count:string};
+export type Journey={journey_id:string;purchase_time:string;context_from:string;context_to:string;touches:{touch_ref:string;event_time:string;campaign_name:string;channel:string;outside_report_interval:boolean}[];financial_events:{event_ref:string;event_name:string;event_time:string;gross_revenue_minor:string;refund_amount_minor:string}[];allocations:Allocation[]};
+export type Journeys={rows:Journey[];model:Model;status:string;message?:string;currency:string;provenance:Provenance;candidates_scanned?:string;context_unavailable?:string;candidate_scan_capped?:boolean;sample_limit?:string;context_limit?:string};
+export type Reports={funnel:Funnel;attribution:Attribution;journeys:Journeys};
