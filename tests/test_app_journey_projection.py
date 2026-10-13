@@ -55,6 +55,7 @@ class JourneyProjectionIntegrationTests(unittest.TestCase):
         self.assertEqual(self.journal.resolve(self.release),copied)
         rows=self.client.query(f'SELECT event_date FROM {copied.database}.paid_touches').result_rows
         self.assertEqual(rows,[(date(2025,11,1),)])
+        with self.assertRaises(ValueError):self.journal.resolve(replace(self.release,proof_digest='e'*64))
         self.journal.publish(replace(copied,silver_snapshot_id=124))
         with self.assertRaises(ValueError):self.journal.resolve(self.release)
 
@@ -64,5 +65,18 @@ class JourneyProjectionIntegrationTests(unittest.TestCase):
             copy_journeys(self.client,self.release,123,[project_event(event(),self.release.identity)]*2)
         self.assertEqual(self.journal.resolve(self.release),before)
         # Test-owned failed candidate cleanup lives only in this test.
+        databases=self.client.query('SELECT name FROM system.databases WHERE startsWith(name,{prefix:String})',parameters={'prefix':'mp_journey_'+'c'*64+'_'}).result_rows
+        self.owned.extend(row[0] for row in databases)
+
+    def test_durable_partial_insert_with_lost_ack_never_publishes(self):
+        delegate=self.client
+        class LostAck:
+            def __getattr__(self,name):return getattr(delegate,name)
+            def insert(self,*args,**kwargs):
+                delegate.insert(*args,**kwargs)
+                raise RuntimeError('injected lost insert acknowledgement')
+        before=self.journal.resolve(self.release)
+        with self.assertRaises(RuntimeError):copy_journeys(LostAck(),self.release,123,[project_event(event(),self.release.identity)])
+        self.assertEqual(self.journal.resolve(self.release),before)
         databases=self.client.query('SELECT name FROM system.databases WHERE startsWith(name,{prefix:String})',parameters={'prefix':'mp_journey_'+'c'*64+'_'}).result_rows
         self.owned.extend(row[0] for row in databases)

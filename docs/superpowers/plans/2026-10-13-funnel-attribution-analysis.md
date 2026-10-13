@@ -42,19 +42,19 @@
 pure `summarize_funnel(rows: Sequence[Mapping[str,object]], dimensions: Sequence[Mapping[str,object]]) -> dict[str,object]` and
 `summarize_attribution(rows, baseline, dimensions) -> dict[str,object]` use exact fields from spec.
 
-- [ ] Write RED tests: duplicate campaign/day buckets summed with incidence label;
+- [x] Write RED tests: duplicate campaign/day buckets summed with incidence label;
   stage skipping remains valid; unknown/unattributed channels; zero ratios;
   gross 9007199254740993 exact; three models conserve gross/refund/net;
   corrupted same-count money or missing model fails; filtered credit differs
   from source campaign revenue without false reconciliation failure;
   SQL parameters bind hostile values; all subqueries use one release; mixed
   campaigns/performance currencies rejected. Define literal fixture expectations.
-- [ ] Run `PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -p 'test_app_analysis.py' -v`.
+- [x] Run `PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -p 'test_app_analysis.py' -v`.
   Expected: missing analysis interfaces FAIL.
-- [ ] Implement focused pure rollups, model definitions, request-pinned parameterized
+- [x] Implement focused pure rollups, model definitions, request-pinned parameterized
   Gold queries and actual day-resolution provenance. No new attribution algorithm.
-- [ ] Run focused/full Python suite. Expected: all tests pass (existing integrations opt-in).
-- [ ] Update architecture, diff check and commit `feat: expose exact funnel and attribution analysis`.
+- [x] Run focused/full Python suite. Expected: all tests pass (existing integrations opt-in).
+- [x] Update architecture, diff check and commit `feat: expose exact funnel and attribution analysis`.
 
 ## Task 2: Snapshot-bound privacy-safe journey projection
 
@@ -67,20 +67,20 @@ pure `summarize_funnel(rows: Sequence[Mapping[str,object]], dimensions: Sequence
 `copy_journeys(client, release, snapshot_id: int, rows: Iterable[Mapping[str,object]]) -> JourneyPublication`.
 Publisher `main()` uses BatchLedger recorded receipt/bundle and existing Spark configuration.
 
-- [ ] Write RED tests: no raw PII/profile fields; profile ref stable within release,
+- [x] Write RED tests: no raw PII/profile fields; profile ref stable within release,
   different between releases; exact nullable money/time/opaque IDs; reject bot,
   denied consent/duplicate event; failed insert does not publish; conflicting
   metadata rejected; identical semantic journal rows collapse; source snapshot
   mismatch rejects; copy source/readback full checksum equals, including >2**53.
-- [ ] Run focused tests. Expected: missing interfaces FAIL.
-- [ ] Implement streamed snapshot projection, key validation, typed MergeTree copy
+- [x] Run focused tests. Expected: missing interfaces FAIL.
+- [x] Implement streamed snapshot projection, key validation, typed MergeTree copy
   with bounded chunks/disk-backed checksum, complete publication binding and
   existing-copy re-verification under PostgreSQL advisory lock 36007. Add globally
   canonical paid-touch view before window filters. Failed candidates stay isolated.
-- [ ] Build explicit tool image, publish from the existing active receipt against
+- [x] Build explicit tool image, publish from the existing active receipt against
   real Spark/ClickHouse; verify rowset equality and retry reuse. Run focused/full
   suite and opt-in real projection fault/journal tests. Expected: PASS.
-- [ ] Update architecture, diff check, commit `feat: publish pinned anonymized journey detail for analysis`.
+- [x] Update architecture, diff check, commit `feat: publish pinned anonymized journey detail for analysis`.
 
 ## Task 3: Representative journeys and read-only HTTP boundary
 
@@ -90,20 +90,20 @@ Publisher `main()` uses BatchLedger recorded receipt/bundle and existing Spark c
 `sample(filters: DashboardFilter, settings: Sequence[CampaignSetting], model: str = 'last_touch', limit: int = 5) -> dict[str,object]`;
 `register_analysis_routes(app: FastAPI, analytics: Analytics, store: AppStore) -> None`.
 
-- [ ] Write RED tests for limit/model/date validation, no projection warning,
+- [x] Write RED tests for limit/model/date validation, no projection warning,
   old/mismatched receipt or conflicting projection rejection, paid touches before
   report dates, original purchase preceding refunds, canonical click outside
   window, selected-model credited campaign filtering (not source campaign),
   too-large context reports unavailable without partial credit, hashed HTTP refs,
   409/422/503 stable errors and no-store/one-release provenance. Use unchanged
   `build_attribution_daily` for bounded explanations and literal expectations.
-- [ ] Run focused tests. Expected: new interfaces/routes FAIL.
-- [ ] Implement bounded (100 candidates, 500 touches, 100 financial events) queries
+- [x] Run focused tests. Expected: new interfaces/routes FAIL.
+- [x] Implement bounded (100 candidates, 500 touches, 100 financial events) queries
   and safe sample DTOs. Register the three GET routes and specific AnalysisError
   handler without changing MP-06 errors. Proxy only fixed analysis GET paths.
-- [ ] Run focused/full suite and real HTTP funnel/attribution/journey filters and
+- [x] Run focused/full suite and real HTTP funnel/attribution/journey filters and
   refund windows against the actual sidecar. Expected: PASS, no raw profile/contact payloads.
-- [ ] Update architecture, diff check, commit `feat: add representative journey drill-down APIs`.
+- [x] Update architecture, diff check, commit `feat: add representative journey drill-down APIs`.
 
 ## Task 4: Usable analysis page and race-safe navigation
 
@@ -113,18 +113,18 @@ Publisher `main()` uses BatchLedger recorded receipt/bundle and existing Spark c
 use the same selected interval/configured market. UI accepts refreshed reports
 only when all release identities match and selection is still current.
 
-- [ ] Write RED browser tests: actual navigation; stage-reach/incident labels;
+- [x] Write RED browser tests: actual navigation; stage-reach/incident labels;
   three model definitions and conservation operands; >2**53 exact display;
   channel→campaign→journey drill; unknown/no projection states; mobile/keyboard;
   delayed previous selection and mixed-release three-response batch rejected.
-- [ ] Run frontend tests. Expected: absent page/actions FAIL.
-- [ ] Build responsive labeled stage bars/tables, comparison cards, drill controls,
+- [x] Run frontend tests. Expected: absent page/actions FAIL.
+- [x] Build responsive labeled stage bars/tables, comparison cards, drill controls,
   full source/reconciliation details and honest sample timeline. Cancel old reads,
   preserve marked previous results on failure, never invent chart data.
-- [ ] Run all MP-06/07 browser tests, TypeScript/build, full Python tests. Build/
+- [x] Run all MP-06/07 browser tests, TypeScript/build, full Python tests. Build/
   recreate only app API/web in proof project and inspect actual desktop/mobile UI.
   Expected: PASS and existing operations behavior retained.
-- [ ] Update architecture, diff check, commit `feat: add funnel and attribution analysis workspace`.
+- [x] Update architecture, diff check, commit `feat: add funnel and attribution analysis workspace`.
 
 ## Task 5: Independent evidence, restart, review and runbook
 
@@ -132,16 +132,16 @@ only when all release identities match and selection is still current.
 `docs/runbooks/funnel-attribution.md`, `docs/architecture/mp07-decisions.md`;
 modify backlog/spec/plan/architecture status.
 
-- [ ] Write RED proof tests: exact keyed equality detects duplicate/missing keys;
+- [x] Write RED proof tests: exact keyed equality detects duplicate/missing keys;
   all model totals reconcile independently; refusal of filtered/global conflation.
-- [ ] Implement explicit test-project proof: validated pinned MP-05 export oracles,
+- [x] Implement explicit test-project proof: validated pinned MP-05 export oracles,
   sanitized Silver projection funnel/attribution oracles using existing Gold
   helpers, HTTP drill and representative timeline checks, unavailable/fault tests
   in owned candidates only, API/web restart, unchanged MP-06 source/finance/app state.
-- [ ] Run actual publisher/retry and HTTP proof, 20 warmups/100 uncached samples
+- [x] Run actual publisher/retry and HTTP proof, 20 warmups/100 uncached samples
   per funnel/attribution/journey workload; require fixture p95 <=500 ms and disclose
   sample limits/counts/versions/resources. Retain ignored evidence; no capacity claim.
-- [ ] Run full Python tests, fixture validation, Compose/diff checks, all browser
+- [x] Run full Python tests, fixture validation, Compose/diff checks, all browser
   tests/typecheck/build and real visual QA. Expected: all required checks pass.
 - [ ] Request one fresh whole-branch review against 5b236b9; fix Important issues
   via RED/GREEN/full suite and rerun affected Docker proof. Record rulings/limits.
