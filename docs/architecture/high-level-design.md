@@ -514,6 +514,28 @@ it excludes HTTP and is separate from historical business event age. No capacity
 or event-to-dashboard SLA is implied. See the [runbook](../runbooks/campaign-operations.md)
 and [decisions](mp06-decisions.md).
 
+### 4.6 MP-07 analysis boundary (specified; implementation pending)
+
+MP-07 extends the FastAPI/Next.js application with channel/campaign stage reach,
+first/last/linear attribution comparison and representative order journeys.
+Its [spec](../../specs/07-funnel-and-attribution-analysis.md) and
+[plan](../superpowers/plans/2026-10-13-funnel-attribution-analysis.md) preserve
+MP-04 Gold semantics and MP-05 certification. Aggregates read existing immutable
+ClickHouse funnel/attribution tables with one release per request. Cross-bucket
+session sums are labeled campaign-day incidences, not global unique audiences.
+Attribution global reconciliation precedes dimension filters and requires a
+single-currency release, matching the existing currency-less Gold contract.
+
+An explicit `app-tools` Spark publisher will read that release's recorded Silver
+snapshot, sanitize profile identity and copy exact event detail into a separately
+validated immutable ClickHouse sidecar. It does not change the seven-relation
+MP-05 export or promote a new release. APIs query only ClickHouse; PostgreSQL
+holds config/coordination, not analytical events. Representative explanations
+reuse the existing Gold helper on bounded canonical touch/financial context.
+Click deduplication covers the full pinned snapshot before the order window.
+Partial/missing/conflicting sidecars never appear as complete journey data.
+No source generation/replay or earlier pipeline reimplementation is required.
+
 ## 5. Kafka design
 
 Suggested topic naming:
