@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from dagster import (
-    AssetExecutionContext, AssetKey, AssetOut, AssetSelection, DailyPartitionsDefinition,
+    AssetExecutionContext, AssetIn, AssetKey, AssetOut, AssetSelection, BackfillPolicy, DailyPartitionsDefinition,
     DefaultScheduleStatus, Definitions, Field, Output, RunRequest, ScheduleDefinition,
     asset, multi_asset, resource, define_asset_job, in_process_executor,
 )
@@ -18,7 +18,7 @@ from .settings import load_settings
 from .resources import run_spark_operation, clickhouse_client
 from .contracts import BatchSelection, PreparationReceipt
 from .ledger import BatchLedger, UnknownPreparationReceipt
-from .jobs import model_digest, rebuild_receipt, resolve_rebuild_receipts, local_receipt_path, ordered_asset_outputs
+from .jobs import model_digest, rebuild_receipt, resolve_rebuild_receipts, local_receipt_path, ordered_asset_outputs, resolve_run_artifact
 from .receipts import preparation_identity, read_receipt, write_receipt
 from .export import ExportManifest, EXPORTED_RELATIONS
 from .copying import load_candidate
@@ -27,6 +27,7 @@ from .publication import publish_certified, resolve_active
 from marketpulse_lakehouse.source_files import build_source_archive_plan, create_s3_client
 
 DAILY = DailyPartitionsDefinition(start_date="2026-01-01", timezone="UTC")
+DAILY_BACKFILL = BackfillPolicy.multi_run(max_partitions_per_run=1)
 PROJECT = Path("/opt/marketpulse/dbt/marketpulse_serving")
 
 
@@ -51,6 +52,13 @@ def _directory(context):
     return path
 
 
+def _run_artifact(context, name):
+    def parent(run_id):
+        run = context.run if run_id == context.run_id else context.instance.get_run_by_id(run_id)
+        return run.parent_run_id if run else None
+    return resolve_run_artifact(_settings(context).state_path, context.run_id, name, parent)
+
+
 def _save(context, name, value):
     path = _directory(context) / f"{name}.json"
     path.write_text(json.dumps(value, sort_keys=True, default=str))
@@ -62,6 +70,8 @@ def _read(uri):
 
 
 def _rebuild(context):
+    if context.job_name == "source_history_job":
+        return False
     return context.job_name == "historical_rebuild_job" or any(
         key in context.run.tags for key in ("dagster/backfill", "dagster/backfill_id")
     )
@@ -102,17 +112,17 @@ def master_data(context, historical_file_manifest):
     return _source(context, ["master/ads", "master/campaigns", "master/customers", "master/products"], daily=False)
 
 
-@asset(partitions_def=DAILY, required_resource_keys={"batch_settings"})
+@asset(partitions_def=DAILY, backfill_policy=DAILY_BACKFILL, required_resource_keys={"batch_settings"})
 def ad_reports(context, historical_file_manifest):
     return _source(context, list(_selection(context).required_platforms))
 
 
-@asset(partitions_def=DAILY, required_resource_keys={"batch_settings"})
+@asset(partitions_def=DAILY, backfill_policy=DAILY_BACKFILL, required_resource_keys={"batch_settings"})
 def crm_snapshots(context, historical_file_manifest):
     return _source(context, ["crm"])
 
 
-@asset(partitions_def=DAILY, required_resource_keys={"batch_settings"})
+@asset(partitions_def=DAILY, backfill_policy=DAILY_BACKFILL, required_resource_keys={"batch_settings"})
 def bounded_kafka(context):
     if _rebuild(context):
         context.add_output_metadata({"mode": "recorded_snapshot_rebuild", "offset_capture": "skipped"})
@@ -123,7 +133,7 @@ def bounded_kafka(context):
     return _save(context, "bounded_kafka", result)
 
 
-@asset(partitions_def=DAILY, deps=[master_data, ad_reports, crm_snapshots, bounded_kafka],
+@asset(partitions_def=DAILY, backfill_policy=DAILY_BACKFILL, deps=[master_data, ad_reports, crm_snapshots, bounded_kafka],
        required_resource_keys={"batch_settings"},
        config_schema={"receipt_mapping": Field(dict, default_value={})})
 def pinned_bronze(context):
@@ -141,7 +151,7 @@ def pinned_bronze(context):
                                             "required_platforms": selection.required_platforms})
 
 
-@asset(partitions_def=DAILY, required_resource_keys={"batch_settings"})
+@asset(partitions_def=DAILY, backfill_policy=DAILY_BACKFILL, required_resource_keys={"batch_settings"})
 def governed_silver(context, pinned_bronze):
     recipe = _read(pinned_bronze)
     if recipe["mode"] == "rebuild":
@@ -167,7 +177,7 @@ def governed_silver(context, pinned_bronze):
                                               "silver_snapshots": {f"silver.{name}": value for name, value in silver["snapshots"].items()}})
 
 
-@asset(partitions_def=DAILY, required_resource_keys={"batch_settings"})
+@asset(partitions_def=DAILY, backfill_policy=DAILY_BACKFILL, required_resource_keys={"batch_settings"})
 def marketing_gold(context, governed_silver):
     stage = _read(governed_silver)
     if "receipt_uri" in stage:
@@ -187,7 +197,7 @@ def marketing_gold(context, governed_silver):
     return path.as_uri()
 
 
-@asset(partitions_def=DAILY, required_resource_keys={"batch_settings"})
+@asset(partitions_def=DAILY, backfill_policy=DAILY_BACKFILL, required_resource_keys={"batch_settings"})
 def snapshot_export(context, marketing_gold):
     receipt = read_receipt(local_receipt_path(marketing_gold))
     bundle = _ledger(context).get_certified_bundle(receipt.identity) if not _rebuild(context) else None
@@ -209,7 +219,7 @@ def snapshot_export(context, marketing_gold):
 RAW_OUTS = {f"raw_{name.split('.')[1]}": AssetOut(key=AssetKey(["pinned_gold", f"raw_{name.split('.')[1]}"])) for name in EXPORTED_RELATIONS}
 
 
-@multi_asset(outs=RAW_OUTS, partitions_def=DAILY, required_resource_keys={"batch_settings"})
+@multi_asset(outs=RAW_OUTS, partitions_def=DAILY, backfill_policy=DAILY_BACKFILL, required_resource_keys={"batch_settings"})
 def clickhouse_raw_candidates(context, snapshot_export):
     path = _directory(context) / "candidate.json"
     if not path.exists():
@@ -252,30 +262,41 @@ def _manifest():
     return path
 
 
-@dbt_assets(manifest=_manifest(), partitions_def=DAILY, dagster_dbt_translator=StableTranslator(),
+@dbt_assets(manifest=_manifest(), partitions_def=DAILY, backfill_policy=DAILY_BACKFILL, dagster_dbt_translator=StableTranslator(),
             required_resource_keys={"batch_settings", "dbt"})
 def marketing_dbt(context: AssetExecutionContext):
-    candidate = json.loads((_directory(context) / "candidate.json").read_bytes())
+    candidate_path = _run_artifact(context, "candidate")
+    candidate = json.loads(candidate_path.read_bytes())
+    if "certification_uri" not in candidate:
+        receipt = read_receipt(local_receipt_path(candidate["receipt_uri"]))
+        bundle = _ledger(context).get_certified_bundle(receipt.identity)
+        if bundle and bundle.database == candidate["database"]:
+            candidate["certification_uri"] = bundle.certification_uri
+    result_path = candidate_path.parent / "dbt_result.json"
     if "certification_uri" in candidate:
         cert = read_certification(local_receipt_path(candidate["certification_uri"]))
         keys = {name: key.to_user_string() for name, key in marketing_dbt.keys_by_output_name.items()}
         dependencies = {key.to_user_string(): {dep.to_user_string() for dep in deps} for key, deps in marketing_dbt.asset_deps.items()}
         for output_name in ordered_asset_outputs(keys, dependencies):
             yield Output(None, output_name=output_name, metadata={"dbt_execution": "reused_certified_invocation", "dbt_invocation_id": cert.dbt_invocation_id})
-        _save(context, "dbt_result", {"target_path": str(cert.proof_path.parent)})
+        result_path.write_text(json.dumps({"target_path": str(cert.proof_path.parent)}))
         return
     os.environ["BATCH_CANDIDATE_DATABASE"] = candidate["database"]
     target = _directory(context) / f"dbt-{uuid.uuid4().hex}"
     yield from context.resources.dbt.cli(["build"], context=context, target_path=target).stream()
-    _save(context, "dbt_result", {"target_path": str(target)})
+    result_path.write_text(json.dumps({"target_path": str(target)}))
 
 
-@asset(partitions_def=DAILY, deps=[AssetKey(name) for name in
+@asset(partitions_def=DAILY, backfill_policy=DAILY_BACKFILL,
+       ins={"candidate_uri": AssetIn(key=AssetKey(["pinned_gold", "raw_campaign_performance_daily"]))},
+       deps=[AssetKey(name) for name in
        ("funnel_daily", "attribution_daily", "customer_360", "cohort_retention", "campaign_performance_daily", "campaigns", "customers", "campaign_dashboard")],
        required_resource_keys={"batch_settings"})
-def certified_release(context):
-    candidate = json.loads((_directory(context) / "candidate.json").read_bytes())
-    target = Path(json.loads((_directory(context) / "dbt_result.json").read_bytes())["target_path"])
+def certified_release(context, candidate_uri):
+    # Partition IO can point to a later materialization. Retry ancestry pins this execution.
+    candidate_path = _run_artifact(context, "candidate")
+    candidate = json.loads(candidate_path.read_bytes())
+    target = Path(json.loads((candidate_path.parent / "dbt_result.json").read_bytes())["target_path"])
     receipt = read_receipt(local_receipt_path(candidate["receipt_uri"]))
     manifest = ExportManifest.from_payload(_read(candidate["manifest_uri"]))
     client = clickhouse_client(_settings(context))
@@ -290,21 +311,32 @@ def certified_release(context):
                                                          candidate["manifest_uri"], cert.proof_path.as_uri())
     finally:
         client.close()
+    candidate_path.write_text(json.dumps(candidate | {"certification_uri": cert.proof_path.as_uri()}, sort_keys=True))
     context.add_output_metadata({"proof_digest": cert.proof_digest, "database": cert.database, "checked_relations": len(cert.checked_relations)})
     return cert.proof_path.as_uri()
 
 
-@asset(partitions_def=DAILY, required_resource_keys={"batch_settings"})
+@asset(partitions_def=DAILY, backfill_policy=DAILY_BACKFILL, required_resource_keys={"batch_settings"})
 def active_release(context, certified_release):
     if _rebuild(context):
         context.add_output_metadata({"publication": "skipped_historical_rebuild"})
         return certified_release
-    candidate = json.loads((_directory(context) / "candidate.json").read_bytes())
+    ledger = _ledger(context)
+    candidate = json.loads(_run_artifact(context, "candidate").read_bytes())
     receipt = read_receipt(local_receipt_path(candidate["receipt_uri"]))
-    cert = read_certification(local_receipt_path(certified_release))
+    cert_uri = candidate.get("certification_uri")
+    if cert_uri is None:
+        bundle = ledger.get_certified_bundle(receipt.identity)
+        if bundle is None or bundle.database != candidate["database"]:
+            raise ValueError("retry candidate has no matching persisted certification")
+        cert_uri = bundle.certification_uri
+    cert = read_certification(local_receipt_path(cert_uri))
+    if cert.identity != receipt.identity or cert.database != candidate["database"]:
+        raise ValueError("retry certification differs from pinned candidate")
+    receipt, _ = ledger.get_receipt(cert.identity)
     client = clickhouse_client(_settings(context))
     try:
-        published = publish_certified(client, _ledger(context), receipt, cert)
+        published = publish_certified(client, ledger, receipt, cert)
         current = resolve_active(client)
     finally:
         client.close()

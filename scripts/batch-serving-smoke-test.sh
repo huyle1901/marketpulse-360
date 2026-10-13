@@ -12,11 +12,21 @@ verify() {
     python3 -m marketpulse_batch.cli verify --from-date 2026-01-01 --to-date 2026-01-03 > "$1"
 }
 verify "$proof_root/before.json"
-"${compose[@]}" run --rm --no-deps -e BATCH_TEST_RECOVERY=1 \
+recovery_id="$("${MP05_PYTHON:-python3}" -c 'import uuid; print(uuid.uuid4().hex)')"
+"${compose[@]}" run --rm --no-deps -e BATCH_TEST_RECOVERY=1 -e BATCH_RECOVERY_PHASE=pending -e "BATCH_RECOVERY_ID=$recovery_id" \
   -v "$PWD/src:/opt/marketpulse/src:ro" -v "$PWD/tests:/opt/marketpulse/tests:ro" batch-code \
   python3 -m unittest discover -s /opt/marketpulse/tests -p test_batch_proof.py > "$proof_root/recovery.log" 2>&1
+"${compose[@]}" run --rm --no-deps -e "BATCH_RECOVERY_ID=$recovery_id" batch-code python3 -c '
+import json, os
+from pathlib import Path
+path = Path(os.environ["BATCH_STATE_PATH"]) / "recovery" / (os.environ["BATCH_RECOVERY_ID"] + ".json")
+assert json.loads(path.read_text())["acknowledged"] is False
+'
 "${compose[@]}" restart clickhouse batch-postgres batch-code dagster-webserver dagster-daemon
 "${compose[@]}" up -d --wait --wait-timeout 180 clickhouse batch-postgres batch-code dagster-webserver dagster-daemon
+"${compose[@]}" run --rm --no-deps -e BATCH_TEST_RECOVERY=1 -e BATCH_RECOVERY_PHASE=recover -e "BATCH_RECOVERY_ID=$recovery_id" \
+  -v "$PWD/src:/opt/marketpulse/src:ro" -v "$PWD/tests:/opt/marketpulse/tests:ro" batch-code \
+  python3 -m unittest discover -s /opt/marketpulse/tests -p test_batch_proof.py >> "$proof_root/recovery.log" 2>&1
 verify "$proof_root/after.json"
 PYTHONPATH=src "${MP05_PYTHON:-python3}" scripts/verify-batch-serving.py "$proof_root/before.json" "$proof_root/after.json"
 docker info --format '{{json .MemTotal}} {{json .NCPU}}' > "$proof_root/docker-resources.txt"

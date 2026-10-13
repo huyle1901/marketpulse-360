@@ -4,7 +4,9 @@ Status: runtime bootstrap, operational ledger, pinned snapshot export and isolat
 ClickHouse raw copy, dbt models/tests, certification, marketing Dagster graph and
 publication implemented. Real queued refresh, isolated historical rebuild,
 six independent query oracles, benchmark and restart/lost-acknowledgement proof
-passed locally. Final review and remote GitGuardian/CI are separate release gates.
+passed locally. The final review's Important findings were fixed with regression
+tests and actual native backfill/re-execution checks. Remote GitGuardian/CI remain
+separate release checks.
 
 ## Build and start
 
@@ -168,6 +170,15 @@ before retrying; do not alter a sealed candidate or manually edit the journal.
 The historical job excludes publication. Promotion is a separate explicit
 `publish --receipt <path> --certification <path>` operation and rechecks contents.
 
+All daily stages use one partition per backfill run. In Dagster, use
+`source_history_job` partition backfills for **first-time ingestion** without
+receipts. For asset backfills of already prepared dates, supply the explicit
+receipt mapping; these run in receipt-only mode and skip promotion. Re-execution
+from dbt/certification/publication uses retained artifacts from the exact retry
+parent chain. Keep the original run metadata and `batch_state` volume. A
+standalone dbt materialization with no upstream candidate or retry ancestry must
+include its upstream assets; it does not select an arbitrary latest artifact.
+
 With the port exports above, run the executable recovery proof against the
 existing **test-owned** project:
 
@@ -178,8 +189,10 @@ PYTHONPATH=src python3 scripts/verify-batch-serving.py \
 ```
 
 This command injects acknowledgement loss using a dedicated `mp05_test` ledger
-and test journal, verifies a single logical publication, restarts the five
-batch/serving services, and reruns all six oracle/benchmark workloads. It compares
+and test journal, terminates that publisher with `acknowledged_at` still null,
+restarts the five batch/serving services, and repairs the same reservation in a
+new publisher process. It verifies one publication row and reruns all six
+oracle/benchmark workloads. It compares
 the release, snapshots, row counts and exact financial totals before/after.
 The test database's test-owned schema is reset; application operational metadata
 is retained. Bootstrap and source replay are separate steps above so recovery

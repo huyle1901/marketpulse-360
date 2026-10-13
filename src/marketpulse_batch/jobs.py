@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -16,6 +16,24 @@ from .ledger import BatchLedger, UnknownPreparationReceipt
 from .resources import run_spark_operation
 import json
 import uuid
+
+
+def resolve_run_artifact(state_path: Path, run_id: str, name: str,
+                         parent_for_run: Callable[[str], str | None]) -> Path:
+    """Resolve only this execution's persisted handoff or its exact retry ancestry."""
+    import re
+    if name not in {"candidate", "dbt_result"}:
+        raise ValueError("unknown run artifact")
+    seen: set[str] = set()
+    while run_id:
+        if re.fullmatch(r"[a-zA-Z0-9_-]{1,128}", run_id) is None or run_id in seen:
+            raise ValueError("invalid or cyclic run artifact ancestry")
+        seen.add(run_id)
+        path = state_path / "dagster-runs" / run_id / f"{name}.json"
+        if path.is_file():
+            return path
+        run_id = parent_for_run(run_id)
+    raise ValueError(f"missing {name} artifact in this execution's retry ancestry; include upstream assets")
 
 
 def ordered_asset_outputs(output_keys: Mapping[str, str], dependencies: Mapping[str, set[str]]) -> tuple[str, ...]:

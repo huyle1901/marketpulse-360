@@ -222,8 +222,9 @@ validator; therefore the fixture is not a simplified parallel implementation.
 1. Dagster retrieves campaign spend, CRM snapshots, and historical files.
 2. Exact compressed source files are copied to a content-addressed Bronze archive
    on MinIO before their rows are parsed into Iceberg.
-3. MP-04 Spark jobs build deterministic Silver and Gold tables; MP-05 later ports
-   orchestration and model tests into Dagster/dbt without changing the contracts.
+3. MP-04 Spark jobs build deterministic Silver and Gold tables; MP-05 runs them
+   through Dagster and uses dbt to build/test the serving copies without changing
+   lakehouse contracts.
 4. Gold aggregates required by interactive pages are published to ClickHouse.
 5. Backfills and reprocessing use recorded historical Iceberg snapshots rather than the
    application database.
@@ -386,7 +387,9 @@ publication. A receipt-only historical job rebuilt and certified in isolation,
 without publication; native backfill tags also block promotion. Six independent
 query oracles and 20-warmup/100-sample uncached benchmarks passed, including after
 a restart of ClickHouse, PostgreSQL and the three Dagster services. Test-owned
-lost-acknowledgement recovery preserves one logical publication; active identity,
+lost-acknowledgement recovery leaves the reservation unacknowledged, ends the
+publisher process, restarts services, then repairs it in a new process while
+preserving one logical publication; active identity,
 snapshots, row counts and exact money remain equal before/after restart.
 
 ClickHouse receives isolated candidate release databases. All five Gold rowsets
@@ -399,6 +402,17 @@ preparation identity. A new refresh of identical inputs reuses the certified
 export, database and dbt invocation, re-verifies their contents, and acknowledges
 the same generation. It never rebuilds a sealed serving database or attempts to
 replace its reservation. Reused dbt outputs follow the actual asset DAG order.
+All daily asset stages explicitly use one partition per backfill run. Partial
+re-execution resolves dbt candidate handoffs through the current run and its
+exact recorded parent ancestry. Certification/publication pin the same candidate
+even when partition IO has a later materialization; dbt results stay beside that
+candidate. Publication gets the receipt by certified identity from the ledger.
+Run metadata/artifact retention is part
+of recovery. Source-history job backfills perform first-time ingestion, while
+normal asset backfills remain receipt-only.
+Actual two-day native job/asset backfills completed successfully, and GraphQL
+re-executions from dbt failure, certification and publication all succeeded after
+those backfills without changing the active generation.
 Reader requests pin a single certified
 database; retries do not append duplicate rows into an active dataset. Historical
 rebuilds do not promote by default. Iceberg/MinIO remains the durable truth.
@@ -624,22 +638,26 @@ flowchart TB
             SPL["spark-lakehouse one-shot"]
         end
 
-        subgraph FutureServing["future analytical serving"]
+        subgraph Serving["profile: serving (MP-05)"]
             CH["clickhouse"]
         end
 
-        subgraph Batch["profile: batch"]
-            DG["dagster"]
-            DBT2["dbt-runner"]
+        subgraph Batch["profile: batch (MP-05)"]
+            DG["dagster-webserver + dagster-daemon"]
+            DBT2["batch-code: Spark + dbt subprocesses"]
+            BPG["batch-postgres: Dagster + operational ledger"]
+            DG --> DBT2
+            DG --> BPG
+            DBT2 --> CH
         end
 
-        subgraph App["profile: app"]
+        subgraph App["future profile: app"]
             BE["fastapi"]
             FE["nextjs"]
             EG["event-generator"]
         end
 
-        subgraph Observe["profile: observability"]
+        subgraph Observe["future profile: observability"]
             PR["prometheus"]
             GR["grafana"]
         end

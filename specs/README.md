@@ -121,8 +121,8 @@ Persist immutable raw data and governed tables with MinIO and Apache Iceberg.
 
 ### MP-05 - Batch orchestration and analytical serving
 
-**Status:** Implemented and locally verified; final review and remote CI/
-GitGuardian pending. Depends on MP-04. Daily source selection and immutable
+**Status:** Implemented and locally verified, including final review fixes;
+remote CI/GitGuardian pending. Depends on MP-04. Daily source selection and immutable
 receipt contracts, Docker runtime and operational ledger implemented;
 snapshot export and isolated ClickHouse copy verified;
 dbt models/tests and certification verified;
