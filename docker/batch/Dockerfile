@@ -6,6 +6,7 @@ COPY docker/batch/requirements.lock /opt/marketpulse/requirements.lock
 RUN python3 -m pip install --no-cache-dir --require-hashes -r /opt/marketpulse/requirements.lock
 COPY pyproject.toml ./pyproject.toml
 COPY src ./src
+COPY dbt ./dbt
 RUN python3 -m pip install --no-cache-dir --no-deps . \
     && mkdir -p /opt/marketpulse/dagster-home /opt/marketpulse/batch-state \
     && chown -R 185:185 /opt/marketpulse/dagster-home /opt/marketpulse/batch-state

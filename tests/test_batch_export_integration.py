@@ -52,6 +52,32 @@ class SnapshotExportIntegrationTests(unittest.TestCase):
             self.assertEqual(client.query(f"SELECT count() FROM {candidate}.raw_funnel_daily").first_row[0], expected)
             self.assertEqual(len(manifest.relations), 7)
             print(f"Verified all seven snapshot/export/ClickHouse rowsets; pinned funnel rows={expected}")
+            if os.environ.get("BATCH_TEST_DBT"):
+                from pathlib import Path
+                from marketpulse_batch.dbt_runner import run_dbt_build
+                from marketpulse_batch.certification import certify_candidate
+                artifact_root = Path(settings.state_path) / f"dbt-proof-{identity}"
+                print(f"dbt proof artifacts: {artifact_root}", flush=True)
+                artifacts = run_dbt_build(candidate, settings=settings, artifact_root=artifact_root)
+                certification = certify_candidate(client, receipt, manifest, candidate, artifacts)
+                self.assertEqual(len(certification.checked_relations), 7)
+                # Same count, altered amount: full-row equality must reject the change.
+                client.command(f"ALTER TABLE {candidate}.campaign_performance_daily UPDATE net_revenue_minor=net_revenue_minor+1 WHERE 1",
+                               settings={"mutations_sync": 2})
+                with self.assertRaisesRegex(ValueError, "rowset"):
+                    certify_candidate(client, receipt, manifest, candidate, artifacts)
+                bad_candidate = load_candidate(client, manifest, attempt=2, s3=create_s3_client())
+                bad_fields = ",".join("'missing-test-campaign' AS campaign_id" if name == "campaign_id" else f"`{name}`"
+                                      for name, _, _ in next(r for r in manifest.relations if r.name == "gold.campaign_performance_daily").columns)
+                # MergeTree keys cannot be UPDATEd; append a deliberately bad test row.
+                client.command(f"INSERT INTO {bad_candidate}.raw_campaign_performance_daily SELECT {bad_fields} "
+                               f"FROM {bad_candidate}.raw_campaign_performance_daily LIMIT 1")
+                bad_artifacts = Path(settings.state_path) / f"dbt-bad-proof-{identity}"
+                with self.assertRaisesRegex(ValueError, "dbt build failed"):
+                    run_dbt_build(bad_candidate, settings=settings, artifact_root=bad_artifacts)
+                with self.assertRaisesRegex(ValueError, "dbt"):
+                    certify_candidate(client, receipt, manifest, bad_candidate, bad_artifacts / "target")
+                print("Verified real dbt build, financial gates, dashboard oracle and same-count mutation rejection", flush=True)
         finally:
             spark.stop()
 

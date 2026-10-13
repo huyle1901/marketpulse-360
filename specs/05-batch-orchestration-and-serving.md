@@ -3,7 +3,8 @@
 **Status:** In progress. Daily source selection and immutable local preparation
 receipt contracts, authenticated Docker runtime and PostgreSQL operational ledger
 implemented; exact pinned snapshot export and isolated ClickHouse copy verified.
-dbt/business orchestration/publication/query proof still pending.
+dbt models/tests and complete certification gates verified;
+business orchestration/publication/query proof still pending.
 **Dependency:** MP-04, merged in PR #4.
 
 ## Outcome

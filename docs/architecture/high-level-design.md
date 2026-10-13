@@ -370,8 +370,15 @@ without collecting the whole dataset in Python. Fresh Atomic ClickHouse
 candidate databases receive typed MergeTree raw copies in bounded chunks;
 partial attempts are never reused. Exact integers/decimals/nulls/UTC timestamps
 survive transfer. The seven-table real Spark/MinIO/ClickHouse roundtrip and
-pinned-snapshot-after-head-change proof passed. dbt/certification/publication
-and performance acceptance remain pending; candidates are not active releases.
+pinned-snapshot-after-head-change proof passed. dbt now builds five exact Gold
+tables, two reference dimensions and `campaign_dashboard`; its 28 tests cover
+required fields/keys/domains/relationships, consent, cohort/funnel invariants and
+financial conservation. Certification verifies the successful complete dbt
+invocation, every typed served rowset and independent Decimal CTR/CPC/dimension
+oracles, then writes an immutable proof digest. Actual eight-model/28-test build
+passed; changed monetary rows with unchanged counts and injected missing campaign
+references were rejected. Publication/orchestration and performance acceptance
+remain pending; candidates are not active releases.
 
 ClickHouse receives isolated candidate release databases. All five Gold rowsets
 must pass schema/key/checksum/financial reconciliation and dbt tests before a
