@@ -80,7 +80,9 @@ def evaluate_rule(rule: AlertRule, operands: Mapping[str, object]) -> dict[str, 
     elif rule.kind == "budget_overrun":
         numerator, denominator = operands.get("spend_minor"), operands.get("budget_minor")
     usable = type(numerator) is int and type(denominator) is int and denominator > 0
-    triggered = usable and Decimal(numerator) > rule.threshold * Decimal(denominator)
+    with localcontext() as context:
+        context.prec = max(80, len(rule.threshold.as_tuple().digits)+40)
+        triggered = usable and Decimal(numerator) > rule.threshold * Decimal(denominator)
     outcome = "insufficient_data" if not usable else "triggered" if triggered else "clear"
     return {"outcome": outcome, "kind": rule.kind, "threshold": str(rule.threshold),
             "observed_ratio": ratio(numerator, denominator) if usable else None,

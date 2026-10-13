@@ -1,7 +1,9 @@
 # MP-06 — Live campaign and budget operations
 
-**Status:** Scope selected by the builder after the user delegated decisions to
-the backlog on 2026-10-13. Implementation and acceptance evidence are pending.
+**Status:** Implemented and locally verified on 2026-10-13 after the user delegated
+scope to the backlog. Review findings were reproduced and fixed through
+RED/GREEN regressions; fresh Docker acceptance passed. Evidence and limitations:
+[campaign-operations.md](../docs/runbooks/campaign-operations.md).
 **Base:** PR #5 merged; `origin/main` at `a8843ae` contains MP-05 head `19788c7`.
 **Execution:** Inline in the existing source tree; no new worktree.
 
@@ -116,7 +118,7 @@ come from UI/API or explicitly invoked demo steps; startup never seeds app state
 ## Alerts
 
 Rules are campaign scoped, user created, versioned, enabled/disabled and typed:
-`budget_overrun` (spend > period budget), `spend_spike` (current complete UTC day
+`budget_overrun` (known closed-day spend > full period budget, including during an active period), `spend_spike` (current complete UTC day
 spend > baseline_multiplier * prior complete day spend, baseline >0), and
 `refund_share` (refund_amount / gross > threshold, gross >0). Thresholds are
 Decimal strings; multiplier >1; share in [0,1]. Missing baseline/zero denominator
@@ -126,10 +128,15 @@ A worker evaluates enabled rules against the latest pinned release every 5 secon
 and the UI can explicitly request an evaluation. Daily rules use one global latest
 complete date in the pinned release before real UTC today. A campaign must have
 a row on that date; spend_spike also requires its immediately preceding day;
-missing calendar day is not replaced by another row. Budget rules use the entire
-configured period. No future/current-day aggregate is treated as a completed day.
+missing calendar day is not replaced by another row. Budget rules compare against
+the full configured budget, evaluating `[period_start,min(today,period_end))`.
+Known nonnegative spend exceeding that budget triggers even with missing dates;
+otherwise missing dates return insufficient_data rather than a confident clear.
+No future/current-day aggregate is treated as a completed day.
 The evaluator snapshots rule and setting versions; its key hashes release
-identity, rule/version, setting/version and exact evaluated interval. Unique DB
+identity, rule/version, setting/version, evaluation-contract version and exact
+evaluated closed-day interval. A UTC day transition can change that interval and
+must never reuse an immutable result for different operands. Unique DB
 constraints make polling/concurrent evaluation/restart produce one logical result.
 Occurrences are immutable and remain visible after a rule/setting edit. Record
 outcome triggered/clear/insufficient_data, exact observed operands, comparator,

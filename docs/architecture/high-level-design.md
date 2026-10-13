@@ -82,12 +82,14 @@ flowchart LR
         DAGSTER["Dagster batch ingestion"]
         DLQ["Kafka dead-letter topics"]
         CLEAN["Versioned clean Kafka topics"]
+        GOLDTOPICS["Versioned Gold Kafka topics"]
     end
 
     subgraph Processing["Data processing"]
         FLINK["Apache Flink SQL / DataStream"]
         SPARK["Apache Spark bounded jobs<br/>Bronze ingestion / Silver / Gold / proof"]
         DBT["dbt Core models and tests"]
+        SERVE["MP-06 committed snapshot<br/>serving + alert worker"]
         RULES["Validation, deduplication, watermark,<br/>sessionization, enrichment"]
     end
 
@@ -126,7 +128,10 @@ flowchart LR
     KAFKA --> SPARK
     SPARK --> ICEBERG
     SPARK --> MINIO
-    RULES --> CLICKHOUSE
+    FLINK --> GOLDTOPICS
+    GOLDTOPICS --> SERVE
+    SERVE --> CLICKHOUSE
+    SERVE --> POSTGRES
     DAGSTER --> MINIO
     MINIO --> ICEBERG
     ICEBERG --> DBT
@@ -446,11 +451,12 @@ psycopg2 for notification compatibility with SQLAlchemy 2.1; the operational
 ledger uses psycopg3. The tracked instance config is mounted read-only over the
 persistent instance volume. See `docs/runbooks/batch-serving.md`.
 
-### 4.5 MP-06 campaign operations boundary (implementation; acceptance pending)
+### 4.5 MP-06 campaign operations boundary (implemented; local proof verified)
 
 The user delegated MP-06 scope to the ordered backlog. Strict dependency-free
 application contracts and exact Decimal pacing/scenario/alert primitives are
-implemented and unit-tested; service/persistence/UI verification remains pending.
+implemented and unit-tested. FastAPI/Next.js and app persistence run in Docker;
+final review regressions and refreshed acceptance passed.
 Its binding specification
 is [06-live-campaign-and-budget-operations.md](../../specs/06-live-campaign-and-budget-operations.md)
 and its [implementation plan](../superpowers/plans/2026-10-13-campaign-budget-operations.md)
@@ -466,7 +472,7 @@ MP-03 campaign snapshots into a separate `marketpulse_live` projection, selectin
 whole latest keyed snapshots by Kafka offset and collapsing retries. Real ClickHouse
 integration verifies duplicate/out-of-order delivery, null currency, conflicting
 positions and changed source identity rejection. A manual-commit read_committed
-worker and periodic evaluator are implemented; Docker runtime verification remains pending. Provisional
+worker and periodic evaluator run in healthy Docker services. Provisional
 streaming counts/money are displayed separately from consent/bot-governed Gold.
 No metric adds both sources or mixes live revenue with daily batch spend.
 
@@ -483,15 +489,30 @@ Daily spend supports closed-day pacing only; gaps/zero baselines produce explici
 insufficient-data states. Simulations are read-only linear historical-ROAS
 scenarios. Every metric records its model/source and actual data timestamp;
 historical replay, API polling and retry delivery cannot masquerade as fresh
-business events. New app services will use the Compose `app` profile and separate
+business events. New app services use the Compose `app` profile and separate
 persistent app metadata. FastAPI 0.143.0/Uvicorn 0.54.0/Pydantic 2.14.1 use a
 hashed Python lock; Next.js 16.4.0/React 19.3.0 use an npm lock and Node 24.21.0.
 Nonroot API/worker/web images have built successfully; TypeScript/production build
-and five browser behavior tests pass, including discarding an old pending scenario
+and browser behavior tests cover discarding an old pending scenario
 after its interval changes. All four app services are healthy in the existing
 MP-05 proof project; actual desktop/mobile UI inspection shows 14 separate live
-keys and unchanged certified totals. Restart/benchmark acceptance remains pending.
-MP-01–05 contracts and pipelines remain intact.
+keys and unchanged certified totals. The first independent Docker proof passed
+keyed Kafka equality, lost-offset-acknowledgement retry, persistent app restart
+and all three fixture HTTP budgets; the final images passed this proof again.
+Final review found budget-day identity,
+Decimal comparison and UI ordering issues; focused RED/GREEN regressions address
+them, followed by nine green browser tests, 333-test Python regression suite
+(27 opt-in skips, three new integrations separately exercised), production builds
+and fresh Docker acceptance. Budget alerts use actual closed-day intervals
+and trigger known overruns during an active period. Streaming source identity/
+offset bounds and full alert versions are inspectable in the app.
+MP-01–05 contracts and pipelines remain intact. The fixture has 615 rows in 22
+source files; 217 Kafka snapshots resolve to 14 live keys. Final fixture HTTP p95
+(20 warmups/100 uncached requests) is 26.41 ms dashboard, 16.92 ms pacing, 20.32 ms
+simulation. A test-owned adapter-to-analytical-response measurement was 58.44 ms;
+it excludes HTTP and is separate from historical business event age. No capacity
+or event-to-dashboard SLA is implied. See the [runbook](../runbooks/campaign-operations.md)
+and [decisions](mp06-decisions.md).
 
 ## 5. Kafka design
 
@@ -709,6 +730,7 @@ flowchart TB
             BE --> APG
             AW --> CH
             AW --> APG
+            K1 --> AW
         end
 
         subgraph Observe["future profile: observability"]
@@ -732,7 +754,7 @@ Recommended laptop profiles:
 docker compose --profile streaming --profile flink up -d --build --wait
 ```
 
-MP-05 adds `batch` and `serving`; later milestones add `app` and `observability`. Run the
+MP-05 adds `batch` and `serving`; MP-06 adds `app`; MP-09 adds `observability`. Run the
 Kafka Streams alternative separately when memory is limited.
 
 Credential configuration is local-only: the committed `.env.example` contains

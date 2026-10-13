@@ -5,7 +5,7 @@ const data = {
   certified:{rows:[{campaign_id:'a',campaign_name:'Campaign A',currency:'VND',platform:'google',objective:'traffic',spend_minor:'3',net_revenue_minor:'9007199254740993',orders:'1',source_roas:'2'}],
     totals:[{currency:'VND',spend_minor:'3',net_revenue_minor:'9007199254740993',orders:'1',clicks:'2',impressions:'10'}],
     provenance:{generation:'1',identity:'a'.repeat(64),model:'gold.campaign_performance_daily',data_through:'2026-01-03T00:00:00Z'},freshness:{historical:true,stale:true}},
-  streaming:{status:'unavailable',rows:[],source:'marketing.gold.campaign-metrics.v1'},
+  streaming:{status:'unavailable',rows:[],source:'marketing.gold.campaign-metrics.v1',source_identity:'cluster/topic',offset_bounds:[{partition:'0',from_offset:'1',to_offset:'3'}]},
   campaigns:[{campaign_id:'a',name:'Campaign A',currency:'VND',platform:'google',objective:'traffic'}]
 };
 
@@ -13,8 +13,8 @@ test.beforeEach(async ({page})=>{
   await page.route('**/api/v1/**',async route=>{
     const path=new URL(route.request().url()).pathname;
     const body=path.endsWith('dashboard')?data:path.includes('budget-pacing')?{status:'insufficient_data',spend_minor:'0',remaining_minor:'100',forecast_minor:null}:
-      path.endsWith('budget-simulation')?{projected_net_minor:'200',rows:[],assumption:'Linear scenario using historical net ROAS; not a prediction'}:
-      path.endsWith('alerts')?[{evaluation_key:'x',evidence:{explanation:'refund_share: triggered',campaign_id:'a',outcome:'triggered',currency:'VND',operands:{gross_revenue_minor:'10',refund_amount_minor:'1'}}}]:[];
+      path.endsWith('budget-simulation')?{projected_net_minor:'200',rows:[],provenance:data.certified.provenance,assumption:'Linear scenario using historical net ROAS; not a prediction'}:
+      path.endsWith('alerts')?[{evaluation_key:'x',evidence:{explanation:'refund_share: triggered',campaign_id:'a',outcome:'triggered',currency:'VND',rule_id:'r',rule_version:'2',setting_version:'3',provenance:{identity:'a'.repeat(64)},operands:{gross_revenue_minor:'10',refund_amount_minor:'1'}}}]:[];
     await route.fulfill({json:body});
   });
 });
@@ -64,7 +64,7 @@ test('a changed interval discards a pending scenario from the old interval',asyn
   const pending=new Promise<void>(resolve=>{release=resolve;});
   await page.route('**/api/v1/budget-simulation',async route=>{
     await pending;
-    await route.fulfill({json:{projected_net_minor:'777',rows:[],assumption:'Old scenario must disappear'}});
+    await route.fulfill({json:{projected_net_minor:'777',rows:[],provenance:data.certified.provenance,assumption:'Old scenario must disappear'}});
   });
   await page.goto('/');
   await page.getByLabel('Scenario total (minor units)').fill('100');
@@ -76,4 +76,42 @@ test('a changed interval discards a pending scenario from the old interval',asyn
   await page.waitForResponse('**/api/v1/budget-simulation');
   await page.waitForTimeout(250); // Allow the response continuation to render before a negative assertion.
   await expect(page.getByText('Old scenario must disappear')).toHaveCount(0);
+});
+
+test('a pending settings save disables its editable draft',async({page})=>{
+  let release!:()=>void;const pending=new Promise<void>(resolve=>{release=resolve;});
+  await page.route('**/api/v1/campaign-settings/a',async route=>{
+    await pending;await route.fulfill({json:{campaign_id:'a',market:null,currency:'VND',period_start:'2026-01-01',period_end:'2026-01-03',budget_minor:'100',version:'1'}});
+  });
+  await page.goto('/');await page.getByLabel('Period budget (minor units)').fill('100');
+  const request=page.waitForRequest('**/api/v1/campaign-settings/a');
+  await page.getByRole('button',{name:'Save campaign settings'}).click();await request;
+  await expect(page.getByLabel('Period budget (minor units)')).toBeDisabled();release();
+});
+
+test('changed filter labels retained results while the next selection loads',async({page})=>{
+  await page.goto('/');await expect(page.getByText('9,007,199,254,740,993').first()).toBeVisible();
+  let release!:()=>void;const pending=new Promise<void>(resolve=>{release=resolve;});
+  await page.route('**/api/v1/dashboard*platform=google*',async route=>{await pending;await route.fulfill({json:data});});
+  await page.getByRole('combobox',{name:/^Platform/}).selectOption('google');
+  await expect(page.getByText('Loading selection; showing previous filter results')).toBeVisible();release();
+});
+
+test('release change invalidates a pending scenario',async({page})=>{
+  let release!:()=>void;const pending=new Promise<void>(resolve=>{release=resolve;});
+  await page.route('**/api/v1/budget-simulation',async route=>{await pending;await route.fulfill({json:{projected_net_minor:'777',rows:[],provenance:data.certified.provenance,assumption:'Scenario from old release'}});});
+  await page.goto('/');await page.getByLabel('Scenario total (minor units)').fill('100');await page.getByLabel('Allocation for Campaign A').fill('100');
+  const request=page.waitForRequest('**/api/v1/budget-simulation');await page.getByRole('button',{name:'Simulate allocation'}).click();await request;
+  await page.route('**/api/v1/dashboard*',route=>route.fulfill({json:{...data,certified:{...data.certified,provenance:{...data.certified.provenance,generation:'2',identity:'b'.repeat(64)}}}}));
+  await expect(page.locator('details').filter({has:page.locator('summary',{hasText:'Metric source & freshness'})})).toContainText('Generation 2',{timeout:10000});
+  release();await page.waitForResponse('**/api/v1/budget-simulation');await page.waitForTimeout(250);
+  await expect(page.getByText('Scenario from old release')).toHaveCount(0);
+});
+
+test('source identity and versioned alert evidence are inspectable',async({page})=>{
+  await page.goto('/');
+  await page.getByText('Streaming source provenance',{exact:true}).click();
+  await expect(page.getByText('cluster/topic',{exact:false})).toBeVisible();
+  await page.getByText('Full alert provenance',{exact:true}).click();
+  await expect(page.getByText('Rule version 2 · Setting version 3',{exact:false})).toBeVisible();
 });

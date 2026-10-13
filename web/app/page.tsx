@@ -15,6 +15,7 @@ export default function CommandCenter() {
   const [filters,setFilters]=useState({from_date:'',to_date:'',platform:'',campaign_id:'',objective:'',market:''});
   const [refreshError,setRefreshError]=useState('');
   const [lastSuccess,setLastSuccess]=useState('');
+  const [displayedQuery,setDisplayedQuery]=useState('');
   const [settings,setSettings]=useState<Setting[]>([]);
   const [rules,setRules]=useState<Rule[]>([]);
   const [alerts,setAlerts]=useState<Alert[]>([]);
@@ -37,10 +38,11 @@ export default function CommandCenter() {
   const [retry,setRetry]=useState(0);
   const [busy,setBusy]=useState(false);
   const query=new URLSearchParams(Object.entries(filters).filter(([,value])=>!!value)).toString();
+  const releaseIdentity=report?.certified.provenance.identity||'';
   const scenarioContext=useRef('');
   const scenarioRequest=useRef(0);
-  scenarioContext.current=JSON.stringify([query,currency,total,allocations]);
-  useEffect(()=>{setScenario(null);setScenarioError('');},[query,currency,total,allocations]);
+  scenarioContext.current=JSON.stringify([query,currency,total,allocations,releaseIdentity]);
+  useEffect(()=>{setScenario(null);setScenarioError('');},[query,currency,total,allocations,releaseIdentity]);
 
   useEffect(()=>{
     let active=true,inFlight=false;
@@ -51,8 +53,8 @@ export default function CommandCenter() {
       try {
         const data=await api<Dashboard>('dashboard?'+query,undefined,'GET',controller.signal);
         if(active) {
-          setReport(data);setRefreshError('');setLastSuccess(new Date().toLocaleTimeString());
-          setFilters(current=>current.from_date&&current.to_date?current:{...current,...data.filters});
+          setReport(data);setDisplayedQuery(query);setRefreshError('');setLastSuccess(new Date().toLocaleTimeString());
+          setFilters(current=>current.from_date&&current.to_date?current:{...current,from_date:data.filters.from_date,to_date:data.filters.to_date});
           setCampaignId(current=>current||data.campaigns[0]?.campaign_id||'');
           setCurrency(current=>current||data.campaigns[0]?.currency||'');
         }
@@ -101,7 +103,10 @@ export default function CommandCenter() {
       if(values.some(row=>!/^[0-9]+$/.test(row.budget_minor))) throw new Error('Use whole nonnegative allocations');
       if(values.reduce((sum,row)=>sum+BigInt(row.budget_minor),0n)!==BigInt(total)) throw new Error('Allocations must equal the scenario total');
       const result=await api<Scenario>('budget-simulation',{from_date:filters.from_date,to_date:filters.to_date,currency,total_budget_minor:total,allocations:values},'POST');
-      if(context===scenarioContext.current&&request===scenarioRequest.current) setScenario(result);
+      if(context===scenarioContext.current&&request===scenarioRequest.current) {
+        if(result.provenance.identity!==releaseIdentity) {setScenarioError('Dataset changed; refresh before simulating again');setRetry(value=>value+1);}
+        else setScenario(result);
+      }
     } catch(error) {if(context===scenarioContext.current&&request===scenarioRequest.current) setScenarioError(error instanceof Error?error.message:'Scenario failed');}
   };
 
@@ -115,6 +120,7 @@ export default function CommandCenter() {
       <label>Objective<select value={filters.objective} onChange={e=>setFilters({...filters,objective:e.target.value})}><option value="">All objectives</option>{['awareness','traffic','conversions'].map(value=><option key={value}>{value}</option>)}</select></label>
       <label>Configured market<input maxLength={2} placeholder="All / e.g. VN" value={filters.market} onChange={e=>setFilters({...filters,market:e.target.value.toUpperCase()})}/></label>
     </section>
+    {report&&displayedQuery!==query&&<p className="notice" role="status">{refreshError?'Selection unavailable; showing previous filter results':'Loading selection; showing previous filter results'} · {report.filters.from_date} → {report.filters.to_date}</p>}
     {refreshError&&<div className="error" role="alert"><strong>{report?'Refresh failed; showing last successful data':'Data unavailable'}</strong><p>{refreshError}</p><button onClick={()=>setRetry(value=>value+1)}>Retry</button></div>}
     {!report&&!refreshError&&<p className="empty">Loading published campaign data…</p>}
     {report&&<>
@@ -123,15 +129,18 @@ export default function CommandCenter() {
       {report.certified.rows.length===0?<p className="empty">No campaign data matches these filters.</p>:<div className="table-scroll"><table><thead><tr><th>Campaign</th><th>Platform / market</th><th>Spend</th><th>Net revenue</th><th>Orders</th><th>Net ROAS</th></tr></thead><tbody>{report.certified.rows.map(row=><tr key={row.campaign_id+row.currency}><td><strong>{row.campaign_name||row.campaign_id}</strong><small>{row.objective} · {row.currency}</small></td><td>{row.platform||'Unmapped'}<small>{row.configured_market||'Market unknown'}</small></td><td>{money(row.spend_minor)}</td><td>{money(row.net_revenue_minor)}</td><td>{money(row.orders)}</td><td>{row.source_roas??'Unavailable'}</td></tr>)}</tbody></table></div>}
       <details className="provenance"><summary>Metric source &amp; freshness · {report.certified.provenance.model}</summary><p>Generation {report.certified.provenance.generation} · Data through {report.certified.provenance.data_through||'No data'} (day resolution)</p><p>Release {report.certified.provenance.identity}</p><p>Read at {report.certified.provenance.observed_at}; polling does not change data freshness.</p></details>
       <section className="panel"><div className="section-heading"><div><h2>Streaming activity</h2><p>Provisional Flink aggregates · Separate from certified finance</p></div><span className="badge neutral">{report.streaming.status}</span></div><p className="source">{report.streaming.source}</p>
+        <details className="provenance"><summary>Streaming source provenance</summary><p>{report.streaming.source_identity||'Unavailable'}</p><p>Latest selected offset bounds (gaps may exist): {JSON.stringify(report.streaming.offset_bounds||[])}</p></details>
         {report.streaming.rows.length===0?<p className="empty">No committed streaming snapshot is available for this selection.</p>:<div className="table-scroll"><table><thead><tr><th>Campaign</th><th>Sessions</th><th>Orders</th><th>Provisional net</th><th>Business event / processing / arrival</th></tr></thead><tbody>{report.streaming.rows.map(row=><tr key={row.metric_key}><td>{campaigns.find(item=>item.campaign_id===row.campaign_id)?.name||row.campaign_id}<small>{row.mapped?'Mapped':'Unmapped'} · {row.stale?'Historical / stale':'Recent activity'}</small></td><td>{money(row.sessions)}</td><td>{money(row.order_count)}</td><td>{money(row.net_revenue_minor)} {row.currency||''}</td><td><small>{row.max_event_time}<br/>{row.processed_at}<br/>{row.received_at}</small></td></tr>)}</tbody></table></div>}
       </section>
     </>}
     <div className="operations">
       <section className="panel"><h2>Campaign settings &amp; pacing</h2><p>Set an app budget for a UTC period. Source budgets are reference data.</p>
+        <fieldset disabled={busy} style={{border:0,padding:0,margin:0}} aria-label="Campaign configuration">
         <label>Campaign to configure<select disabled={busy} value={campaignId} onChange={e=>{setCampaignId(e.target.value);setRuleId('');}}>{campaigns.map(row=><option key={row.campaign_id} value={row.campaign_id}>{row.name}</option>)}</select></label>
         <div className="form-grid"><label>Campaign market<input value={market} maxLength={2} placeholder="Unassigned" onChange={e=>setMarket(e.target.value.toUpperCase())}/></label><label>Period budget (minor units)<input inputMode="numeric" value={budget} onChange={e=>setBudget(e.target.value)}/></label><label>Period start (UTC)<input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label><label>Period end (exclusive UTC)<input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label></div>
         <p className="source">{campaign?.currency||'Select currency via campaign'} · Saved version {saved?.version||'none'}</p>
         <div className="actions"><button disabled={busy||!campaignId} onClick={()=>void save()}>Save campaign settings</button><button className="secondary" disabled={busy||!campaignId} onClick={()=>void action(async()=>setPace(await api<Pace>('budget-pacing/'+encodeURIComponent(campaignId))))}>View pacing</button></div>
+        </fieldset>
         {pace&&<div className="result"><strong>{pace.status}</strong><dl><dt>Observed spend</dt><dd>{money(pace.spend_minor)}</dd><dt>Remaining budget</dt><dd>{money(pace.remaining_minor)}</dd><dt>Projected period spend</dt><dd>{money(pace.forecast_minor)}</dd><dt>Closed days</dt><dd>{pace.completed_days} / {pace.period_days}</dd></dl><p>As of {pace.data_through||'No complete dates'}; closed daily spend only.</p></div>}
       </section>
       <section className="panel"><h2>Alert rules</h2><p>Explainable thresholds on certified data for the selected campaign.</p>
@@ -143,14 +152,14 @@ export default function CommandCenter() {
     </div>
     {message&&<p className="notice" role="status">{message}</p>}
     <section className="panel"><div className="section-heading"><div><h2>Alert evidence</h2><p>Immutable decisions tied to source release, rule and budget versions</p></div><span className="badge neutral">{alerts.length} occurrences</span></div>
-      {!alerts.length?<p className="empty">No triggered alerts. Create a rule and evaluate certified data.</p>:<div className="alert-grid">{alerts.map(row=><article className="alert" key={row.evaluation_key}><strong>{row.evidence.explanation}</strong><p>{campaigns.find(item=>item.campaign_id===row.evidence.campaign_id)?.name||row.evidence.campaign_id}</p><small>{row.evidence.from_date} → {row.evidence.to_date} · {row.evidence.currency}</small><dl>{Object.entries(row.evidence.operands).map(([key,value])=><div key={key}><dt>{key.replaceAll('_',' ')}</dt><dd>{value}</dd></div>)}</dl><small>Release {row.evidence.provenance?.identity?.slice(0,12)||'recorded'} · {row.evaluated_at}</small></article>)}</div>}
+      {!alerts.length?<p className="empty">No triggered alerts. Create a rule and evaluate certified data.</p>:<div className="alert-grid">{alerts.map(row=><article className="alert" key={row.evaluation_key}><strong>{row.evidence.explanation}</strong><p>{campaigns.find(item=>item.campaign_id===row.evidence.campaign_id)?.name||row.evidence.campaign_id}</p><small>{row.evidence.from_date} → {row.evidence.to_date} · {row.evidence.currency}</small><dl>{Object.entries(row.evidence.operands).map(([key,value])=><div key={key}><dt>{key.replaceAll('_',' ')}</dt><dd>{value}</dd></div>)}</dl><small>Release {row.evidence.provenance?.identity?.slice(0,12)||'recorded'} · {row.evaluated_at}</small><details className="provenance"><summary>Full alert provenance</summary><p>Rule version {row.evidence.rule_version} · Setting version {row.evidence.setting_version}</p><p>Rule {row.evidence.rule_id}</p><p>Release {row.evidence.provenance?.identity}</p><p>Evaluation {row.evaluation_key}</p></details></article>)}</div>}
     </section>
     <section className="panel"><div className="section-heading"><div><h2>What-if budget allocation</h2><p>Use the selected historical UTC interval. A scenario leaves saved budgets unchanged.</p></div><span className="badge neutral">Read-only scenario</span></div>
       <div className="form-grid"><label>Scenario currency<select value={currency} onChange={e=>{setCurrency(e.target.value);setScenario(null);}}>{Array.from(new Set(campaigns.map(row=>row.currency))).map(value=><option key={value}>{value}</option>)}</select></label><label>Scenario total (minor units)<input inputMode="numeric" value={total} onChange={e=>setTotal(e.target.value)}/></label></div>
       <div className="allocation-grid">{campaigns.filter(row=>row.currency===currency).map(row=><label key={row.campaign_id}>Allocation for {row.name}<input inputMode="numeric" value={allocations[row.campaign_id]||''} placeholder="0" onChange={e=>setAllocations({...allocations,[row.campaign_id]:e.target.value})}/></label>)}</div>
       <button disabled={!campaigns.length} onClick={()=>void simulate()}>Simulate allocation</button>
       {scenarioError&&<p className="error" role="alert">{scenarioError}</p>}
-      {scenario&&<div className="result"><h3>Scenario projected net: {money(scenario.projected_net_minor)} {currency}</h3><p>{scenario.assumption}</p><div className="table-scroll"><table><thead><tr><th>Campaign</th><th>Historical net ROAS</th><th>Proposed allocation</th><th>Projected net</th></tr></thead><tbody>{scenario.rows.map(row=><tr key={row.campaign_id}><td>{campaigns.find(item=>item.campaign_id===row.campaign_id)?.name||row.campaign_id}</td><td>{row.historical_net_roas||'Insufficient baseline'}</td><td>{money(row.allocated_budget_minor)}</td><td>{money(row.projected_net_minor)}</td></tr>)}</tbody></table></div></div>}
+      {scenario&&<div className="result"><h3>Scenario projected net: {money(scenario.projected_net_minor)} {currency}</h3><p>{scenario.assumption}</p><p className="source">Generation {scenario.provenance.generation} · Release {scenario.provenance.identity}</p><div className="table-scroll"><table><thead><tr><th>Campaign</th><th>Historical net ROAS</th><th>Proposed allocation</th><th>Projected net</th></tr></thead><tbody>{scenario.rows.map(row=><tr key={row.campaign_id}><td>{campaigns.find(item=>item.campaign_id===row.campaign_id)?.name||row.campaign_id}</td><td>{row.historical_net_roas||'Insufficient baseline'}</td><td>{money(row.allocated_budget_minor)}</td><td>{money(row.projected_net_minor)}</td></tr>)}</tbody></table></div></div>}
     </section>
     <footer>MarketPulse 360 · MP-06 · Synthetic marketing source data · Application settings created by the operator</footer>
   </main>;

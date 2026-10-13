@@ -36,7 +36,7 @@ class RuleInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     campaign_id: str
     kind: str
-    threshold: str = Field(max_length=50)
+    threshold: str = Field(pattern=r"^[0-9]+(?:\.[0-9]+)?$", max_length=50)
     enabled: bool = Field(default=True, strict=True)
     expected_version: int = Field(default=0, strict=True, ge=0, le=MAX_MONEY)
 

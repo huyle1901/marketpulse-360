@@ -72,6 +72,7 @@ class LiveProjectionIntegrationTests(unittest.TestCase):
         self.client.close()
 
     def test_latest_offset_retry_conflicts_nullable_and_source_identity(self):
+        self.assertEqual(self.store.source_identity(), "cluster/topic")
         self.store.write(snapshot(offset=2))
         self.store.write(snapshot(offset=2))
         zero = payload() | dict(currency=None, gross_revenue_minor=0, net_revenue_minor=0)

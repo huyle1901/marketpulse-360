@@ -40,3 +40,7 @@ class ApiBoundaryTests(unittest.TestCase):
         self.assertEqual(self.client(stale).put('/api/v1/campaign-settings/a',json=self.body()).status_code,409)
         self.assertEqual(self.client(unavailable=True).put('/api/v1/campaign-settings/a',json=self.body()).json()['code'],'no_published_release')
         self.assertEqual(self.client().put('/api/v1/campaign-settings/a',json=self.body()|{'currency':'USD'}).status_code,422)
+
+    def test_malformed_rule_threshold_is_input_error(self):
+        response=self.client().post('/api/v1/alert-rules',json={'campaign_id':'a','kind':'refund_share','threshold':'abc'})
+        self.assertEqual(response.status_code,422)

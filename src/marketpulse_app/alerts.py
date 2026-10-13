@@ -29,11 +29,12 @@ def build_evaluations(provenance: Mapping[str, object], campaigns: Sequence[Mapp
         operands = {}
         start, end = latest, latest + timedelta(days=1) if latest else None
         if rule.kind == "budget_overrun":
-            start, end = (setting.period_start, setting.period_end) if setting else (None, None)
-            if setting and setting.currency == currency and setting.period_end <= today:
+            start, end = (setting.period_start, max(setting.period_start, min(setting.period_end, today))) if setting else (None, None)
+            if setting and setting.currency == currency and end > start:
                 dates = [start + timedelta(days=i) for i in range((end-start).days)]
-                if all(day in campaign_rows for day in dates):
-                    operands = {"spend_minor": sum(campaign_rows[day]["spend_minor"] for day in dates),
+                observed = sum(campaign_rows[day]["spend_minor"] for day in dates if day in campaign_rows)
+                if observed > setting.budget_minor or all(day in campaign_rows for day in dates):
+                    operands = {"spend_minor": observed,
                                 "budget_minor": setting.budget_minor}
         elif latest in campaign_rows:
             row = campaign_rows[latest]
@@ -51,6 +52,7 @@ def build_evaluations(provenance: Mapping[str, object], campaigns: Sequence[Mapp
         # Operands are deterministic within this immutable release/versions/window.
         identity = {key: evidence[key] for key in ("rule_id", "rule_version", "setting_version", "from_date", "to_date")}
         identity["release_identity"] = provenance["identity"]
+        identity["evaluation_contract"] = 2  # Preserve earlier local evidence; changed interval semantics get new keys.
         digest = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         results.append((digest, evidence))
     return results

@@ -26,10 +26,22 @@ class AlertEvidenceTests(unittest.TestCase):
     def test_budget_uses_entire_period_and_missing_date_is_insufficient(self):
         setting = CampaignSetting("a", "VN", "VND", date(2026, 1, 1), date(2026, 1, 3), 100, 1)
         rule = AlertRule("r", "a", "budget_overrun", Decimal(1), version=1)
-        row = dict(campaign_id="a",currency="VND",event_date=date(2026, 1, 1),spend_minor=200)
+        row = dict(campaign_id="a",currency="VND",event_date=date(2026, 1, 1),spend_minor=50)
         results = build_evaluations({"identity": "a"*64}, [{"campaign_id":"a","currency":"VND"}], [row], [setting], [rule], date(2026, 1, 3))
         self.assertEqual(results[0][1]["outcome"], "insufficient_data")
-        daily = [row, row | {"event_date": date(2026, 1, 2), "spend_minor": 100}]
+        daily = [row, row | {"event_date": date(2026, 1, 2), "spend_minor": 250}]
         result = build_evaluations({"identity": "a"*64}, [{"campaign_id":"a","currency":"VND"}], daily, [setting], [rule], date(2026, 1, 3))[0][1]
         self.assertEqual(result["outcome"], "triggered")
         self.assertEqual(result["operands"]["spend_minor"], "300")
+
+    def test_active_period_overrun_and_day_transition_have_distinct_identity(self):
+        setting = CampaignSetting("a", None, "VND", date(2026,1,1), date(2026,1,3), 100, 1)
+        rule = AlertRule("r", "a", "budget_overrun", Decimal(1), version=1)
+        campaigns=[{"campaign_id":"a","currency":"VND"}]
+        daily=[dict(campaign_id="a",currency="VND",event_date=date(2026,1,1),spend_minor=200),
+               dict(campaign_id="a",currency="VND",event_date=date(2026,1,2),spend_minor=100)]
+        first=build_evaluations({"identity":"a"*64},campaigns,daily,[setting],[rule],date(2026,1,2))[0]
+        second=build_evaluations({"identity":"a"*64},campaigns,daily,[setting],[rule],date(2026,1,3))[0]
+        self.assertEqual(first[1]["outcome"],"triggered")
+        self.assertEqual(first[1]["to_date"],"2026-01-02")
+        self.assertNotEqual(first[0],second[0])

@@ -53,6 +53,12 @@ class LiveStore:
                   *(row[name] for name in COUNTERS)]
         self.client.insert(f"{self.database}.campaign_snapshots", [values], column_names=names, settings={"async_insert": 0})
 
+    def source_identity(self) -> str:
+        rows = self.client.query(f"SELECT DISTINCT identity FROM {self.database}.source_identity").result_rows
+        if len(rows) != 1:
+            raise ValueError("ambiguous live source identity")
+        return rows[0][0]
+
     def latest(self) -> list[dict[str, object]]:
         for grouping, expression in (("partition,offset", "digest"), ("metric_key", "partition")):
             conflict = self.client.query(f"SELECT count() FROM (SELECT {grouping} FROM {self.database}.campaign_snapshots "
