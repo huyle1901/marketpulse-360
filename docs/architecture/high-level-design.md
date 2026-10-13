@@ -516,7 +516,9 @@ and [decisions](mp06-decisions.md).
 
 ### 4.6 MP-07 analysis boundary (specified; implementation pending)
 
-MP-07 extends the FastAPI/Next.js application with channel/campaign stage reach,
+MP-07 implements a tested request-pinned analytical read service for
+channel/campaign stage reach and exact three-model/global reconciliation.
+HTTP/UI and journey projection verification are pending. It extends the FastAPI/Next.js application with channel/campaign stage reach,
 first/last/linear attribution comparison and representative order journeys.
 Its [spec](../../specs/07-funnel-and-attribution-analysis.md) and
 [plan](../superpowers/plans/2026-10-13-funnel-attribution-analysis.md) preserve
