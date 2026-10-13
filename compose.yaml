@@ -34,6 +34,19 @@ x-batch-runtime: &batch-runtime
     - ./docker/batch/dagster.yaml:/opt/marketpulse/dagster-home/dagster.yaml:ro
 
 services:
+  journey-publish:
+    <<: *batch-runtime
+    image: marketpulse-360/journeys:mp07
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile.journeys
+    profiles: [app-tools]
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 3072M
+
   app-postgres:
     image: postgres:17.6-alpine
     profiles: [app]

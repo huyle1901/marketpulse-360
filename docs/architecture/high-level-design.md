@@ -528,13 +528,18 @@ session sums are labeled campaign-day incidences, not global unique audiences.
 Attribution global reconciliation precedes dimension filters and requires a
 single-currency release, matching the existing currency-less Gold contract.
 
-An explicit `app-tools` Spark publisher will read that release's recorded Silver
+An explicit `app-tools` Spark publisher now reads that release's recorded Silver
 snapshot, sanitize profile identity and copy exact event detail into a separately
 validated immutable ClickHouse sidecar. It does not change the seven-relation
 MP-05 export or promote a new release. APIs query only ClickHouse; PostgreSQL
 holds config/coordination, not analytical events. Representative explanations
 reuse the existing Gold helper on bounded canonical touch/financial context.
 Click deduplication covers the full pinned snapshot before the order window.
+The real publisher copied and verified 191 governed rows from Silver snapshot
+`505365576434850409`, with typed full-row checksum equality. Earlier failed
+attempts remained isolated. Global paid-click canonicalization is a ClickHouse
+view over the complete projection. Commerce events retain the bot-session flag
+per MP-04 policy; web/mobile bot activity and consent-denied rows are rejected.
 Partial/missing/conflicting sidecars never appear as complete journey data.
 No source generation/replay or earlier pipeline reimplementation is required.
 
