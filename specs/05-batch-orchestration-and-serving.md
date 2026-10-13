@@ -1,7 +1,8 @@
 # MP-05 - Batch orchestration and analytical serving
 
 **Status:** In progress. Daily source selection and immutable local preparation
-receipt contracts implemented; Docker/orchestration/serving proof still pending.
+receipt contracts, authenticated Docker runtime and PostgreSQL operational ledger
+implemented; business orchestration/Gold serving proof still pending.
 **Dependency:** MP-04, merged in PR #4.
 
 ## Outcome

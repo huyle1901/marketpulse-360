@@ -62,10 +62,13 @@ Sources: [Dagster packages](https://pypi.org/project/dagster/),
   Dagster must obey the same publication protocol.
 - Run Spark steps sequentially as bounded child processes (2 GiB heap/local[2]);
   the worker container has a 4 GiB limit. Do not start a second Flink job.
-- Require separate `CLICKHOUSE_PASSWORD` and `DAGSTER_POSTGRES_PASSWORD` in ignored
+- Require separate `CLICKHOUSE_PASSWORD` and `DAGSTER_POSTGRES_PASSWORD` at service
+  startup, not global interpolation of disabled Compose profiles, in ignored
   `.env`, with empty committed template fields. Do not bake credentials into images,
   SQL, manifests, Dagster logs or dbt artifacts. Existing MP-04 services/volumes are
   not reset or silently migrated by MP-05.
+- Build the local Spark base then the batch image using
+  `scripts/build-batch-runtime.sh`; the Spark base is not a public registry image.
 
 ## Sources, dates and observable assets
 
