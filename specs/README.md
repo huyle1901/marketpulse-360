@@ -108,7 +108,7 @@ a correctness/recovery proof, not a capacity benchmark.
 
 ### MP-04 - Bronze/Silver/Gold lakehouse
 
-**Status:** Planned; depends on MP-01 and MP-03
+**Status:** Implemented; depends on MP-01, MP-02, and MP-03
 
 Persist immutable raw data and governed tables with MinIO and Apache Iceberg.
 

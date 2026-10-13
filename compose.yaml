@@ -199,6 +199,129 @@ services:
       - --job-name=marketpulse-stream-v1
     restart: "no"
 
+  lakehouse-postgres:
+    image: postgres:17.6-alpine
+    profiles:
+      - lakehouse
+    environment:
+      POSTGRES_DB: nessie
+      POSTGRES_USER: ${LAKEHOUSE_POSTGRES_USER:-nessie}
+      POSTGRES_PASSWORD: "${LAKEHOUSE_POSTGRES_PASSWORD:?}"
+    volumes:
+      - lakehouse_catalog:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  minio:
+    image: marketpulse-360/minio:RELEASE.2025-04-22T22-12-26Z
+    build:
+      context: .
+      dockerfile: docker/minio/Dockerfile.server
+    profiles:
+      - lakehouse
+    command: ["server", "/data", "--console-address", ":9001"]
+    ports:
+      - "${MINIO_API_HOST_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-marketpulse}
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:?}"
+    volumes:
+      - lakehouse_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  minio-init:
+    image: marketpulse-360/mc:RELEASE.2025-05-21T01-59-54Z
+    build:
+      context: .
+      dockerfile: docker/minio/Dockerfile.client
+    profiles:
+      - lakehouse
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_BUCKET: marketpulse-lakehouse
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-marketpulse}
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:?}"
+    volumes:
+      - ./docker/minio/create-bucket.sh:/opt/marketpulse/create-bucket.sh:ro
+    entrypoint: ["/bin/sh", "/opt/marketpulse/create-bucket.sh"]
+    restart: "no"
+
+  nessie:
+    image: ghcr.io/projectnessie/nessie:0.109.0
+    profiles:
+      - lakehouse
+    depends_on:
+      lakehouse-postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    ports:
+      - "${NESSIE_HOST_PORT:-19120}:19120"
+    environment:
+      NESSIE_VERSION_STORE_TYPE: JDBC2
+      NESSIE_VERSION_STORE_PERSIST_JDBC_DATASOURCE: postgresql
+      QUARKUS_DATASOURCE_POSTGRESQL_JDBC_URL: jdbc:postgresql://lakehouse-postgres:5432/nessie
+      QUARKUS_DATASOURCE_POSTGRESQL_USERNAME: ${LAKEHOUSE_POSTGRES_USER:-nessie}
+      QUARKUS_DATASOURCE_POSTGRESQL_PASSWORD: "${LAKEHOUSE_POSTGRES_PASSWORD:?}"
+      NESSIE_SERVER_DEFAULT_BRANCH: main
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/q/health/ready >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  spark-lakehouse:
+    build:
+      context: .
+      dockerfile: docker/lakehouse/Dockerfile
+    image: marketpulse-360/spark-lakehouse:4.0.4-iceberg-1.12.0
+    profiles:
+      - lakehouse-tools
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      nessie:
+        condition: service_healthy
+    environment:
+      SPARK_MASTER: local[2]
+      SPARK_DRIVER_MEMORY: ${SPARK_DRIVER_MEMORY:-2g}
+      SPARK_SQL_SESSION_TIMEZONE: UTC
+      SPARK_SQL_SHUFFLE_PARTITIONS: "2"
+      NESSIE_URI: http://nessie:19120/api/v2
+      NESSIE_REF: main
+      ICEBERG_WAREHOUSE: s3://marketpulse-lakehouse/warehouse
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_REGION: us-east-1
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-marketpulse}
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:?}"
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-marketpulse}
+      AWS_SECRET_ACCESS_KEY: "${MINIO_ROOT_PASSWORD:?}"
+      AWS_REGION: us-east-1
+    volumes:
+      - ./data:/opt/marketpulse/data:ro
+      - lakehouse_evidence:/opt/marketpulse/evidence
+    deploy:
+      resources:
+        limits:
+          memory: ${SPARK_CONTAINER_MEMORY_LIMIT:-2560M}
+
 volumes:
   kafka_data:
   flink_checkpoints:
+  lakehouse_data:
+  lakehouse_catalog:
+  lakehouse_evidence:

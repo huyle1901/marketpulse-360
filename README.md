@@ -8,18 +8,20 @@ cloud benchmark rather than a runtime dependency.
 
 The repository implements **MP-01: reproducible omnichannel mock data**,
 **MP-02: Kafka ingestion and replay controls**, and **MP-03: stateful Flink stream
-processing with checkpoint recovery**. The project generates coherent data
+processing with checkpoint recovery**, and **MP-04: governed Iceberg lakehouse**.
+The project generates coherent data
 shaped like Google Ads, Meta Ads, TikTok Ads, web/mobile analytics, CRM, commerce,
 and email systems, then replays event-shaped sources to versioned Kafka topics.
 Batch-shaped sources remain inputs to the later Dagster milestone.
 
 ## Current proof
 
-- 135 Python tests and 30 Java tests cover mock-data correctness, Kafka contracts, bounded
+- 221 Python tests and 30 Java tests cover mock-data correctness, Kafka contracts, bounded
   replay ordering, pacing, idempotent delivery, registry behavior, CLI behavior,
   Docker assets, raw-event validation, checkpointed deduplication, late events,
   sessions, campaign KPIs, all six output schemas, Kafka serde, and the executable
-  Flink graph.
+  Flink graph, immutable Bronze ingestion, governed Silver, marketing Gold models,
+  physical schemas, historical snapshot evidence, and isolated rebuilds.
 - The committed fixture contains 615 rows in 22 compressed files.
 - The validated `demo` profile produces 1,200,225 rows in 130 files (about 90 MB)
   for seed `360`.
@@ -31,10 +33,29 @@ Batch-shaped sources remain inputs to the later Dagster milestone.
   active, advanced raw Kafka input from 83 to 219 records across recovery, retained
   217 unique event IDs and 73 session keys, rejected two duplicate copies, and
   reconciled net revenue to `24,751,000` minor units.
+- The MP-04 Docker proof archives 439 raw Kafka records and 217 clean events,
+  verifies and rebuilds all ten Silver/Gold tables after catalog/storage restart,
+  and retrieves all 13 archived source objects byte-for-byte. Each attribution
+  model reconciles to governed net revenue of `22,193,000` minor units; all three
+  contain paid-click attribution. A Spark regression checks conflicting recovered
+  click IDs, including nulls, without changing deterministic winner selection.
 
 ## Quick start
 
 Python 3.12 or newer is required. The generator has no runtime dependencies.
+
+Before any Docker Compose command, copy `.env.example` to `.env` and set
+`LAKEHOUSE_POSTGRES_PASSWORD` and `MINIO_ROOT_PASSWORD` to independently generated
+local values (for example, generate each with `openssl rand -hex 24`). MinIO requires
+at least eight characters. Compose fails if either value is missing or empty;
+there is no built-in password, including when resolving streaming-only profiles.
+Keep `.env` local: it is ignored by Git and excluded from image builds. Commit only
+the empty template. Each teammate creates their own values for their own stack.
+
+```bash
+cp .env.example .env
+# Edit .env and fill both password fields before starting Docker.
+```
 
 ```bash
 python3 -m venv .venv
@@ -91,6 +112,16 @@ Run the complete isolated MP-03 recovery proof with:
 ```bash
 ./scripts/flink-smoke-test.sh
 ```
+
+Run the MP-04 Kafka/Flink → Bronze → Silver → Gold proof, including historical
+snapshot verification, storage/catalog restart, and an isolated rebuild, with:
+
+```bash
+./scripts/lakehouse-smoke-test.sh
+```
+
+The [lakehouse runbook](docs/runbooks/lakehouse-local.md) describes retained
+evidence, inspection commands, demo URLs, and cleanup.
 
 ## Documentation map
 

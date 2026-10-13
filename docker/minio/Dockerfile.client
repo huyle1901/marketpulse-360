@@ -1,0 +1,18 @@
+FROM alpine:3.22.1
+
+ARG TARGETARCH
+ARG MC_RELEASE=RELEASE.2025-05-21T01-59-54Z
+
+RUN apk add --no-cache ca-certificates \
+    && case "${TARGETARCH}" in \
+         amd64) checksum="fb11c542a9d781fb228de1126c267a7933e98bee831654462fb352d5c9e94d24" ;; \
+         arm64) checksum="0ec5f3f22cec2b7f86d02dff44e2ef9632374b742d74f234bbc3f9d366541ed9" ;; \
+         *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+       esac \
+    && wget -q \
+       "https://github.com/minio/mc/releases/download/${MC_RELEASE}/mc.linux-${TARGETARCH}.${MC_RELEASE}" \
+       -O /usr/local/bin/mc \
+    && echo "${checksum}  /usr/local/bin/mc" | sha256sum -c - \
+    && chmod 0555 /usr/local/bin/mc
+
+ENTRYPOINT ["mc"]

@@ -1,15 +1,54 @@
 from __future__ import annotations
 
+import json
+import os
 import shutil
 import subprocess
 import unittest
+import uuid
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+COMPOSE_TEST_ENV = {
+    **os.environ,
+    "MINIO_ROOT_PASSWORD": uuid.uuid4().hex,
+    "LAKEHOUSE_POSTGRES_PASSWORD": uuid.uuid4().hex,
+}
 
 
 class DockerAssetTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("docker"), "Docker CLI is not installed")
+    def test_lakehouse_compose_requires_passwords_and_propagates_explicit_values(self) -> None:
+        command = ["docker", "compose", "--env-file", "/dev/null", "-f", "compose.yaml",
+                   "--profile", "lakehouse", "--profile", "lakehouse-tools", "config", "--format", "json"]
+        for missing in ("MINIO_ROOT_PASSWORD", "LAKEHOUSE_POSTGRES_PASSWORD"):
+            env = {key: value for key, value in COMPOSE_TEST_ENV.items() if key != missing}
+            result = subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True)
+            self.assertNotEqual(result.returncode, 0, "Compose silently used a built-in password")
+            self.assertIn(missing, result.stderr)
+        result = subprocess.run(command, cwd=ROOT, env=COMPOSE_TEST_ENV, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        services = json.loads(result.stdout)["services"]
+        for service in ("minio", "minio-init", "spark-lakehouse"):
+            self.assertEqual(services[service]["environment"]["MINIO_ROOT_PASSWORD"],
+                             COMPOSE_TEST_ENV["MINIO_ROOT_PASSWORD"])
+        self.assertEqual(services["spark-lakehouse"]["environment"]["AWS_SECRET_ACCESS_KEY"],
+                         COMPOSE_TEST_ENV["MINIO_ROOT_PASSWORD"])
+        self.assertEqual(services["lakehouse-postgres"]["environment"]["POSTGRES_PASSWORD"],
+                         COMPOSE_TEST_ENV["LAKEHOUSE_POSTGRES_PASSWORD"])
+        self.assertEqual(services["nessie"]["environment"]["QUARKUS_DATASOURCE_POSTGRESQL_PASSWORD"],
+                         COMPOSE_TEST_ENV["LAKEHOUSE_POSTGRES_PASSWORD"])
+
+    def test_docker_context_excludes_local_and_generated_material(self) -> None:
+        dockerignore = (ROOT / ".dockerignore").read_text()
+
+        self.assertTrue(dockerignore.startswith("**\n"))
+        for allowed in ("!pyproject.toml", "!src/**", "!contracts/**", "!flink-job/src/**", "!docker/**"):
+            self.assertIn(allowed, dockerignore)
+        for excluded in ("data/generated", ".lakehouse", ".env", ".git", ".worktrees"):
+            self.assertNotIn(f"!{excluded}", dockerignore)
+
     def test_compose_uses_pinned_streaming_services_and_kraft_listeners(self) -> None:
         compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
 
@@ -136,6 +175,188 @@ class DockerAssetTests(unittest.TestCase):
         self.assertIn("flink run -d", script)
         self.assertIn("apt-get install -y --no-install-recommends jq", dockerfile)
 
+    def test_lakehouse_image_pins_spark_and_offline_runtime_jars(self) -> None:
+        dockerfile = (ROOT / "docker/lakehouse/Dockerfile").read_text()
+        entrypoint = (ROOT / "docker/lakehouse/entrypoint.sh").read_text()
+
+        self.assertIn("FROM python:3.12.12-slim-bookworm", dockerfile)
+        self.assertIn(
+            "FROM apache/spark:4.0.4-scala2.13-java17-python3-ubuntu",
+            dockerfile,
+        )
+        for artifact in (
+            "iceberg-spark-runtime-4.0_2.13-1.12.0.jar",
+            "iceberg-aws-bundle-1.12.0.jar",
+            "spark-sql-kafka-0-10_2.13-4.0.4.jar",
+        ):
+            self.assertIn(artifact, dockerfile)
+        self.assertIn("USER spark", dockerfile)
+        self.assertIn("/opt/spark/bin/spark-submit", entrypoint)
+        self.assertIn("--master", entrypoint)
+        self.assertIn("local[2]", entrypoint)
+        self.assertIn("marketpulse_lakehouse/cli.py", entrypoint)
+        self.assertIn("'.[lakehouse]'", dockerfile)
+
+    def test_minio_images_are_built_from_pinned_verified_release_assets(self) -> None:
+        server = (ROOT / "docker/minio/Dockerfile.server").read_text()
+        client = (ROOT / "docker/minio/Dockerfile.client").read_text()
+
+        self.assertIn("RELEASE.2025-04-22T22-12-26Z", server)
+        self.assertIn("53e2a2cb16c5366ea6fbbc479c19ddb4c6a0948273e752f740fb1fbf27bb817c", server)
+        self.assertIn("6c2f3142c94240206123177f4ba1e360daa5d1e0a4962e90757ef4f92c3ab57c", server)
+        self.assertIn("sha256sum -c -", server)
+        self.assertIn("RELEASE.2025-05-21T01-59-54Z", client)
+        self.assertIn("fb11c542a9d781fb228de1126c267a7933e98bee831654462fb352d5c9e94d24", client)
+        self.assertIn("0ec5f3f22cec2b7f86d02dff44e2ef9632374b742d74f234bbc3f9d366541ed9", client)
+        self.assertIn("sha256sum -c -", client)
+
+    @unittest.skipUnless(shutil.which("docker"), "Docker CLI is not installed")
+    def test_compose_defines_persistent_lakehouse_and_on_demand_tool(self) -> None:
+        compose_env = dict(COMPOSE_TEST_ENV)
+        compose_env["COMPOSE_DISABLE_ENV_FILE"] = "true"
+        for name in ("MINIO_API_HOST_PORT", "MINIO_CONSOLE_HOST_PORT", "NESSIE_HOST_PORT"):
+            compose_env.pop(name, None)
+        result = subprocess.run(
+            [
+                "docker",
+                "compose",
+                "-f",
+                "compose.yaml",
+                "--profile",
+                "lakehouse",
+                "--profile",
+                "lakehouse-tools",
+                "config",
+                "--format",
+                "json",
+            ],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            env=compose_env,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        rendered = json.loads(result.stdout)
+        services = rendered["services"]
+
+        self.assertEqual(
+            services["lakehouse-postgres"]["image"],
+            "postgres:17.6-alpine",
+        )
+        self.assertEqual(services["minio"]["image"], "marketpulse-360/minio:RELEASE.2025-04-22T22-12-26Z")
+        self.assertIn("docker/minio/Dockerfile.server", str(services["minio"]["build"]))
+        self.assertEqual(services["minio-init"]["image"], "marketpulse-360/mc:RELEASE.2025-05-21T01-59-54Z")
+        self.assertIn("docker/minio/Dockerfile.client", str(services["minio-init"]["build"]))
+        self.assertEqual(services["nessie"]["image"], "ghcr.io/projectnessie/nessie:0.109.0")
+        self.assertEqual(services["spark-lakehouse"]["profiles"], ["lakehouse-tools"])
+        for service_name in ("lakehouse-postgres", "minio", "minio-init", "nessie"):
+            self.assertEqual(services[service_name]["profiles"], ["lakehouse"])
+
+        postgres = services["lakehouse-postgres"]
+        self.assertNotIn("ports", postgres)
+        self.assertIn("healthcheck", postgres)
+        self.assertIn("lakehouse_catalog", str(postgres["volumes"]))
+
+        minio = services["minio"]
+        self.assertEqual(
+            {(port["target"], port["published"]) for port in minio["ports"]},
+            {(9000, "9000"), (9001, "9001")},
+        )
+        self.assertIn("lakehouse_data", str(minio["volumes"]))
+        self.assertIn("healthcheck", minio)
+
+        nessie = services["nessie"]
+        self.assertEqual(
+            {(port["target"], port["published"]) for port in nessie["ports"]},
+            {(19120, "19120")},
+        )
+        self.assertEqual(nessie["environment"]["NESSIE_VERSION_STORE_TYPE"], "JDBC2")
+        self.assertEqual(
+            nessie["environment"]["NESSIE_VERSION_STORE_PERSIST_JDBC_DATASOURCE"],
+            "postgresql",
+        )
+        self.assertIn("jdbc:postgresql://lakehouse-postgres:5432/nessie", str(nessie["environment"]))
+        self.assertIn("healthcheck", nessie)
+        self.assertIn("localhost:9000/q/health/ready", str(nessie["healthcheck"]))
+
+        spark = services["spark-lakehouse"]
+        self.assertIn("docker/lakehouse/Dockerfile", str(spark["build"]))
+        self.assertEqual(spark["environment"]["SPARK_MASTER"], "local[2]")
+        self.assertEqual(spark["environment"]["SPARK_SQL_SESSION_TIMEZONE"], "UTC")
+        self.assertEqual(spark["environment"]["SPARK_SQL_SHUFFLE_PARTITIONS"], "2")
+        self.assertEqual(spark["environment"]["NESSIE_REF"], "main")
+        self.assertEqual(spark["environment"]["MINIO_REGION"], "us-east-1")
+        self.assertIn("lakehouse_evidence", str(spark["volumes"]))
+        self.assertIn(
+            "${SPARK_CONTAINER_MEMORY_LIMIT:-2560M}",
+            (ROOT / "compose.yaml").read_text(),
+        )
+
+        self.assertIn("lakehouse_data", rendered["volumes"])
+        self.assertIn("lakehouse_catalog", rendered["volumes"])
+        self.assertIn("lakehouse_evidence", rendered["volumes"])
+
+    def test_minio_initializer_is_idempotent_and_creates_lakehouse_bucket(self) -> None:
+        script = (ROOT / "docker/minio/create-bucket.sh").read_text()
+        self.assertIn("mc alias set", script)
+        self.assertIn("mc mb --ignore-existing", script)
+        self.assertIn("marketpulse-lakehouse", script)
+
+    def test_lakehouse_smoke_script_proves_catalog_persistence(self) -> None:
+        script = (ROOT / "scripts/lakehouse-smoke-test.sh").read_text()
+
+        self.assertIn('COMPOSE_PROJECT_NAME="marketpulse-mp04-smoke-$$"', script)
+        self.assertIn("--profile lakehouse", script)
+        self.assertIn("--profile lakehouse-tools", script)
+        self.assertIn("build spark-lakehouse", script)
+        self.assertIn("up -d --wait", script)
+        self.assertIn("restart lakehouse-postgres minio nessie", script)
+        self.assertIn("run_lakehouse verify verify", script)
+        self.assertIn("later_snapshot_id", script)
+        self.assertIn("down --volumes --remove-orphans", script)
+        self.assertIn("KEEP_STACK", script)
+
+    def test_lakehouse_smoke_and_runbook_cover_complete_mp04_proof(self) -> None:
+        script = (ROOT / "scripts/lakehouse-smoke-test.sh").read_text()
+        runbook = (ROOT / "docs/runbooks/lakehouse-local.md").read_text()
+
+        for profile in ("streaming", "flink", "lakehouse", "lakehouse-tools"):
+            self.assertIn(f"--profile {profile}", script)
+        for command in (
+            "capture-offsets",
+            "ingest-kafka",
+            "ingest-files",
+            "build-silver",
+            "build-gold",
+            "write-evidence",
+            "run_lakehouse verify verify",
+            "backfill-proof",
+        ):
+            self.assertIn(command, script)
+        self.assertGreaterEqual(script.count("ingest-kafka"), 2)
+        self.assertGreaterEqual(script.count("ingest-files"), 2)
+        self.assertGreaterEqual(script.count("build-gold"), 2)
+        self.assertIn("stop flink-job-submit flink-taskmanager flink-jobmanager", script)
+        self.assertIn("later_snapshot_id", script)
+        self.assertIn("restart lakehouse-postgres minio nessie", script)
+        self.assertIn("rebuild_", script)
+        self.assertIn("lakehouse-evidence.json", script)
+        self.assertIn("KEEP_STACK", script)
+        self.assertIn("down --volumes --remove-orphans", script)
+
+        for text in (
+            "Kafka UI",
+            "Flink dashboard",
+            "MinIO console",
+            "Nessie",
+            "Time travel",
+            "backfill-proof",
+            "KEEP_STACK=1",
+            "down --volumes --remove-orphans",
+        ):
+            self.assertIn(text, runbook)
+
     def test_smoke_script_asserts_fixture_delivery_counts(self) -> None:
         script = (ROOT / "scripts/kafka-smoke-test.sh").read_text()
 
@@ -158,6 +379,7 @@ class DockerAssetTests(unittest.TestCase):
             cwd=ROOT,
             text=True,
             capture_output=True,
+            env=COMPOSE_TEST_ENV,
             check=False,
         )
         self.assertEqual(0, result.returncode, result.stderr)
