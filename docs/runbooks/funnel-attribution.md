@@ -13,8 +13,8 @@ For the retained proof project:
 ```sh
 docker compose -p marketpulse-mp05-proof --profile app-tools build journey-publish
 docker compose -p marketpulse-mp05-proof --profile app-tools run --rm --no-deps journey-publish
-docker compose -p marketpulse-mp05-proof --profile app build api web
-API_HOST_PORT=48000 WEB_HOST_PORT=43100 docker compose -p marketpulse-mp05-proof --profile app up -d --no-deps --wait api web
+docker compose -p marketpulse-mp05-proof --profile app --profile serving --profile streaming build api web
+API_HOST_PORT=48000 WEB_HOST_PORT=43100 docker compose -p marketpulse-mp05-proof --profile app --profile serving --profile streaming up -d --no-deps --wait api web
 ```
 
 The publisher resolves the active certified release, reads its recorded exact

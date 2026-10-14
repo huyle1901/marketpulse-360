@@ -174,7 +174,7 @@ and budget simulation.
 
 ### MP-07 - Funnel and attribution analysis
 
-**Status:** Implemented and locally verified; final review pending. Depends on MP-05; stacked on pushed MP-06.
+**Status:** Implemented and locally verified. Depends on MP-05; stacked on pushed MP-06.
 
 Scope: [`07-funnel-and-attribution-analysis.md`](07-funnel-and-attribution-analysis.md).
 Plan: [`2026-10-13-funnel-attribution-analysis.md`](../docs/superpowers/plans/2026-10-13-funnel-attribution-analysis.md).

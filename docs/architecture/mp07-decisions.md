@@ -85,5 +85,23 @@ touches/100 financial events per order, with visible unavailable/capped states.
 All fourteen Playwright tests pass, including nine MP-06 regressions. TypeScript
 and production builds pass. Actual Docker desktop/mobile screenshots, drill
 checks, no overflow and no browser errors were inspected. Evidence is retained
-under ignored `.lakehouse/mp07-proof/`. Fresh whole-branch review is the remaining
-completion gate; its result and any fixes are recorded below before completion.
+under ignored `.lakehouse/mp07-proof/`. Fresh whole-branch review against `5b236b9..d3833c1` found no Critical/Important
+issues and assessed the branch ready to merge. The acknowledged runbook profile
+omission was corrected and Compose validated with app/serving/streaming active.
+
+Deferred minor: strengthen selected-model journey inclusion/exclusion regression
+with a two-campaign journey whose first/last touches differ. Current production
+predicate correctly applies the selected model; the proof model loop currently
+checks its echoed model. No production correctness change was required.
+
+Final verification: 350 Python tests OK (30 opt-in skips; the three real MP-07
+ClickHouse integration cases exercised separately), fourteen browser tests,
+TypeScript/build, fixture validation, Compose and diff checks. After the interrupted
+session, existing containers were restarted with their original volumes; no earlier
+pipeline replay/rebuild occurred. Production capacity, authentication/privacy
+hardening and earlier pipeline redesign remain outside the accepted scope.
+
+The retained proof re-run after container restore also passed with zero failures
+and unchanged release/snapshot/results: p95 funnel 19.49 ms, attribution 32.26 ms,
+journeys 54.99 ms, again 20 warmups/100 samples each. Evidence:
+`.lakehouse/mp07-proof/evidence-resume.json`.

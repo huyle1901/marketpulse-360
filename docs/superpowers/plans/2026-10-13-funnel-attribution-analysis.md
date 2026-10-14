@@ -143,9 +143,9 @@ modify backlog/spec/plan/architecture status.
   sample limits/counts/versions/resources. Retain ignored evidence; no capacity claim.
 - [x] Run full Python tests, fixture validation, Compose/diff checks, all browser
   tests/typecheck/build and real visual QA. Expected: all required checks pass.
-- [ ] Request one fresh whole-branch review against 5b236b9; fix Important issues
+- [x] Request one fresh whole-branch review against 5b236b9; fix Important issues
   via RED/GREEN/full suite and rerun affected Docker proof. Record rulings/limits.
-- [ ] Mark only observed acceptance complete; commit `feat: verify MP-07 funnel attribution and journey analysis`.
+- [x] Mark only observed acceptance complete; commit `feat: verify MP-07 funnel attribution and journey analysis`.
 
 ## Self-review / execution
 
@@ -154,3 +154,7 @@ usable UI (4), independent proof (5). Review Focus tests belong to Tasks 1/3/4.
 Builder check clarified global click canonicalization before thirty-day filtering.
 Public shared interfaces consume the same release/columns/filter contracts.
 Continue inline using backlog defaults; user already requested implementation.
+
+Final fresh review found no Critical/Important issues. Deferred minor: strengthen
+selected-model journey inclusion/exclusion regression with two differing campaign
+touches. Existing production predicate applies the chosen model correctly.

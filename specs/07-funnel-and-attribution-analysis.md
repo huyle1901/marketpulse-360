@@ -1,6 +1,6 @@
 # MP-07 — Funnel and attribution analysis
 
-**Status:** Implemented and locally verified; final whole-branch review pending.
+**Status:** Implemented and locally verified; fresh whole-branch review found no blocking issues.
 **Base:** `5b236b9`, pushed MP-06 branch; MP-07 is stacked on MP-06 until it merges.
 **Execution:** Same checkout, no worktree. Spec and plan precede code.
 
