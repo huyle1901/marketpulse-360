@@ -514,11 +514,11 @@ it excludes HTTP and is separate from historical business event age. No capacity
 or event-to-dashboard SLA is implied. See the [runbook](../runbooks/campaign-operations.md)
 and [decisions](mp06-decisions.md).
 
-### 4.6 MP-07 analysis boundary (locally verified; final review pending)
+### 4.6 MP-07 analysis boundary (implemented and locally verified)
 
 MP-07 implements a tested request-pinned analytical read service for
 channel/campaign stage reach and exact three-model/global reconciliation.
-Read-only HTTP, bounded journeys and a race-safe `/analysis` workspace are implemented and exercised on Docker; independent export/Silver/HTTP and restart proof has passed; final review is pending. It extends the FastAPI/Next.js application with channel/campaign stage reach,
+Read-only HTTP, bounded journeys and a race-safe `/analysis` workspace are implemented and exercised on Docker; independent export/Silver/HTTP and restart proof has passed. Fresh whole-branch review found no blocking issues. It extends the FastAPI/Next.js application with channel/campaign stage reach,
 first/last/linear attribution comparison and representative order journeys.
 Its [spec](../../specs/07-funnel-and-attribution-analysis.md) and
 [plan](../superpowers/plans/2026-10-13-funnel-attribution-analysis.md) preserve
