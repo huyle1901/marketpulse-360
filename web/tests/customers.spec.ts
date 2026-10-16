@@ -78,3 +78,5 @@ test('missing detail leaves certified cohorts available and negative net stays e
  await page.goto('/customers');await expect(page.getByRole('heading',{name:'Cohort retention',exact:true})).toBeVisible();await expect(page.getByText('Publish pinned detail for this release.')).toBeVisible();
  await page.route('**/api/v1/lifecycle/profiles?*',route=>route.fulfill({json:{...profiles,rows:[{...profile,net_revenue_minor:'-9007199254740993'}]}}));await page.getByRole('button',{name:'Refresh customers',exact:true}).click();await expect(page.getByText('-9,007,199,254,740,993',{exact:true})).toBeVisible();
 });
+
+test.beforeEach(async({page})=>{await page.route('**/api/v1/auth/session',r=>r.fulfill({json:{user_id:'fixture-admin',username:'fixture-admin',role:'admin'}}));});

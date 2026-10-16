@@ -50,3 +50,5 @@ test('slow previous selection never replaces current results',async({page})=>{
  await page.getByLabel('Paid channel').selectOption('meta');await expect(page.getByText('Loading selection; showing previous analysis')).toHaveCount(0);release();
  await page.waitForTimeout(250);await expect(page.getByText('777',{exact:true})).toHaveCount(0);
 });
+
+test.beforeEach(async({page})=>{await page.route('**/api/v1/auth/session',r=>r.fulfill({json:{user_id:'fixture-admin',username:'fixture-admin',role:'admin'}}));});

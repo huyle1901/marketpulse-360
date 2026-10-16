@@ -35,5 +35,6 @@ def runtime_operations(analytics,store,auth):
     password=os.environ.get('DAGSTER_POSTGRES_PASSWORD','')
     if not password:raise ValueError('batch operational credentials required')
     dsn='postgresql://'+quote(os.environ.get('DAGSTER_POSTGRES_USER','dagster'),safe='')+':'+quote(password,safe='')+'@batch-postgres:5432/'+quote(os.environ.get('DAGSTER_POSTGRES_DB','dagster'),safe='')
+    auth.initialize()
     evidence=OpsStore(store);evidence.initialize()
     return Operations(QualityService(analytics,BatchLedger(dsn),Path('/opt/marketpulse/batch-state')),evidence,auth)

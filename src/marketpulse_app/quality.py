@@ -38,7 +38,7 @@ class QualityService:
         verify_certification_current(session.client,receipt,cert)
         projection=JourneyJournal(session.client).resolve(release)
         if projection is None:raise OSError('no projection')
-        if projection.silver_snapshot_id!=receipt.output_snapshots.get('silver.events'):raise QualityMismatch('projection_snapshot')
+        if projection.silver_snapshot_id!=receipt.output_snapshots.get('silver.customer_events'):raise QualityMismatch('projection_snapshot')
         verify_projection(session.client,projection)
         return session,receipt,cert,manifest,projection
     @staticmethod
