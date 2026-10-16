@@ -151,16 +151,21 @@ def verify_reports(reports:dict,oracle:dict,silver:dict,start:str,end:str) -> No
         assert '"'+key+'"' not in payload,'raw identity in public journey'
 
 
+from marketpulse_app.proof_http import ProofHTTP,add_auth_arguments
+
+
 def main() -> int:
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--project',required=True);parser.add_argument('--api',required=True);parser.add_argument('--web',required=True)
     parser.add_argument('--output',type=Path,required=True);parser.add_argument('--restart',action='store_true')
+    add_auth_arguments(parser)
     args=parser.parse_args()
+    http=ProofHTTP(args.api,args.origin,args.username,args.password_file,args.web)
     if re.fullmatch(r'marketpulse-[a-z0-9-]+-proof',args.project) is None:parser.error('explicit test-owned *-proof project required')
     if not str(args.output.resolve()).startswith(str(Path('.lakehouse').resolve())+'/'):parser.error('evidence must stay under ignored .lakehouse')
     def get(path,selection=None):
         url=args.api.rstrip('/')+'/api/v1/'+path+('?' + urlencode(selection) if selection else '')
-        with urllib.request.urlopen(urllib.request.Request(url,headers={'Cache-Control':'no-cache'}),timeout=30) as response:
+        with http.open(urllib.request.Request(url,headers={'Cache-Control':'no-cache'}),timeout=30) as response:
             assert response.headers['cache-control']=='no-store';return json.load(response)
     def fetch(selection):return {name:get('analysis/'+name,selection) for name in ('funnel','attribution','journeys')}
     gold=execute_oracle(args.project,'batch-code',GOLD_ORACLE)
@@ -195,7 +200,7 @@ def main() -> int:
         while True:
             try:
                 get('health/ready')
-                urllib.request.urlopen(args.web+'/analysis',timeout=5).close();break
+                http.open(args.web+'/analysis',timeout=5).close();break
             except Exception:
                 if time.monotonic()>deadline:raise
                 time.sleep(.5)

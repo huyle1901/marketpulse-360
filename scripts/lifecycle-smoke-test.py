@@ -132,15 +132,19 @@ def oracle(project:str,service:str,code:str) -> dict:
     return json.loads(result.stdout)
 
 
+from marketpulse_app.proof_http import ProofHTTP,add_auth_arguments
+
+
 def main() -> int:
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--project',required=True);parser.add_argument('--api',required=True);parser.add_argument('--web',required=True)
-    parser.add_argument('--output',type=Path,required=True);parser.add_argument('--restart',action='store_true');args=parser.parse_args()
+    parser.add_argument('--output',type=Path,required=True);parser.add_argument('--restart',action='store_true');add_auth_arguments(parser);args=parser.parse_args()
+    http=ProofHTTP(args.api,args.origin,args.username,args.password_file,args.web)
     if re.fullmatch(r'marketpulse-[a-z0-9-]+-proof',args.project) is None:parser.error('explicit test-owned *-proof project required')
     if not str(args.output.resolve()).startswith(str(Path('.lakehouse').resolve())+'/'):parser.error('ignored .lakehouse evidence path required')
     def request(path,selection=None,body=None,method='GET',expected=200):
         url=args.api.rstrip('/')+'/api/v1/'+path+('?' + urlencode(selection) if selection else '')
         req=urllib.request.Request(url,data=json.dumps(body).encode() if body is not None else None,method=method,headers={'Content-Type':'application/json','Cache-Control':'no-cache'})
-        try:response=urllib.request.urlopen(req,timeout=30)
+        try:response=http.open(req,timeout=30)
         except urllib.error.HTTPError as error:response=error
         with response:
             assert response.status==expected,f'HTTP status differs for {path}'
@@ -221,7 +225,7 @@ def main() -> int:
         subprocess.run(['docker','restart',f'{args.project}-api-1',f'{args.project}-web-1'],capture_output=True,check=True)
         deadline=time.monotonic()+60
         while True:
-            try:request('health/ready');urllib.request.urlopen(args.web+'/customers',timeout=5).close();break
+            try:request('health/ready');http.open(args.web+'/customers',timeout=5).close();break
             except Exception:
                 if time.monotonic()>deadline:raise
                 time.sleep(.5)

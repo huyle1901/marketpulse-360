@@ -100,3 +100,13 @@ class MetricsAccessTests(unittest.TestCase):
         c=TestClient(create_app(SimpleNamespace(),SimpleNamespace(),access=AccessControl(FakeAuth(),'http://testserver',metrics_token='private-service-token')))
         self.assertEqual(c.get('/metrics').status_code,401)
         self.assertEqual(c.get('/metrics',headers={'Authorization':'Bearer private-service-token'}).status_code,200)
+    def test_outcome_audit_failure_keeps_success_and_exposes_counter(self):
+        auth=FakeAuth('admin');calls=[]
+        def audit(*args):
+            calls.append(args)
+            if len(calls)==2:raise OSError('outcome unavailable')
+        auth.audit=audit
+        c=TestClient(create_app(SimpleNamespace(),SimpleNamespace(),access=AccessControl(auth,'http://testserver',metrics_token='service-token')));c.cookies.set('mp_session','valid')
+        self.assertEqual(c.get('/api/v1/auth/session').status_code,200)
+        response=c.get('/metrics',headers={'Authorization':'Bearer service-token'})
+        self.assertIn('mp_audit_outcome_failures_total 1',response.text)
