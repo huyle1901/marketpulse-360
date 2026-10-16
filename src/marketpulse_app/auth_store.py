@@ -25,6 +25,7 @@ class AuthStore:
     def set_password(self,name:str,password:str) -> None:
         name=username(name);encoded=password_hash(password)
         with self.store.connect() as c:
+            c.execute('SELECT pg_advisory_xact_lock(360091)')
             row=c.execute('UPDATE marketpulse_app.auth_users SET password_hash=%s,version=version+1 WHERE username=%s RETURNING user_id',(encoded,name)).fetchone()
             if not row:raise ValueError('unknown account')
             c.execute('DELETE FROM marketpulse_app.auth_sessions WHERE user_id=%s',(row[0],))
@@ -32,13 +33,14 @@ class AuthStore:
     def digest(token:str) -> str:return hashlib.sha256(token.encode()).hexdigest()
     def login(self,name:str,password:str) -> tuple[str,Principal] | None:
         # Invalid names still receive identical work/error and bounded persisted throttling.
+        valid_name=True
         try:name=username(name)
-        except ValueError:name='invalid'
+        except ValueError:name='invalid';valid_name=False
         key=self.digest(name)
         with self.store.connect() as c:
             c.execute('SELECT pg_advisory_xact_lock(360091)')
             attempts=c.execute("SELECT failures,window_start > now()-interval '15 minutes' FROM marketpulse_app.login_failures WHERE username_hash=%s",(key,)).fetchone()
-            row=c.execute('SELECT user_id,username,role,password_hash,enabled FROM marketpulse_app.auth_users WHERE username=%s',(name,)).fetchone()
+            row=c.execute('SELECT user_id,username,role,password_hash,enabled FROM marketpulse_app.auth_users WHERE username=%s',(name,)).fetchone() if valid_name else None
             valid=password_matches(password,row[3] if row and row[4] else self._dummy)
             if attempts and attempts[1] and attempts[0]>=5:return None
             if not row or not row[4] or not valid:

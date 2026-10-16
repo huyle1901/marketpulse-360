@@ -51,7 +51,7 @@ services:
           memory: 512M
 
   grafana:
-    image: grafana/grafana:13.2.1-ubuntu
+    image: grafana/grafana:13.2.1-ubuntu@sha256:ae737b9445c9c89461fd938a8cb732c5416b4dda656bbd058f7b34de27954384
     profiles: [observability]
     environment:
       GF_SECURITY_ADMIN_USER: operator

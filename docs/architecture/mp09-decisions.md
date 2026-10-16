@@ -26,3 +26,8 @@ The observability profile adds collector, Prometheus and Grafana only. The API
 and collector mount persisted batch evidence read-only. Compose secrets expose
 only supplied leaf files; ignored host secret directory is0700. Grafana uses
 its own operator login; app RBAC does not protect local operator tool ports.
+
+Next.js forwards Cookie/Origin and relays Set-Cookie through an explicit route
+allowlist. A global session gate handles expiry; viewers retain aggregate analysis
+and cohorts while journey/profile/segment fetches require operator access. The
+admin operations workspace guards stale refreshes and displays dependency errors.

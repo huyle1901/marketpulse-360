@@ -72,6 +72,29 @@ class AuthPGTests(unittest.TestCase):
         token,_=self.auth.login('admin-test-unknown','wrong password') or ('',None)
         self.assertEqual(self.auth.cleanup_sessions(),0)
 
+    def test_invalid_username_cannot_alias_a_valid_account(self):
+        # A malformed input must never fall back to the real canonical user "invalid".
+        self.auth.create_user('invalid','secure password 999','viewer')
+        self.assertIsNone(self.auth.login('invalid/name','secure password 999'))
+
+    def test_concurrent_demotions_preserve_one_admin(self):
+        from concurrent.futures import ThreadPoolExecutor
+        second=self.auth.create_user('second-admin','secure password 456','admin')
+        def demote(identity):
+            try:self.auth.update_user(identity,'viewer',True,1);return True
+            except ValueError:return False
+        with ThreadPoolExecutor(max_workers=2) as pool:results=list(pool.map(demote,[self.admin.user_id,second.user_id]))
+        self.assertEqual(sorted(results),[False,True])
+        self.assertEqual(sum(u['role']=='admin' and u['enabled'] for u in self.auth.users()),1)
+    def test_expiry_disable_and_bounded_retention(self):
+        token,p=self.auth.login('admin-test','secure password 123')
+        with self.store.connect() as c:
+            c.execute("INSERT INTO marketpulse_app.auth_sessions(token_hash,user_id,expires_at) SELECT md5(i::text),%s,now()-interval '1 minute' FROM generate_series(1,1005) i",(p.user_id,))
+        self.assertEqual(self.auth.cleanup_sessions(),1000);self.assertEqual(self.auth.expired_sessions(),5)
+        self.assertIsNotNone(self.auth.resolve(token))
+        with self.store.connect() as c:c.execute("UPDATE marketpulse_app.auth_sessions SET expires_at=now()-interval '1 second' WHERE token_hash=%s",(self.auth.digest(token),))
+        self.assertIsNone(self.auth.resolve(token))
+
 class MetricsAccessTests(unittest.TestCase):
     def test_metrics_requires_separate_bearer(self):
         c=TestClient(create_app(SimpleNamespace(),SimpleNamespace(),access=AccessControl(FakeAuth(),'http://testserver',metrics_token='private-service-token')))
