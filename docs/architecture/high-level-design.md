@@ -82,12 +82,14 @@ flowchart LR
         DAGSTER["Dagster batch ingestion"]
         DLQ["Kafka dead-letter topics"]
         CLEAN["Versioned clean Kafka topics"]
+        GOLDTOPICS["Versioned Gold Kafka topics"]
     end
 
     subgraph Processing["Data processing"]
         FLINK["Apache Flink SQL / DataStream"]
         SPARK["Apache Spark bounded jobs<br/>Bronze ingestion / Silver / Gold / proof"]
         DBT["dbt Core models and tests"]
+        SERVE["MP-06 committed snapshot<br/>serving + alert worker"]
         RULES["Validation, deduplication, watermark,<br/>sessionization, enrichment"]
     end
 
@@ -126,7 +128,10 @@ flowchart LR
     KAFKA --> SPARK
     SPARK --> ICEBERG
     SPARK --> MINIO
-    RULES --> CLICKHOUSE
+    FLINK --> GOLDTOPICS
+    GOLDTOPICS --> SERVE
+    SERVE --> CLICKHOUSE
+    SERVE --> POSTGRES
     DAGSTER --> MINIO
     MINIO --> ICEBERG
     ICEBERG --> DBT
@@ -446,6 +451,140 @@ psycopg2 for notification compatibility with SQLAlchemy 2.1; the operational
 ledger uses psycopg3. The tracked instance config is mounted read-only over the
 persistent instance volume. See `docs/runbooks/batch-serving.md`.
 
+### 4.5 MP-06 campaign operations boundary (implemented; local proof verified)
+
+The user delegated MP-06 scope to the ordered backlog. Strict dependency-free
+application contracts and exact Decimal pacing/scenario/alert primitives are
+implemented and unit-tested. FastAPI/Next.js and app persistence run in Docker;
+final review regressions and refreshed acceptance passed.
+Its binding specification
+is [06-live-campaign-and-budget-operations.md](../../specs/06-live-campaign-and-budget-operations.md)
+and its [implementation plan](../superpowers/plans/2026-10-13-campaign-budget-operations.md)
+executes in the existing source tree, based on merged MP-05 PR #5.
+
+FastAPI now exposes request-pinned dashboard, settings/rules, alert evaluation,
+pacing and read-only simulation routes; its contract tests cover exact money,
+parameterized queries, configured-market filtering, stale writes and missing releases.
+Next.js implements the Marketing Command Center with live KPI monitoring, explainable campaign alerts,
+budget pacing and what-if allocation. Certified campaign finance remains in the
+MP-05 immutable ClickHouse releases. A validated serving adapter synchronously appends
+MP-03 campaign snapshots into a separate `marketpulse_live` projection, selecting
+whole latest keyed snapshots by Kafka offset and collapsing retries. Real ClickHouse
+integration verifies duplicate/out-of-order delivery, null currency, conflicting
+positions and changed source identity rejection. A manual-commit read_committed
+worker and periodic evaluator run in healthy Docker services. Provisional
+streaming counts/money are displayed separately from consent/bot-governed Gold.
+No metric adds both sources or mixes live revenue with daily batch spend.
+
+A dedicated application PostgreSQL database/schema stores user-created campaign
+market/budget settings, versioned alert rules and immutable evaluation evidence.
+Their additive migrations and concurrency/idempotency tests run against a
+dedicated `mp06_test` PostgreSQL database. The evaluator uses the global latest
+closed release date, requires actual calendar baselines and hashes immutable
+release/rule/setting/window identities; no polling timestamp changes that key.
+It contains no generated source customers, analytical warehouse copy or seeded
+application accounts. Existing Gold has no market dimension: the UI filter means
+configured campaign market, with unassigned values explicitly unknown.
+Daily spend supports closed-day pacing only; gaps/zero baselines produce explicit
+insufficient-data states. Simulations are read-only linear historical-ROAS
+scenarios. Every metric records its model/source and actual data timestamp;
+historical replay, API polling and retry delivery cannot masquerade as fresh
+business events. New app services use the Compose `app` profile and separate
+persistent app metadata. FastAPI 0.143.0/Uvicorn 0.54.0/Pydantic 2.14.1 use a
+hashed Python lock; Next.js 16.4.0/React 19.3.0 use an npm lock and Node 24.21.0.
+Nonroot API/worker/web images have built successfully; TypeScript/production build
+and browser behavior tests cover discarding an old pending scenario
+after its interval changes. All four app services are healthy in the existing
+MP-05 proof project; actual desktop/mobile UI inspection shows 14 separate live
+keys and unchanged certified totals. The first independent Docker proof passed
+keyed Kafka equality, lost-offset-acknowledgement retry, persistent app restart
+and all three fixture HTTP budgets; the final images passed this proof again.
+Final review found budget-day identity,
+Decimal comparison and UI ordering issues; focused RED/GREEN regressions address
+them, followed by nine green browser tests, 333-test Python regression suite
+(27 opt-in skips, three new integrations separately exercised), production builds
+and fresh Docker acceptance. Budget alerts use actual closed-day intervals
+and trigger known overruns during an active period. Streaming source identity/
+offset bounds and full alert versions are inspectable in the app.
+MP-01–05 contracts and pipelines remain intact. The fixture has 615 rows in 22
+source files; 217 Kafka snapshots resolve to 14 live keys. Final fixture HTTP p95
+(20 warmups/100 uncached requests) is 26.41 ms dashboard, 16.92 ms pacing, 20.32 ms
+simulation. A test-owned adapter-to-analytical-response measurement was 58.44 ms;
+it excludes HTTP and is separate from historical business event age. No capacity
+or event-to-dashboard SLA is implied. See the [runbook](../runbooks/campaign-operations.md)
+and [decisions](mp06-decisions.md).
+
+### 4.6 MP-07 analysis boundary (implemented and locally verified)
+
+MP-07 implements a tested request-pinned analytical read service for
+channel/campaign stage reach and exact three-model/global reconciliation.
+Read-only HTTP, bounded journeys and a race-safe `/analysis` workspace are implemented and exercised on Docker; independent export/Silver/HTTP and restart proof has passed. Fresh whole-branch review found no blocking issues. It extends the FastAPI/Next.js application with channel/campaign stage reach,
+first/last/linear attribution comparison and representative order journeys.
+Its [spec](../../specs/07-funnel-and-attribution-analysis.md) and
+[plan](../superpowers/plans/2026-10-13-funnel-attribution-analysis.md) preserve
+MP-04 Gold semantics and MP-05 certification. Aggregates read existing immutable
+ClickHouse funnel/attribution tables with one release per request. Cross-bucket
+session sums are labeled campaign-day incidences, not global unique audiences.
+Attribution global reconciliation precedes dimension filters and requires a
+single-currency release, matching the existing currency-less Gold contract.
+
+An explicit `app-tools` Spark publisher now reads that release's recorded Silver
+snapshot, sanitize profile identity and copy exact event detail into a separately
+validated immutable ClickHouse sidecar. It does not change the seven-relation
+MP-05 export or promote a new release. APIs query only ClickHouse; PostgreSQL
+holds config/coordination, not analytical events. Representative explanations
+reuse the existing Gold helper on bounded canonical touch/financial context.
+Click deduplication covers the full pinned snapshot before the order window.
+The real publisher copied and verified 191 governed rows from Silver snapshot
+`505365576434850409`, with typed full-row checksum equality. Earlier failed
+attempts remained isolated. Global paid-click canonicalization is a ClickHouse
+view over the complete projection. Commerce events retain the bot-session flag
+per MP-04 policy; web/mobile bot activity and consent-denied rows are rejected.
+Partial/missing/conflicting sidecars never appear as complete journey data.
+No source generation/replay or earlier pipeline reimplementation is required.
+
+Independent pinned exports and sidecar-recomputed Gold establish full-row equality;
+all three models reconcile gross/refund/net. On the 191-event fixture, p95 HTTP
+latency was 26.58/18.96/77.84 ms for funnel/attribution/five journeys, each with
+20 warmups/100 uncached samples and zero failures. API/web restart preserved MP-06
+operational state and MP-07 outputs. Desktop/mobile/drill visual checks and all
+fourteen browser tests passed. See [decisions/evidence](mp07-decisions.md) and
+[runbook](../runbooks/funnel-attribution.md) for bounds and explicit publication.
+
+### 4.7 MP-08 Customer 360 and lifecycle boundary (implemented and locally verified)
+
+Strict versioned segment contracts, pure RFM/consent evidence and request-pinned
+ClickHouse lifecycle reads are implemented. Real queries preserve 60 historical
+profiles and 37 consent-eligible activation profiles at as_of2026-01-03.
+Lifecycle HTTP and immutable PostgreSQL segment revisions now pass real Docker
+reads and dedicated-database concurrency/restart tests. Startup adds definitions
+only through additive migrations, never seeds members/rules. The `/customers`
+workspace now supports cohort/activity drills, categorical identity/consent evidence,
+RFM/heuristic tables, paginated governed timelines and a versioned segment editor.
+Combined reads and rule/timeline contexts reject stale/mixed releases; saves lock
+the draft and old revisions remain read-only. Twenty-two browser tests, production
+build and actual Docker desktop/mobile inspection pass. Independent validated
+exports, 29 discovery cases and all 60 timelines reconcile 60 historical/37
+activation-eligible profiles and 191 governed events. Owned consent/refund/currency
+faults and PostgreSQL immutable/concurrent revision tests pass. API/web restart
+preserves revisions and MP06–07 outputs. Fixture p95 cohorts/profiles/timeline/preview
+is 13.64/28.53/22.00/32.39ms, 20warmups/100uncached samples each. Fresh review
+found no blocking issues; the documented metadata-reload UX improvement is deferred.
+See [decisions](mp08-decisions.md) and
+[runbook](../runbooks/customer-lifecycle.md). The [MP-08 spec](../../specs/08-customer-lifecycle-intelligence.md) extends the
+existing FastAPI/Next.js app with historical cohorts, pseudonymous RFM profiles,
+governed timelines and versioned segment previews. Analytical queries reuse the
+immutable ClickHouse Customer 360/cohort/CRM relations and MP-07 event sidecar;
+no earlier pipeline/export contract or new Spark publication is needed.
+PostgreSQL stores only operator-authored segment definitions and immutable revisions.
+Release-scoped hashes connect profile drills to governed event detail. Identity
+confidence is categorical evidence of existing deterministic rules, not a new
+probabilistic merge. Historical governed cohorts remain distinct from activation:
+activation requires an identified CRM customer with both current-in-release
+analytics and marketing consent; unknown/denied consent fails closed. Analytics
+CRM denial suppresses timeline detail. RFM/as_of is pinned to data, not wall time;
+heuristics are explained and exact finance remains single-currency guarded.
+
 ## 5. Kafka design
 
 Suggested topic naming:
@@ -652,10 +791,17 @@ flowchart TB
             DBT2 --> CH
         end
 
-        subgraph App["future profile: app"]
-            BE["fastapi"]
-            FE["nextjs"]
-            EG["event-generator"]
+        subgraph App["profile: app (MP-06)"]
+            BE["FastAPI campaign operations"]
+            FE["Next.js Command Center"]
+            AW["Kafka serving + alert worker"]
+            APG["app-postgres: configuration + alert evidence"]
+            FE --> BE
+            BE --> CH
+            BE --> APG
+            AW --> CH
+            AW --> APG
+            K1 --> AW
         end
 
         subgraph Observe["future profile: observability"]
@@ -679,7 +825,7 @@ Recommended laptop profiles:
 docker compose --profile streaming --profile flink up -d --build --wait
 ```
 
-MP-05 adds `batch` and `serving`; later milestones add `app` and `observability`. Run the
+MP-05 adds `batch` and `serving`; MP-06 adds `app`; MP-09 adds `observability`. Run the
 Kafka Streams alternative separately when memory is limited.
 
 Credential configuration is local-only: the committed `.env.example` contains

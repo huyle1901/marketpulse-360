@@ -143,7 +143,22 @@ and publishing selected Gold models to ClickHouse.
 
 ### MP-06 - Live campaign and budget operations
 
-**Status:** Planned; depends on MP-03 and MP-05
+**Status:** Implemented and locally verified. Depends on MP-03 and MP-05
+(PR #5 merged into main). User delegated scope decisions to this backlog.
+
+Detailed scope: [`06-live-campaign-and-budget-operations.md`](06-live-campaign-and-budget-operations.md).
+Execution plan: [`2026-10-13-campaign-budget-operations.md`](../docs/superpowers/plans/2026-10-13-campaign-budget-operations.md).
+
+**Proof:** FastAPI/Next.js/worker/app PostgreSQL healthy in Docker; 14 latest
+keys independently matched against 217 committed Kafka snapshots; duplicate/
+lost-ack/restart checks preserve results, configuration and alert evidence.
+333-test Python suite succeeds (27 opt-in skips; all three new real integration
+cases exercised separately); nine browser tests, TypeScript/production builds,
+source-fixture validation and Compose/diff checks pass. Review fixes cover
+budget alert day transitions, exact thresholds and UI stale state. Fixture
+HTTP p95 after 20 warmups/100 requests: dashboard 26.41 ms, pacing 16.92 ms,
+simulation 20.32 ms. This proves a local fixture, not capacity/SLA.
+Runbook: [`campaign-operations.md`](../docs/runbooks/campaign-operations.md).
 
 Provide live KPI monitoring, abnormal-spend alerts, budget pacing, and a what-if
 budget allocation view for marketing leaders and performance managers.
@@ -159,7 +174,10 @@ and budget simulation.
 
 ### MP-07 - Funnel and attribution analysis
 
-**Status:** Planned; depends on MP-05
+**Status:** Implemented and locally verified. Depends on MP-05; stacked on pushed MP-06.
+
+Scope: [`07-funnel-and-attribution-analysis.md`](07-funnel-and-attribution-analysis.md).
+Plan: [`2026-10-13-funnel-attribution-analysis.md`](../docs/superpowers/plans/2026-10-13-funnel-attribution-analysis.md).
 
 Show cross-channel funnels and compare first-touch, last-touch, and linear
 attribution without changing the underlying orders.
@@ -174,7 +192,10 @@ attribution without changing the underlying orders.
 
 ### MP-08 - Customer 360 and lifecycle intelligence
 
-**Status:** Planned; depends on MP-04 and MP-05
+**Status:** Implemented and locally verified. Depends on MP-04/05; stacked on complete MP-07.
+
+Scope: [`08-customer-lifecycle-intelligence.md`](08-customer-lifecycle-intelligence.md).
+Plan: [`2026-10-16-customer-lifecycle-intelligence.md`](../docs/superpowers/plans/2026-10-16-customer-lifecycle-intelligence.md).
 
 Provide consent-aware Customer 360 timelines, RFM/behavior segments, cohort
 retention, and high-value or churn-risk identification.
