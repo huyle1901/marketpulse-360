@@ -926,6 +926,16 @@ application interaction, correctness test, and demo scenario.
 
 ## 9. Evaluation plan
 
+MP-10 adds an optional isolated `compose.evaluation.yaml` profile, specified in
+[`specs/10-evaluation-and-evidence.md`](../../specs/10-evaluation-and-evidence.md).
+It owns separate Kafka/Flink/Streams/ClickHouse/PostgreSQL resources and cannot
+publish to the application. PostgreSQL analytical facts exist only in this
+baseline. A bounded campaign-finance contract isolates engine costs; it does not
+claim parity with all MP-03 outputs. Query scale fixtures contain 1M/10M/20M
+deterministic Gold-shaped synthetic rows. Measured send-to-committed-output and
+HTTP query latencies are separate; neither is historical event age. Human
+effectiveness and narrated submission evidence require actual observations.
+
 ### Correctness
 
 - Reconcile source counts and revenue totals against validated Silver data.
