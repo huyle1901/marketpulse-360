@@ -9,6 +9,11 @@ import org.apache.kafka.streams.processor.api.*;
 import org.apache.kafka.streams.state.*;
 
 public final class StreamsJob {
+    public static KafkaStreams.StateListener readinessListener(String runId,java.io.PrintStream output) {
+        return (current,old) -> {
+            if(current==KafkaStreams.State.RUNNING) { output.println("EVAL_READY "+runId);output.flush(); }
+        };
+    }
     public static Topology topology(String input, String output) {
         StreamsBuilder builder = new StreamsBuilder();
         builder.addStateStore(Stores.keyValueStoreBuilder(Stores.persistentKeyValueStore("seen"),Serdes.String(),Serdes.Boolean()));
@@ -47,6 +52,7 @@ public final class StreamsJob {
         p.put(StreamsConfig.NUM_STREAM_THREADS_CONFIG,1);p.put(StreamsConfig.REPLICATION_FACTOR_CONFIG,1);
         p.put("consumer.auto.offset.reset","earliest");p.put("producer.transaction.timeout.ms",60000);
         KafkaStreams streams = new KafkaStreams(topology(args[1],args[2]),p);
+        streams.setStateListener(readinessListener(args[3],System.out));
         Runtime.getRuntime().addShutdownHook(new Thread(() -> streams.close(Duration.ofSeconds(10))));
         streams.start();
     }

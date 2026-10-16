@@ -24,6 +24,10 @@ deterministic input and exactly-once Kafka output. Both produce one versioned
 audit/result record per input, containing sequence, classification, campaign,
 gross/refund/net totals and send timestamp. Read outputs with `read_committed`.
 
+Separate shaded artifacts use kafka-clients4.2.0 for the Flink connector's
+internal transaction ABI and4.3.1 for Streams. Do not mix these classpaths;
+report the client versions as part of each measured adapter.
+
 This is a bounded campaign-finance workload, not a reimplementation or proof of
 equivalence of the entire MP-03 session/funnel/consent pipeline. Document this
 limit beside every comparison. The benchmark contract is intentionally separate

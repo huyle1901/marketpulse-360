@@ -57,7 +57,7 @@ services:
     depends_on: [jobmanager]
   streams:
     <<: *engine
-    entrypoint: [java, -Xmx768m, -cp, /opt/flink/usrlib/evaluation-job.jar:/opt/flink/lib/*, io.marketpulse.eval.StreamsJob]
+    entrypoint: [java, -Xmx768m, -cp, /opt/evaluation/streams-evaluation.jar:/opt/flink/lib/*, io.marketpulse.eval.StreamsJob]
     command: [kafka:29092, idle-in, idle-out, eval-idle]
     volumes: ["streams:/tmp/eval-streams"]
   clickhouse:
