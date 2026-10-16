@@ -112,7 +112,7 @@ export default function CommandCenter() {
   };
 
   return <main>
-    <nav className="workspace-nav" aria-label="Workspaces"><Link href="/" aria-current="page">Campaign Operations</Link><Link href="/analysis">Funnel &amp; Attribution</Link></nav>
+    <nav className="workspace-nav" aria-label="Workspaces"><Link href="/" aria-current="page">Campaign Operations</Link><Link href="/analysis">Funnel &amp; Attribution</Link><Link href="/customers">Customer 360</Link></nav>
     <header className="masthead"><div><div className="brand">MARKETPULSE <span>360</span></div><h1>Marketing Command Center</h1><p>Campaign performance, decisions and budget scenarios</p></div><div className="status"><span className="dot"/> Updates every 5 seconds<br/><small>Last successful read: {lastSuccess||'Waiting'}</small></div></header>
     <section className="filters" aria-label="Campaign filters">
       <label>From (UTC)<input type="date" value={filters.from_date} onChange={e=>setFilters({...filters,from_date:e.target.value})}/></label>

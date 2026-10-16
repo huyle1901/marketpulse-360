@@ -37,7 +37,7 @@ export default function Analysis(){
   })}</tbody></table></div>;
  };
  return <main>
- <nav className="workspace-nav" aria-label="Workspaces"><Link href="/">Campaign Operations</Link><Link href="/analysis" aria-current="page">Funnel &amp; Attribution</Link></nav>
+ <nav className="workspace-nav" aria-label="Workspaces"><Link href="/">Campaign Operations</Link><Link href="/analysis" aria-current="page">Funnel &amp; Attribution</Link><Link href="/customers">Customer 360</Link></nav>
  <header className="masthead"><div><div className="brand">MARKETPULSE <span>360</span></div><h1>Funnel &amp; Attribution</h1><p>Trace stage reach, compare credit, inspect representative journeys</p></div><div className="status"><span className="dot"/>Certified analytical release<br/>5-second refresh · Last success {success||'Pending'}<br/><button className="secondary" onClick={()=>setRetry(v=>v+1)}>Refresh analysis</button></div></header>
  <section className="filters analysis-filters" aria-label="Analysis filters">
  <label>From (UTC)<input type="date" value={filters.from_date} onChange={e=>update('from_date',e.target.value)}/></label><label>To (exclusive UTC)<input type="date" value={filters.to_date} onChange={e=>update('to_date',e.target.value)}/></label>
