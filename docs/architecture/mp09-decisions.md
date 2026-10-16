@@ -114,3 +114,13 @@ all five filenames, exact modes and unchanged values on repeat setup. GitGuardia
 dashboard triage was unavailable from this session; no finding was ignored and
 no published history was rewritten. PR9 describes the open scanner blocker and
 must not be described as passing GitGuardian until disposition is verified.
+
+Follow-up triage: accessed GitGuardian using the existing GitHub sign-in. The
+incident patch explicitly highlights octal permission constants0o444 and0o600;
+no credential value is involved. Incidents38276830 and38276831 were individually
+classified with the exact reason "Not a secret (false positive)" and both detail
+pages now show that disposition. No detector, integration, repository monitoring,
+permission or published history was disabled/changed. The filename/mode refactor
+remains in place. Screenshots are ignored under `.lakehouse/mp09-proof/`.
+A fresh scan of this documentation update verifies the current PR head separately
+from the previous failed check run; record its actual result before claiming green.
