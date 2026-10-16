@@ -551,6 +551,22 @@ operational state and MP-07 outputs. Desktop/mobile/drill visual checks and all
 fourteen browser tests passed. See [decisions/evidence](mp07-decisions.md) and
 [runbook](../runbooks/funnel-attribution.md) for bounds and explicit publication.
 
+### 4.7 MP-08 Customer 360 and lifecycle boundary (specified; implementation pending)
+
+The [MP-08 spec](../../specs/08-customer-lifecycle-intelligence.md) extends the
+existing FastAPI/Next.js app with historical cohorts, pseudonymous RFM profiles,
+governed timelines and versioned segment previews. Analytical queries reuse the
+immutable ClickHouse Customer 360/cohort/CRM relations and MP-07 event sidecar;
+no earlier pipeline/export contract or new Spark publication is needed.
+PostgreSQL stores only operator-authored segment definitions and immutable revisions.
+Release-scoped hashes connect profile drills to governed event detail. Identity
+confidence is categorical evidence of existing deterministic rules, not a new
+probabilistic merge. Historical governed cohorts remain distinct from activation:
+activation requires an identified CRM customer with both current-in-release
+analytics and marketing consent; unknown/denied consent fails closed. Analytics
+CRM denial suppresses timeline detail. RFM/as_of is pinned to data, not wall time;
+heuristics are explained and exact finance remains single-currency guarded.
+
 ## 5. Kafka design
 
 Suggested topic naming:
