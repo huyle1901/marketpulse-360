@@ -1,0 +1,18 @@
+# MP-09 decisions
+
+Spec: [quality, observability and privacy](../../specs/09-quality-observability-privacy.md).
+
+Authentication is an application operational responsibility in PostgreSQL. The
+API uses fixed capabilities, server-resolved roles and opaque eight-hour sessions;
+Origin checks protect unsafe cookie requests. Every protected decision is written
+before work. Outcome audit failure is observable and does not imply rollback.
+
+Quality resolves existing persisted certification and receipt binding, checks full
+typed rowsets and keys, then reconciles finance across the verified MP07 source
+projection, campaign performance and all three attribution models. Missing proof
+is unavailable; mismatched proof is failed. The probe creates and drops only a
+fresh owned database and never publishes. Its alarm is separate from live quality.
+
+Retention is session-only: at most1000 expired rows. Immutable history, all source
+snapshots, certified releases and projection databases remain protected. Kafka
+offset advancement includes control records; it is never labeled event count.

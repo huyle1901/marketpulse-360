@@ -192,6 +192,9 @@ def create_app(analytics: Any, store: Any, access: Any = None, operations: Any =
     if access is not None:
         from .auth_api import register_auth_routes
         register_auth_routes(app,access)
+    if operations is not None:
+        from .operations import register_operations_routes
+        register_operations_routes(app,operations)
     return app
 
 
@@ -208,4 +211,5 @@ def runtime_app() -> FastAPI:
     token=Path(os.environ.get('METRICS_TOKEN_FILE','/run/secrets/metrics_token')).read_text().strip()
     access=AccessControl(auth,os.environ.get('APP_PUBLIC_ORIGIN','http://localhost:43100'),
                          os.environ.get('APP_COOKIE_SECURE','false')=='true',token)
-    return create_app(analytics, store,access=access)
+    from .operations import runtime_operations
+    return create_app(analytics, store,access=access,operations=runtime_operations(analytics,store,auth))
