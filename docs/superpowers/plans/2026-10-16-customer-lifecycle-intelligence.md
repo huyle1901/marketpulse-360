@@ -34,7 +34,7 @@
 - A slower previous profile/draft/release preview must not appear under newer selection or overwrite saved edits.
 - A reused old rule revision remains immutable and evaluates reproducibly against the same release despite newer revisions.
 
-## Task1: Strict segment contracts and lifecycle metrics
+## Task 1: Strict segment contracts and lifecycle metrics
 
 **Files:** Create src/marketpulse_app/lifecycle_contracts.py, lifecycle_math.py; tests/test_app_lifecycle_contracts.py, test_app_lifecycle_math.py.
 **Interfaces:** `SegmentRule.from_payload(value: object) -> SegmentRule`, `.payload() -> dict`, `.digest: str`;
@@ -46,7 +46,7 @@
 - [ ] Implement frozen strict contracts with schema_version mp08-segment-v1, fixed numeric/enum/month bounds and pure metrics/consent categorical evidence. Verify original-purchase recency, refund-only/never-purchased, heuristic operands and unknown/denied consent.
 - [ ] Run focused/full Python suite, diff check; update architecture and commit feat: define consent-safe lifecycle and segment contracts. Expected PASS.
 
-## Task2: Request-pinned lifecycle analytical reads
+## Task 2: Request-pinned lifecycle analytical reads
 
 **Files:** Create src/marketpulse_app/lifecycle.py; tests/test_app_lifecycle_queries.py.
 **Interfaces:** `LifecycleError(code: str)`; `LifecycleService(analytics: Analytics)` with
@@ -59,7 +59,7 @@ Consumes Task1 rules/metrics and existing Analytics/JourneyJournal/single_curren
 - [ ] Implement fixed-schema ClickHouse CTE profile join to certified CRM and aggregated sidecar (last original purchase/cart/email), fixed source-bound as_of, safe DTOs and exact SQL predicates. Use bound identity/hash/filter/numeric values; no arbitrary SQL. Profiles/preview paginated server-side, not full Python warehouse scans. Cohort/source summaries usable without detail; missing detail returns unavailable and preview fails409. Existing Gold fields remain source totals.
 - [ ] Run focused/full tests and actual CH queries when Docker restored, inspect consent/retention reconciliation. Expected PASS. Architecture/diff check, commit feat: serve pinned Customer 360 and lifecycle insights.
 
-## Task3: Immutable saved segment revisions and HTTP/proxy
+## Task 3: Immutable saved segment revisions and HTTP/proxy
 
 **Files:** Create src/marketpulse_app/segment_store.py, lifecycle_api.py, sql/segments.sql;
  tests/test_app_segment_store.py, test_app_lifecycle_api.py; modify api.py and web/app/api/v1/[...path]/route.ts.
@@ -72,7 +72,7 @@ Consumes Task1 rules/metrics and existing Analytics/JourneyJournal/single_curren
 - [ ] Implement additive schema/current row+immutable revisions transaction, optimistic CAS and parameterized SQL. Initialize with existing app startup migration under separate lock36008; seed nothing. Register fixed lifecycle routes and stable errors; expand proxy allowlist only specified GET/POST/PUT paths. Preserve MP06–07 behavior.
 - [ ] Run focused/full Python suite and real PG revision/concurrency tests in dedicated mp08_test, architecture/diff check. Expected PASS. Commit feat: save versioned lifecycle segments and expose APIs.
 
-## Task4: Cohort-to-customer workspace and segment editor
+## Task 4: Cohort-to-customer workspace and segment editor
 
 **Files:** Create web/app/customers/{page.tsx,types.ts}, web/tests/customers.spec.ts; modify shared navigation/styles.
 **Interfaces:** Task2/3 route DTOs. Combined cohort/profile identities must match; previews must match current rule digest and workspace release. Selected timeline checks returned identity/reference against active profile context.
@@ -82,7 +82,7 @@ Consumes Task1 rules/metrics and existing Analytics/JourneyJournal/single_curren
 - [ ] Build responsive `/customers` with navigation, scope/as_of/source details, retention table, purpose/type/opportunity filters, pagination, RFM/consent table, timeline, fixed condition editor and saved revision selector. Use AbortController/request contexts and previous-selection markers. No invented ML confidence or activation delivery. Draft is preserved on errors and locked while saving.
 - [ ] Run full MP06–08 browser tests/typecheck/build and Python suite; Docker build/recreate only API/web; actual desktop/mobile/drill visual QA. Expected PASS. Architecture/diff check and commit feat: add Customer 360 lifecycle and segment workspace.
 
-## Task5: Independent proof, restart, benchmark, docs and final review
+## Task 5: Independent proof, restart, benchmark, docs and final review
 
 **Files:** Create scripts/lifecycle-smoke-test.py, tests/test_app_lifecycle_proof.py,
  docs/runbooks/customer-lifecycle.md, docs/architecture/mp08-decisions.md;
