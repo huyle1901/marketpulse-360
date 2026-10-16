@@ -41,10 +41,10 @@
 `Condition(field: str,op: str,value: str)`; `lifecycle_metrics(profile: Mapping[str,object], detail: Mapping[str,object], as_of: datetime) -> dict[str,object]`;
 `identity_evidence(profile_type: str) -> dict`, `activation_eligible(profile: Mapping[str,object]) -> bool`.
 
-- [ ] Write RED tests: canonical order-independent digest; reject extra/hostile fields, bool/exponent/noncanonical numbers, duplicates, >8 conditions; signed net; invalid month/type/purpose. Literal >2**53 exact and null recency rules.
-- [ ] Run `PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -p 'test_app_lifecycle_*.py' -v`. Expected missing interfaces FAIL.
-- [ ] Implement frozen strict contracts with schema_version mp08-segment-v1, fixed numeric/enum/month bounds and pure metrics/consent categorical evidence. Verify original-purchase recency, refund-only/never-purchased, heuristic operands and unknown/denied consent.
-- [ ] Run focused/full Python suite, diff check; update architecture and commit feat: define consent-safe lifecycle and segment contracts. Expected PASS.
+- [x] Write RED tests: canonical order-independent digest; reject extra/hostile fields, bool/exponent/noncanonical numbers, duplicates, >8 conditions; signed net; invalid month/type/purpose. Literal >2**53 exact and null recency rules.
+- [x] Run `PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -p 'test_app_lifecycle_*.py' -v`. Expected missing interfaces FAIL.
+- [x] Implement frozen strict contracts with schema_version mp08-segment-v1, fixed numeric/enum/month bounds and pure metrics/consent categorical evidence. Verify original-purchase recency, refund-only/never-purchased, heuristic operands and unknown/denied consent.
+- [x] Run focused/full Python suite, diff check; update architecture and commit feat: define consent-safe lifecycle and segment contracts. Expected PASS.
 
 ## Task 2: Request-pinned lifecycle analytical reads
 
@@ -54,10 +54,10 @@
 `timeline(profile_ref: str,*,limit: int=50,offset: int=0) -> dict`, `preview(rule: SegmentRule) -> dict`.
 Consumes Task1 rules/metrics and existing Analytics/JourneyJournal/single_currency.
 
-- [ ] Write RED query/service tests: all reads pin one release; hashes only; explicit CRM deny/unknown/missing gates for all purposes; original-order aggregate; month membership via full governed activity; signed net and exact comparisons; hostile values bound; stable pagination; missing/conflicting detail; unknown404/invalid422/restricted timeline; global as_of not selected rows. Test two-campaign independent identities do not merge and anonymous/session confidence stays limited.
-- [ ] Run focused tests. Expected missing service FAIL.
-- [ ] Implement fixed-schema ClickHouse CTE profile join to certified CRM and aggregated sidecar (last original purchase/cart/email), fixed source-bound as_of, safe DTOs and exact SQL predicates. Use bound identity/hash/filter/numeric values; no arbitrary SQL. Profiles/preview paginated server-side, not full Python warehouse scans. Cohort/source summaries usable without detail; missing detail returns unavailable and preview fails409. Existing Gold fields remain source totals.
-- [ ] Run focused/full tests and actual CH queries when Docker restored, inspect consent/retention reconciliation. Expected PASS. Architecture/diff check, commit feat: serve pinned Customer 360 and lifecycle insights.
+- [x] Write RED query/service tests: all reads pin one release; hashes only; explicit CRM deny/unknown/missing gates for all purposes; original-order aggregate; month membership via full governed activity; signed net and exact comparisons; hostile values bound; stable pagination; missing/conflicting detail; unknown404/invalid422/restricted timeline; global as_of not selected rows. Test two-campaign independent identities do not merge and anonymous/session confidence stays limited.
+- [x] Run focused tests. Expected missing service FAIL.
+- [x] Implement fixed-schema ClickHouse CTE profile join to certified CRM and aggregated sidecar (last original purchase/cart/email), fixed source-bound as_of, safe DTOs and exact SQL predicates. Use bound identity/hash/filter/numeric values; no arbitrary SQL. Profiles/preview paginated server-side, not full Python warehouse scans. Cohort/source summaries usable without detail; missing detail returns unavailable and preview fails409. Existing Gold fields remain source totals.
+- [x] Run focused/full tests and actual CH queries when Docker restored, inspect consent/retention reconciliation. Expected PASS. Architecture/diff check, commit feat: serve pinned Customer 360 and lifecycle insights.
 
 ## Task 3: Immutable saved segment revisions and HTTP/proxy
 
@@ -67,20 +67,20 @@ Consumes Task1 rules/metrics and existing Analytics/JourneyJournal/single_curren
 `save(segment_id: str,name: str,rule: SegmentRule,expected_version: int) -> dict`, `revision(segment_id: str,version: int) -> dict|None`;
 `register_lifecycle_routes(app: FastAPI,analytics: Analytics,store: AppStore) -> None`.
 
-- [ ] Write RED tests: empty/idempotent migration, exact canonical JSON/digest, version1/create and version2 update, immutable old revision; stale/concurrent edits one winner409, restart still replays old rule. Dedicated mp08_test DB reset only. Invalid payload/unknown ID/model/name/extra keys422; errors409/404/503, no-store; read-only preview never saves; privacy at HTTP boundary.
-- [ ] Run focused tests (opt-in PG tests run later actual Docker). Expected missing interfaces FAIL.
-- [ ] Implement additive schema/current row+immutable revisions transaction, optimistic CAS and parameterized SQL. Initialize with existing app startup migration under separate lock36008; seed nothing. Register fixed lifecycle routes and stable errors; expand proxy allowlist only specified GET/POST/PUT paths. Preserve MP06–07 behavior.
-- [ ] Run focused/full Python suite and real PG revision/concurrency tests in dedicated mp08_test, architecture/diff check. Expected PASS. Commit feat: save versioned lifecycle segments and expose APIs.
+- [x] Write RED tests: empty/idempotent migration, exact canonical JSON/digest, version1/create and version2 update, immutable old revision; stale/concurrent edits one winner409, restart still replays old rule. Dedicated mp08_test DB reset only. Invalid payload/unknown ID/model/name/extra keys422; errors409/404/503, no-store; read-only preview never saves; privacy at HTTP boundary.
+- [x] Run focused tests (opt-in PG tests run later actual Docker). Expected missing interfaces FAIL.
+- [x] Implement additive schema/current row+immutable revisions transaction, optimistic CAS and parameterized SQL. Initialize with existing app startup migration under separate lock36008; seed nothing. Register fixed lifecycle routes and stable errors; expand proxy allowlist only specified GET/POST/PUT paths. Preserve MP06–07 behavior.
+- [x] Run focused/full Python suite and real PG revision/concurrency tests in dedicated mp08_test, architecture/diff check. Expected PASS. Commit feat: save versioned lifecycle segments and expose APIs.
 
 ## Task 4: Cohort-to-customer workspace and segment editor
 
 **Files:** Create web/app/customers/{page.tsx,types.ts}, web/tests/customers.spec.ts; modify shared navigation/styles.
 **Interfaces:** Task2/3 route DTOs. Combined cohort/profile identities must match; previews must match current rule digest and workspace release. Selected timeline checks returned identity/reference against active profile context.
 
-- [ ] Write RED browser tests: cohorts drill exact activity month; RFM/consent/category labels; exact >2**53/negative net; saved rule create/edit/reload old version with immutable view; preview empty activation rule excludes population; unavailable/restricted/zero states; current filter/profile/rule/release suppresses delayed old responses; disabled save draft; mobile/keyboard/no page overflow.
-- [ ] Run new browser tests. Expected absent page FAIL.
-- [ ] Build responsive `/customers` with navigation, scope/as_of/source details, retention table, purpose/type/opportunity filters, pagination, RFM/consent table, timeline, fixed condition editor and saved revision selector. Use AbortController/request contexts and previous-selection markers. No invented ML confidence or activation delivery. Draft is preserved on errors and locked while saving.
-- [ ] Run full MP06–08 browser tests/typecheck/build and Python suite; Docker build/recreate only API/web; actual desktop/mobile/drill visual QA. Expected PASS. Architecture/diff check and commit feat: add Customer 360 lifecycle and segment workspace.
+- [x] Write RED browser tests: cohorts drill exact activity month; RFM/consent/category labels; exact >2**53/negative net; saved rule create/edit/reload old version with immutable view; preview empty activation rule excludes population; unavailable/restricted/zero states; current filter/profile/rule/release suppresses delayed old responses; disabled save draft; mobile/keyboard/no page overflow.
+- [x] Run new browser tests. Expected absent page FAIL.
+- [x] Build responsive `/customers` with navigation, scope/as_of/source details, retention table, purpose/type/opportunity filters, pagination, RFM/consent table, timeline, fixed condition editor and saved revision selector. Use AbortController/request contexts and previous-selection markers. No invented ML confidence or activation delivery. Draft is preserved on errors and locked while saving.
+- [x] Run full MP06–08 browser tests/typecheck/build and Python suite; Docker build/recreate only API/web; actual desktop/mobile/drill visual QA. Expected PASS. Architecture/diff check and commit feat: add Customer 360 lifecycle and segment workspace.
 
 ## Task 5: Independent proof, restart, benchmark, docs and final review
 
@@ -89,10 +89,10 @@ Consumes Task1 rules/metrics and existing Analytics/JourneyJournal/single_curren
  update architecture/backlog/spec/plan observed status.
 **Interfaces:** Task2 service DTOs and Task3 revisions; existing proof project/network/volumes. Oracle uses validated MP05 exports + MP07 events, never service's own rollup/predicate.
 
-- [ ] Write RED proof assertions detecting duplicate/missing keyed profiles, false activation eligibility, incorrect RFM/monetary and cohort membership. Expected absent helper FAIL.
-- [ ] Implement exact independent profile/cohort/timeline/activation oracles from bound typed exports and governed sidecar; include owned isolated denied/unknown consent cases, a refund-only/never-purchased case, fixed rule replay and immutable old revisions across stale writes. No source mutation or external delivery. Evidence .lakehouse/mp08-proof/.
-- [ ] Run Docker proof actual HTTP/write/PG/CH + API/web restart; compare unchanged MP06–07 finance/config/source release and MP08 revisions/results. Benchmark20warmups/100uncached serial samples each for cohorts/profiles/timeline/preview, p95<=500ms fixture target, disclose versions/resources/bounds. Expected PASS.
-- [ ] Run full Python/source fixture validation/all browser tests/typecheck/build/Compose/diff checks and actual visual QA. Expected PASS. Commit observed proof/docs, mark only observed acceptance.
+- [x] Write RED proof assertions detecting duplicate/missing keyed profiles, false activation eligibility, incorrect RFM/monetary and cohort membership. Expected absent helper FAIL.
+- [x] Implement exact independent profile/cohort/timeline/activation oracles from bound typed exports and governed sidecar; include owned isolated denied/unknown consent cases, a refund-only/never-purchased case, fixed rule replay and immutable old revisions across stale writes. No source mutation or external delivery. Evidence .lakehouse/mp08-proof/.
+- [x] Run Docker proof actual HTTP/write/PG/CH + API/web restart; compare unchanged MP06–07 finance/config/source release and MP08 revisions/results. Benchmark20warmups/100uncached serial samples each for cohorts/profiles/timeline/preview, p95<=500ms fixture target, disclose versions/resources/bounds. Expected PASS.
+- [x] Run full Python/source fixture validation/all browser tests/typecheck/build/Compose/diff checks and actual visual QA. Expected PASS. Commit observed proof/docs, mark only observed acceptance.
 - [ ] Fresh whole-branch review base0512e3d using most-capable reviewer, Review Focus verbatim plus ledger rulings. One Critical/Important fix pass via RED/GREEN/full suite, affected Docker proof; minor findings recorded. Final docs/commit and Git check; retain new local branch without creating worktree or unrequested PR/merge.
 
 ## Self-review

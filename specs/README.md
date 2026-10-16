@@ -192,7 +192,7 @@ attribution without changing the underlying orders.
 
 ### MP-08 - Customer 360 and lifecycle intelligence
 
-**Status:** Specified; implementation pending. Depends on MP-04/05; stacked on complete MP-07.
+**Status:** Implemented and locally verified; final review pending. Depends on MP-04/05; stacked on complete MP-07.
 
 Scope: [`08-customer-lifecycle-intelligence.md`](08-customer-lifecycle-intelligence.md).
 Plan: [`2026-10-16-customer-lifecycle-intelligence.md`](../docs/superpowers/plans/2026-10-16-customer-lifecycle-intelligence.md).

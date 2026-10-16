@@ -551,7 +551,7 @@ operational state and MP-07 outputs. Desktop/mobile/drill visual checks and all
 fourteen browser tests passed. See [decisions/evidence](mp07-decisions.md) and
 [runbook](../runbooks/funnel-attribution.md) for bounds and explicit publication.
 
-### 4.7 MP-08 Customer 360 and lifecycle boundary (specified; implementation pending)
+### 4.7 MP-08 Customer 360 and lifecycle boundary (locally verified; final review pending)
 
 Strict versioned segment contracts, pure RFM/consent evidence and request-pinned
 ClickHouse lifecycle reads are implemented. Real queries preserve 60 historical
@@ -563,8 +563,14 @@ workspace now supports cohort/activity drills, categorical identity/consent evid
 RFM/heuristic tables, paginated governed timelines and a versioned segment editor.
 Combined reads and rule/timeline contexts reject stale/mixed releases; saves lock
 the draft and old revisions remain read-only. Twenty-two browser tests, production
-build and actual Docker desktop/mobile inspection pass. Final independent proof
-remains pending. The [MP-08 spec](../../specs/08-customer-lifecycle-intelligence.md) extends the
+build and actual Docker desktop/mobile inspection pass. Independent validated
+exports, 29 discovery cases and all 60 timelines reconcile 60 historical/37
+activation-eligible profiles and 191 governed events. Owned consent/refund/currency
+faults and PostgreSQL immutable/concurrent revision tests pass. API/web restart
+preserves revisions and MP06–07 outputs. Fixture p95 cohorts/profiles/timeline/preview
+is 13.64/28.53/22.00/32.39ms, 20warmups/100uncached samples each. Fresh review
+remains pending. See [decisions](mp08-decisions.md) and
+[runbook](../runbooks/customer-lifecycle.md). The [MP-08 spec](../../specs/08-customer-lifecycle-intelligence.md) extends the
 existing FastAPI/Next.js app with historical cohorts, pseudonymous RFM profiles,
 governed timelines and versioned segment previews. Analytical queries reuse the
 immutable ClickHouse Customer 360/cohort/CRM relations and MP-07 event sidecar;
