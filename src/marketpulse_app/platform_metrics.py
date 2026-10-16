@@ -4,6 +4,7 @@ import json
 import os
 import socket
 import urllib.request
+import urllib.parse
 from .metrics import Sample
 TOPICS=('marketing.raw.web-events.v1','marketing.raw.order-events.v1','marketing.raw.email-events.v1','marketing.gold.campaign-metrics.v1','marketing.gold.funnel-metrics.v1','marketing.gold.revenue-metrics.v1','marketing.dlq.validation.v1','marketing.dlq.flink-validation.v1')
 GROUPS=('marketpulse-campaign-serving-v1','marketpulse-flink-v1')
@@ -57,12 +58,19 @@ def poll_flink() -> list[Sample]:
             for key in keys[:1]:
                 rows=get_json(url+'?get='+urllib.parse.quote(key)+'&agg=sum')
                 if rows and 'sum' in rows[0]:result.append(Sample('mp_flink_operator_events_total',float(rows[0]['sum']),(('kind',kind),)))
-    taskmanagers=get_json(base+'/taskmanagers')
-    for manager in taskmanagers.get('taskmanagers',[])[:4]:
+    managers=get_json(base+'/taskmanagers').get('taskmanagers',[])
+    if len(managers)>4:raise ValueError('bounded Flink manager limit exceeded')
+    observations={'heap_bytes_sum':[],'cpu_load_mean':[]}
+    for manager in managers:
         url=base+'/taskmanagers/'+manager['id']+'/metrics?get=Status.JVM.Memory.Heap.Used,Status.JVM.CPU.Load'
-        for r in get_json(url):
-            kind={'Status.JVM.Memory.Heap.Used':'heap_bytes','Status.JVM.CPU.Load':'cpu_load'}.get(r['id'])
-            if kind:result.append(Sample('mp_flink_jvm',float(r['value']),(('kind',kind),)))
+        values={row['id']:float(row['value']) for row in get_json(url)}
+        for field,kind in (('Status.JVM.Memory.Heap.Used','heap_bytes_sum'),('Status.JVM.CPU.Load','cpu_load_mean')):
+            value=values.get(field)
+            if value is not None and value>=0:observations[kind].append(value)
+    for kind,values in observations.items():
+        # No partial total/mean when any manager lacks the measurement.
+        if values and len(values)==len(managers):
+            result.append(Sample('mp_flink_jvm',sum(values)/(len(values) if kind=='cpu_load_mean' else 1),(('kind',kind),)))
     return result
 
 def clickhouse_samples(analytics) -> list[Sample]:

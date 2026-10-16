@@ -56,3 +56,16 @@ class QualityTests(unittest.TestCase):
         baseline={'gross_revenue_minor':100,'refund_amount_minor':20,'net_revenue_minor':80}
         evidence=probe_evidence((10,'a'*64),(10,'b'*64),baseline,baseline|{'gross_revenue_minor':101,'net_revenue_minor':81})
         self.assertEqual(evidence['observed_checksum'],'b'*64);self.assertEqual(evidence['observed_finance']['net_revenue_minor'],'81');self.assertEqual(evidence['expected_row_count'],evidence['observed_row_count'])
+    def test_failed_and_successful_quality_reports_preserve_expected_binding(self):
+        from unittest.mock import Mock,patch
+        release=SimpleNamespace(identity='a',database='b',proof_digest='c')
+        receipt=SimpleNamespace(identity='a',bronze_snapshots={'bronze.kafka_records':12},output_snapshots={'silver.customer_events':42})
+        cert=SimpleNamespace(identity='a',database='b',proof_digest='c',manifest_digest='d',proof_path=SimpleNamespace(read_bytes=lambda:b'{"relations":[]}'))
+        manifest=SimpleNamespace(identity='a',digest='d')
+        ledger=Mock();ledger.get_receipt.return_value=(receipt,'file:///x');ledger.get_certified_bundle.return_value=SimpleNamespace(certification_uri='file:///cert',export_manifest_uri='file:///manifest',**vars(release))
+        service=QualityService(SimpleNamespace(pin=lambda:SimpleNamespace(release=release,client=Mock())),ledger,Path('/'));service._path=Mock(return_value=SimpleNamespace(read_bytes=lambda:b'{}'));service._rowsets=Mock(return_value=[]);service._finance=Mock(return_value={})
+        with patch('marketpulse_app.quality.single_currency'),patch('marketpulse_app.quality.read_certification',return_value=cert),patch('marketpulse_app.quality.ExportManifest.from_payload',return_value=manifest),patch('marketpulse_app.quality.verify_certification_current') as verify,patch('marketpulse_app.quality.JourneyJournal') as journal,patch('marketpulse_app.quality.verify_projection'):
+            journal.return_value.resolve.return_value=SimpleNamespace(silver_snapshot_id=42)
+            verify.side_effect=ValueError('same-count certified rowset corruption')
+            failed=service.check();self.assertEqual(failed['status'],'failed');self.assertEqual(failed['identity'],'a');self.assertEqual(failed['proof_digest'],'c');self.assertEqual(failed['binding'],'expected');self.assertEqual(failed['output_snapshots'],{'silver.customer_events':'42'})
+            verify.side_effect=None;passed=service.check();self.assertEqual(passed['status'],'passed');self.assertEqual(passed['binding'],'verified');self.assertEqual(passed['source_snapshots'],{'bronze.kafka_records':'12'})

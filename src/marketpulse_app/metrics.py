@@ -4,6 +4,7 @@ import json
 import math
 import os
 import resource
+import re
 import sys
 import threading
 import time
@@ -18,9 +19,18 @@ class Sample:
     labels:tuple[tuple[str,str],...]=()
 
 def render(samples:list[Sample]) -> str:
-    lines=[]
+    lines=[];identities=set()
     for sample in samples:
-        if not math.isfinite(float(sample.value)):raise ValueError('nonfinite metric')
+        if not isinstance(sample,Sample) or re.fullmatch(r'[a-zA-Z_:][a-zA-Z0-9_:]*',sample.name) is None:
+            raise ValueError('invalid metric sample')
+        if type(sample.value) not in (int,float) or not math.isfinite(sample.value):raise ValueError('nonfinite metric')
+        keys=set()
+        for key,value in sample.labels:
+            if re.fullmatch(r'[a-zA-Z_][a-zA-Z0-9_]*',key) is None or key in keys or not isinstance(value,str):raise ValueError('invalid metric label')
+            keys.add(key)
+        identity=(sample.name,tuple(sorted(sample.labels)))
+        if identity in identities:raise ValueError('duplicate metric identity')
+        identities.add(identity)
         labels='{'+','.join(k+'='+json.dumps(v,ensure_ascii=True) for k,v in sample.labels)+'}' if sample.labels else ''
         lines.append(f'{sample.name}{labels} {sample.value}')
     return '\n'.join(lines)+'\n'

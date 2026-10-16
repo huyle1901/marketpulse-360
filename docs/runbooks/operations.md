@@ -79,7 +79,9 @@ The provisioned dashboard is `/d/marketpulse-operations`. API requests/histogram
 and process CPU/RSS are measured; ClickHouse memory is its tracked memory, not
 host usage. Kafka graphs show offset advance, including transaction/control
 records; committed lag also uses offset units. MP02 controlled validation-case
-DLQ and Flink validation DLQ are separate. Flink `invalid` counter rate measures
+DLQ and Flink validation DLQ are separate. Flink JVM heap is summed and CPU load averaged across up to four task managers;
+missing manager measurements are omitted and exceeding that bound marks the
+source unavailable. Flink `invalid` counter rate measures
 that operator's invalid events, not a cross-stage failure share. No denominator
 is invented. Existing Flink REST supplies counters/checkpoints/JVM when present;
 this verification deliberately leaves Flink/Dagster stopped and shows unavailable,
@@ -144,3 +146,12 @@ Before any future source retention change, inventory active/pinned releases,
 sidecars, Iceberg snapshots, export/dbt proof objects and ledger mappings, take and
 validate backups, and prepare an explicit deletion set for review. No broad volume
 reset or analytical deletion command is part of this runbook.
+
+## Deferred review details
+
+Missing certification files currently produce failed rather than unavailable;
+check evidence mounts before treating that alarm as changed business data.
+Operations links assume default Grafana43001/Prometheus49090; if overriding ports,
+open the configured loopback URLs directly. Session ordering, invalid telemetry
+isolation, multi-manager JVM uniqueness and failed-report provenance were fixed
+with regression tests; see [MP09 decisions](../architecture/mp09-decisions.md).

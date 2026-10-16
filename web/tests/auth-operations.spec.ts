@@ -32,3 +32,16 @@ test('a delayed earlier operations refresh cannot replace the latest',async({pag
  await page.route('**/api/v1/ops/**',async r=>{const p=new URL(r.request().url()).pathname;if(p.endsWith('status')){count++;if(count===1){await pending;await r.fulfill({json:{status:'obsolete'}});}else await r.fulfill({json:{status:'current'}});}else await r.fulfill({json:p.endsWith('users')||p.endsWith('audit')||p.endsWith('quality')?[]:{}});});
  await page.goto('/operations');await page.getByRole('button',{name:'Refresh operations'}).click();await expect(page.getByText('"status": "current"',{exact:false})).toBeVisible();release();await expect(page.getByText('"status": "obsolete"',{exact:false})).toHaveCount(0);
 });
+test('an obsolete session response cannot restore an expired workspace',async({page})=>{
+ await page.clock.install();let polls=0;let holdNext=false;let heldOnce=false;let release!:()=>void;let completed!:()=>void;const held=new Promise<void>(r=>{release=r;});const done=new Promise<void>(r=>{completed=r;});
+ await page.route('**/api/v1/auth/session',async r=>{polls++;if(holdNext&&!heldOnce){heldOnce=true;await held;try{await r.fulfill({json:{user_id:'a',username:'admin',role:'admin'}});}finally{completed();}}else await r.fulfill({json:{user_id:'a',username:'admin',role:'admin'}});});
+ await page.route('**/api/v1/ops/**',r=>r.fulfill({json:new URL(r.request().url()).pathname.match(/(users|audit|quality)$/)?[]:{status:'available'}}));
+ await page.goto('/operations');await expect(page.getByRole('heading',{name:'Operations & trust'})).toBeVisible();const initial=polls;holdNext=true;await page.clock.fastForward(15000);await expect.poll(()=>polls).toBe(initial+1);
+ await page.evaluate(()=>window.dispatchEvent(new Event('mp-session-expired')));await expect(page.getByRole('heading',{name:'Sign in to MarketPulse 360'})).toBeVisible();release();await done;await page.clock.runFor(100);await expect(page.getByRole('heading',{name:'Sign in to MarketPulse 360'})).toBeVisible();await expect(page.getByRole('heading',{name:'Operations & trust'})).toHaveCount(0);
+});
+test('session polls honor the latest check rather than response arrival order',async({page})=>{
+ await page.clock.install();let polls=0;let holdNext=false;let heldOnce=false;let release!:()=>void;let completed!:()=>void;const held=new Promise<void>(r=>{release=r;});const done=new Promise<void>(r=>{completed=r;});
+ await page.route('**/api/v1/auth/session',async r=>{polls++;if(holdNext&&!heldOnce){heldOnce=true;await held;try{await r.fulfill({json:{user_id:'a',username:'obsolete-admin',role:'admin'}});}finally{completed();}}else await r.fulfill({json:{user_id:'v',username:'current-viewer',role:'viewer'}});});
+ await page.goto('/operations');await expect(page.getByRole('heading',{name:'Administrator access required'})).toBeVisible();const initial=polls;holdNext=true;await page.clock.fastForward(15000);await expect.poll(()=>polls).toBe(initial+1);await page.clock.fastForward(15000);await expect.poll(()=>polls).toBe(initial+2);release();await done;await page.clock.runFor(100);
+ await expect(page.getByRole('heading',{name:'Administrator access required'})).toBeVisible();await expect(page.getByText('obsolete-admin · admin')).toHaveCount(0);
+});

@@ -13,7 +13,8 @@ class Collector:
     def __init__(self,sources):self.sources=sources;self._cache={};self._lock=threading.Lock()
     def poll(self,name:str) -> None:
         now=time.time()
-        try:samples=self.sources[name]();success=True
+        try:
+            samples=list(self.sources[name]());render(samples);success=True
         except Exception:samples=[];success=False
         with self._lock:self._cache[name]=(now,success,samples)
     def samples(self) -> list[Sample]:

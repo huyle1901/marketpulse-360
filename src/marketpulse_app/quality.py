@@ -28,9 +28,12 @@ class QualityService:
         parsed=urlparse(uri);path=Path(unquote(parsed.path)).resolve()
         if parsed.scheme!='file' or parsed.netloc or parsed.query or parsed.fragment or not path.is_relative_to(self.state_root.resolve()):raise ValueError('proof_path')
         return path
-    def _context(self):
-        session=self.analytics.pin();release=session.release
-        receipt,_=self.ledger.get_receipt(release.identity);bundle=self.ledger.get_certified_bundle(release.identity)
+    def _context(self,session=None,report=None):
+        session=session or self.analytics.pin();release=session.release
+        receipt,_=self.ledger.get_receipt(release.identity)
+        if report is not None:
+            report.update(source_snapshots=wire(dict(receipt.bronze_snapshots)),output_snapshots=wire(dict(receipt.output_snapshots)))
+        bundle=self.ledger.get_certified_bundle(release.identity)
         if bundle is None:raise OSError('no evidence')
         cert=read_certification(self._path(bundle.certification_uri))
         manifest=ExportManifest.from_payload(json.loads(self._path(bundle.export_manifest_uri).read_bytes()))
@@ -65,23 +68,30 @@ class QualityService:
     def lineage(self) -> dict:
         session,receipt,cert,manifest,p=self._context()
         return wire({'identity':receipt.identity,'proof_digest':cert.proof_digest,'model_digest':receipt.model_digest,'export_digest':manifest.digest,'dbt_invocation_id':cert.dbt_invocation_id,'source_snapshots':dict(receipt.bronze_snapshots),'output_snapshots':dict(receipt.output_snapshots),'projection':{'version':p.version,'snapshot_id':p.silver_snapshot_id,'row_count':p.row_count,'checksum':p.checksum}})
-    def check(self,scope:str='live') -> dict:
-        report={'scope':scope,'observed_at':datetime.now(timezone.utc).isoformat(),'status':'unavailable','reason':'dependency_or_evidence_unavailable'}
+    @staticmethod
+    def _report(scope:str) -> dict:
+        return {'scope':scope,'observed_at':datetime.now(timezone.utc).isoformat(),'status':'unavailable','reason':'dependency_or_evidence_unavailable'}
+    def check(self,scope:str='live',*,session=None) -> dict:
+        report=self._report(scope)
         try:
-            session,receipt,cert,manifest,projection=self._context();report.update(identity=receipt.identity,proof_digest=cert.proof_digest)
+            session=session or self.analytics.pin()
+            report.update(identity=session.release.identity,proof_digest=session.release.proof_digest,binding='expected')
+            session,receipt,cert,manifest,projection=self._context(session,report)
             proof=json.loads(cert.proof_path.read_bytes())
             relations=self._rowsets(session.client,cert.database,proof)
             finance=self._finance(session.client,cert.database,projection)
-            report.update(status='passed',reason='certified_rowsets_and_source_finance',relations=relations,finance=finance)
+            report.update(status='passed',reason='certified_rowsets_and_source_finance',binding='verified',relations=relations,finance=finance)
         except ValueError:report.update(status='failed',reason='certification_or_reconciliation_failed')
         except Exception:pass
         return report
     def probe(self) -> dict:
-        report=self.check('probe')
+        try:session=self.analytics.pin()
+        except Exception:return self._report('probe')
+        report=self.check('probe',session=session)
         if report['status']!='passed':return report
         owned=None;client=None
         try:
-            session,receipt,cert,manifest,projection=self._context();client=session.client;proof=json.loads(cert.proof_path.read_bytes())
+            session,receipt,cert,manifest,projection=self._context(session);client=session.client;proof=json.loads(cert.proof_path.read_bytes())
             if sum(r['row_count'] for r in proof['relations'])>5000:raise ValueError('probe_limit')
             candidate='mp09_probe_'+uuid.uuid4().hex
             client.command(f'CREATE DATABASE {candidate} ENGINE=Atomic');owned=candidate
