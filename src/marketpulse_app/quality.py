@@ -55,7 +55,7 @@ class QualityService:
         return result
     @staticmethod
     def _finance(client,database:str,projection) -> dict:
-        source=client.query(f"SELECT sumIf(toInt128(ifNull(gross_amount_minor,0)),event_name='purchase'),sumIf(toInt128(ifNull(refund_amount_minor,0)),event_name='refund') FROM {projection.database}.events").first_row
+        source=client.query(f"SELECT sumIf(toInt128(ifNull(gross_amount_minor,0)),event_name='order_created'),sumIf(toInt128(ifNull(refund_amount_minor,0)),event_name='order_refunded') FROM {projection.database}.events").first_row
         baseline=dict(zip(MONEY,(source[0],source[1],source[0]-source[1])))
         performance=client.query(f'SELECT sum(toInt128(gross_revenue_minor)),sum(toInt128(refund_amount_minor)),sum(toInt128(net_revenue_minor)) FROM {database}.campaign_performance_daily').first_row
         models=client.query(f'SELECT model,sum(toInt128(allocated_gross_minor)),sum(toInt128(allocated_refund_minor)),sum(toInt128(allocated_net_minor)) FROM {database}.attribution_daily GROUP BY model').result_rows

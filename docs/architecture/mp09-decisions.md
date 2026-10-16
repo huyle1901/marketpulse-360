@@ -21,3 +21,8 @@ Collector polls run independently and scrapes read cached samples only. A failed
 source clears its samples while preserving other source results; source age is
 explicit. API metrics use server-defined templates and process CPU/RSS; no host
 CPU inference or identifiers in labels. Kafka probes never subscribe/commit.
+
+The observability profile adds collector, Prometheus and Grafana only. The API
+and collector mount persisted batch evidence read-only. Compose secrets expose
+only supplied leaf files; ignored host secret directory is0700. Grafana uses
+its own operator login; app RBAC does not protect local operator tool ports.

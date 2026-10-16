@@ -16,3 +16,12 @@ class QualityTests(unittest.TestCase):
     def test_probe_stops_before_create_when_baseline_unavailable(self):
         service=QualityService(SimpleNamespace(pin=lambda: (_ for _ in ()).throw(OSError())),None,Path('/none'))
         self.assertEqual(service.probe()['status'],'unavailable')
+    def test_finance_uses_existing_governed_commerce_event_names(self):
+        seen=[]
+        class Client:
+            def query(self,sql):
+                seen.append(sql)
+                if '.events' in sql:return SimpleNamespace(first_row=(100,20) if "event_name='order_created'" in sql and "event_name='order_refunded'" in sql else (0,0))
+                if 'GROUP BY' in sql:return SimpleNamespace(result_rows=[(m,100,20,80) for m in ('first_touch','last_touch','linear')])
+                return SimpleNamespace(first_row=(100,20,80))
+        self.assertEqual(QualityService._finance(Client(),'release',SimpleNamespace(database='projection'))['net_revenue_minor'],'80')

@@ -48,3 +48,5 @@ web/playwright-report/
 web/tsconfig.tsbuildinfo
 web/next-env.d.ts
 *.egg-info/
+
+.secrets/
