@@ -71,3 +71,9 @@ class AuthPGTests(unittest.TestCase):
         self.assertIsNone(self.auth.login('admin-test','secure password 123'))
         token,_=self.auth.login('admin-test-unknown','wrong password') or ('',None)
         self.assertEqual(self.auth.cleanup_sessions(),0)
+
+class MetricsAccessTests(unittest.TestCase):
+    def test_metrics_requires_separate_bearer(self):
+        c=TestClient(create_app(SimpleNamespace(),SimpleNamespace(),access=AccessControl(FakeAuth(),'http://testserver',metrics_token='private-service-token')))
+        self.assertEqual(c.get('/metrics').status_code,401)
+        self.assertEqual(c.get('/metrics',headers={'Authorization':'Bearer private-service-token'}).status_code,200)
