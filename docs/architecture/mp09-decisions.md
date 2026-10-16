@@ -103,3 +103,14 @@ retaining filenames, permissions, random generation, idempotence and symlink
 refusal. Existing filesystem tests and the398-test Python suite pass(40 opt-in
 skipped). Published history is preserved and alerts are not ignored; the new head
 must be checked on GitHub before claiming scanner success.
+
+Remote follow-up: PR6 targets main; PR7 targets MP06; PR8 targets MP07; PR9
+ targets MP08, preserving one milestone per review diff. PRs6–8 GitGuardian checks
+are SUCCESS. After remediation commit1f809a0, PR9 remains FAILURE and its bot
+report still references only original commit4d13b1c, ops_setup.py:9, with two
+incident IDs38276830/38276831 (four occurrences). These are historical file-mode
+false positives, not newly generated credential values. Docker execution verifies
+all five filenames, exact modes and unchanged values on repeat setup. GitGuardian
+dashboard triage was unavailable from this session; no finding was ignored and
+no published history was rewritten. PR9 describes the open scanner blocker and
+must not be described as passing GitGuardian until disposition is verified.
