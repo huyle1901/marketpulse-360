@@ -93,7 +93,7 @@ Consumes Task1 rules/metrics and existing Analytics/JourneyJournal/single_curren
 - [x] Implement exact independent profile/cohort/timeline/activation oracles from bound typed exports and governed sidecar; include owned isolated denied/unknown consent cases, a refund-only/never-purchased case, fixed rule replay and immutable old revisions across stale writes. No source mutation or external delivery. Evidence .lakehouse/mp08-proof/.
 - [x] Run Docker proof actual HTTP/write/PG/CH + API/web restart; compare unchanged MP06–07 finance/config/source release and MP08 revisions/results. Benchmark20warmups/100uncached serial samples each for cohorts/profiles/timeline/preview, p95<=500ms fixture target, disclose versions/resources/bounds. Expected PASS.
 - [x] Run full Python/source fixture validation/all browser tests/typecheck/build/Compose/diff checks and actual visual QA. Expected PASS. Commit observed proof/docs, mark only observed acceptance.
-- [ ] Fresh whole-branch review base0512e3d using most-capable reviewer, Review Focus verbatim plus ledger rulings. One Critical/Important fix pass via RED/GREEN/full suite, affected Docker proof; minor findings recorded. Final docs/commit and Git check; retain new local branch without creating worktree or unrequested PR/merge.
+- [x] Fresh whole-branch review base0512e3d using most-capable reviewer, Review Focus verbatim plus ledger rulings. One Critical/Important fix pass via RED/GREEN/full suite, affected Docker proof; minor findings recorded. Final docs/commit and Git check; retain new local branch without creating worktree or unrequested PR/merge.
 
 ## Self-review
 
@@ -101,3 +101,7 @@ Spec maps to strict inputs/semantics(1), CH reads/gates(2), operational storage/
 usable workflow/races(4), independent correctness/runtime evidence(5). Shared interfaces
 above use existing pin/projection/hash contracts. User's standing backlog delegation
 and native same-tree execution continue; no additional approval stop is needed.
+
+Fresh review `0512e3d..b9a500f`: no Critical/Important issues. Deferred minor:
+explicit saved-head refresh preserving drafts; current concurrent-edit recovery
+requires a full browser reload, documented in the runbook. No production fix.
