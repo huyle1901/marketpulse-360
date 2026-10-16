@@ -56,15 +56,23 @@ class SimulationInput(BaseModel):
     allocations: list[AllocationInput] = Field(min_length=1, max_length=100)
 
 
-def create_app(analytics: Any, store: Any) -> FastAPI:
+def create_app(analytics: Any, store: Any, access: Any = None, operations: Any = None) -> FastAPI:
+    from .metrics import Metrics
+    import time
+    metrics=Metrics()
     app = FastAPI(title="MarketPulse 360 Campaign Operations", version="0.6.0")
 
     @app.middleware("http")
     async def cache_boundary(request: Request, call_next):
+        started=time.perf_counter()
         try:
-            response = await call_next(request)
+            if access is None and request.url.path not in ('/api/v1/health/live','/api/v1/health/ready'):
+                response = JSONResponse({'code':'unauthorized'},status_code=401)
+            else:
+                response = await access.enforce(request,call_next) if access else await call_next(request)
         except Exception:
             response = JSONResponse({"code": "dependency_unavailable", "message": "Service dependency unavailable"}, status_code=503)
+        metrics.observe(getattr(request.state,'route_template','unknown'),request.method,response.status_code,time.perf_counter()-started)
         response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -89,6 +97,11 @@ def create_app(analytics: Any, store: Any) -> FastAPI:
         if found is None or currency is not None and found["currency"] != currency:
             raise ValueError("unknown campaign or currency mismatch")
         return found
+
+    @app.get('/metrics')
+    def scrape():
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(metrics.render()+f'mp_audit_outcome_failures_total {getattr(access,"audit_outcome_failures",0)}\n',media_type='text/plain; version=0.0.4')
 
     @app.get("/api/v1/health/live")
     def live():
@@ -186,6 +199,12 @@ def create_app(analytics: Any, store: Any) -> FastAPI:
     register_analysis_routes(app, analytics, store)
     from .lifecycle_api import register_lifecycle_routes
     register_lifecycle_routes(app, analytics, store)
+    if access is not None:
+        from .auth_api import register_auth_routes
+        register_auth_routes(app,access)
+    if operations is not None:
+        from .operations import register_operations_routes
+        register_operations_routes(app,operations)
     return app
 
 
@@ -195,4 +214,12 @@ def runtime_app() -> FastAPI:
     store.initialize()
     from .segment_store import SegmentStore
     SegmentStore(store).initialize()
-    return create_app(analytics, store)
+    from .auth_store import AuthStore
+    from .access import AccessControl
+    from pathlib import Path
+    auth=AuthStore(store);auth.initialize()
+    token=Path(os.environ.get('METRICS_TOKEN_FILE','/run/secrets/metrics_token')).read_text().strip()
+    access=AccessControl(auth,os.environ.get('APP_PUBLIC_ORIGIN','http://localhost:3100'),
+                         os.environ.get('APP_COOKIE_SECURE','false')=='true',token)
+    from .operations import runtime_operations
+    return create_app(analytics, store,access=access,operations=runtime_operations(analytics,store,auth))

@@ -86,12 +86,17 @@ print(json.dumps({"latest":latest,"records_read":count,"partitions":len(partitio
 '''
 
 
+from marketpulse_app.proof_http import ProofHTTP,add_auth_arguments
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project", required=True)
     parser.add_argument("--api", default="http://127.0.0.1:48000")
     parser.add_argument("--output", type=Path, default=Path(".lakehouse/mp06-proof/acceptance.json"))
+    add_auth_arguments(parser)
     args = parser.parse_args()
+    http=ProofHTTP(args.api,args.origin,args.username,args.password_file)
     if not args.project.startswith("marketpulse-") or "proof" not in args.project:
         parser.error("select an explicitly test-owned marketpulse-...proof project")
     container = f"{args.project}-api-1"
@@ -100,7 +105,7 @@ def main() -> int:
         req = urllib.request.Request(args.api+"/api/v1/"+path,
             data=json.dumps(body).encode() if body is not None else None,
             headers={"Content-Type": "application/json"}, method=method)
-        with urllib.request.urlopen(req, timeout=15) as response:
+        with http.open(req, timeout=15) as response:
             assert response.headers.get("Cache-Control") == "no-store"
             return json.load(response)
 

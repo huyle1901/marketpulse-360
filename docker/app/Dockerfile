@@ -7,4 +7,4 @@ COPY pyproject.toml /app/
 COPY src/ /app/src/
 RUN pip install --no-cache-dir --no-deps . && useradd --create-home --uid 10001 marketpulse
 USER marketpulse
-CMD ["uvicorn", "marketpulse_app.api:runtime_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "marketpulse_app.api:runtime_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

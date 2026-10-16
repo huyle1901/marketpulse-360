@@ -1,0 +1,521 @@
+{
+  "uid": "marketpulse-operations",
+  "title": "MarketPulse 360 \u2014 Operations",
+  "schemaVersion": 42,
+  "version": 1,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "tags": [
+    "marketpulse",
+    "mp09"
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Target/source availability",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up or mp_source_up",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "API requests / second",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status) (rate(mp_api_requests_total[1m]))",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "API p95 seconds",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(mp_api_request_seconds_bucket[1m])))",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Kafka offset advance / second (includes transaction/control records)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(mp_kafka_log_end_offset[1m])",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Committed consumer lag in offset units (unknown omitted)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mp_kafka_committed_lag",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "DLQ offset advance / second: controlled validation vs Flink",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(mp_kafka_log_end_offset{topic=~\"marketing.dlq.*\"}[1m])",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Flink stage event rates (invalid = validation DLQ rate)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(mp_flink_operator_events_total[1m])",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Flink job running / checkpoint counts",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mp_flink_job_running or mp_flink_checkpoints",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Business event age seconds (historical fixture)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - mp_business_event_timestamp_seconds",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Quality status (1 = selected state)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mp_quality_status",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Quality evidence age seconds",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - mp_quality_checked_timestamp_seconds",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Controlled probe active (separate from live quality)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mp_quality_probe_active",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "API / collector process RSS bytes",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mp_process_resident_bytes",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "API / collector process CPU cores",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(mp_process_cpu_seconds_total[1m])",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "ClickHouse tracked memory bytes",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mp_clickhouse_tracked_memory_bytes",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Flink JVM total heap bytes / mean CPU load (up to 4 managers)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 56,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mp_flink_jvm",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Collector observation timestamps (seconds)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 64,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mp_source_observed_timestamp_seconds",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Audit outcome recording failures",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "marketpulse-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 64,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mp_audit_outcome_failures_total",
+          "legendFormat": "{{source}} {{job}} {{topic}} {{group}} {{partition}} {{kind}} {{state}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable"
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

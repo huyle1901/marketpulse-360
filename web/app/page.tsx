@@ -2,6 +2,7 @@
 
 import {useEffect,useRef,useState} from 'react';
 import Link from 'next/link';
+import {useSession} from '../components/SessionGate';
 import type {Alert,Campaign,Dashboard,Pace,Rule,Scenario,Setting} from './types';
 
 const money=(value:string|null|undefined)=>value==null?'Unavailable':BigInt(value).toLocaleString('en-US');
@@ -12,6 +13,7 @@ async function api<T>(path:string,body?:unknown,method='GET',signal?:AbortSignal
 }
 
 export default function CommandCenter() {
+  const {canOperate}=useSession();
   const [report,setReport]=useState<Dashboard|null>(null);
   const [filters,setFilters]=useState({from_date:'',to_date:'',platform:'',campaign_id:'',objective:'',market:''});
   const [refreshError,setRefreshError]=useState('');
@@ -141,7 +143,7 @@ export default function CommandCenter() {
         <label>Campaign to configure<select disabled={busy} value={campaignId} onChange={e=>{setCampaignId(e.target.value);setRuleId('');}}>{campaigns.map(row=><option key={row.campaign_id} value={row.campaign_id}>{row.name}</option>)}</select></label>
         <div className="form-grid"><label>Campaign market<input value={market} maxLength={2} placeholder="Unassigned" onChange={e=>setMarket(e.target.value.toUpperCase())}/></label><label>Period budget (minor units)<input inputMode="numeric" value={budget} onChange={e=>setBudget(e.target.value)}/></label><label>Period start (UTC)<input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label><label>Period end (exclusive UTC)<input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label></div>
         <p className="source">{campaign?.currency||'Select currency via campaign'} · Saved version {saved?.version||'none'}</p>
-        <div className="actions"><button disabled={busy||!campaignId} onClick={()=>void save()}>Save campaign settings</button><button className="secondary" disabled={busy||!campaignId} onClick={()=>void action(async()=>setPace(await api<Pace>('budget-pacing/'+encodeURIComponent(campaignId))))}>View pacing</button></div>
+        <div className="actions"><button disabled={!canOperate||busy||!campaignId} onClick={()=>void save()}>Save campaign settings</button><button className="secondary" disabled={busy||!campaignId} onClick={()=>void action(async()=>setPace(await api<Pace>('budget-pacing/'+encodeURIComponent(campaignId))))}>View pacing</button></div>
         </fieldset>
         {pace&&<div className="result"><strong>{pace.status}</strong><dl><dt>Observed spend</dt><dd>{money(pace.spend_minor)}</dd><dt>Remaining budget</dt><dd>{money(pace.remaining_minor)}</dd><dt>Projected period spend</dt><dd>{money(pace.forecast_minor)}</dd><dt>Closed days</dt><dd>{pace.completed_days} / {pace.period_days}</dd></dl><p>As of {pace.data_through||'No complete dates'}; closed daily spend only.</p></div>}
       </section>
@@ -149,7 +151,7 @@ export default function CommandCenter() {
         <label>Rule to edit<select value={ruleId} onChange={e=>{setRuleId(e.target.value);const row=rules.find(item=>item.rule_id===e.target.value);if(row){setKind(row.kind);setThreshold(row.threshold);setEnabled(row.enabled);}}}><option value="">New rule</option>{rules.filter(row=>row.campaign_id===campaignId).map(row=><option key={row.rule_id} value={row.rule_id}>{row.kind} · version {row.version}</option>)}</select></label>
         <div className="form-grid"><label>Rule type<select value={kind} onChange={e=>{setKind(e.target.value);setThreshold(e.target.value==='spend_spike'?'2':e.target.value==='budget_overrun'?'1':'0');}}><option value="refund_share">Refund share</option><option value="spend_spike">Daily spend spike</option><option value="budget_overrun">Period budget overrun</option></select></label><label>Threshold<input value={threshold} disabled={kind==='budget_overrun'} onChange={e=>setThreshold(e.target.value)}/></label></div>
         <label className="checkbox"><input type="checkbox" checked={enabled} onChange={e=>setEnabled(e.target.checked)}/> Enabled</label>
-        <div className="actions"><button disabled={busy||!campaignId} onClick={()=>void saveRule()}>Save alert rule</button><button className="secondary" disabled={busy} onClick={()=>void action(async()=>{await api('alerts/evaluate',{},'POST');setAlerts(await api<Alert[]>('alerts'));setMessage('Alert evaluation complete');})}>Evaluate alerts</button></div>
+        <div className="actions"><button disabled={!canOperate||busy||!campaignId} onClick={()=>void saveRule()}>Save alert rule</button><button className="secondary" disabled={!canOperate||busy} onClick={()=>void action(async()=>{await api('alerts/evaluate',{},'POST');setAlerts(await api<Alert[]>('alerts'));setMessage('Alert evaluation complete');})}>Evaluate alerts</button></div>
       </section>
     </div>
     {message&&<p className="notice" role="status">{message}</p>}

@@ -1,0 +1,38 @@
+groups:
+  - name: marketpulse
+    rules:
+      - alert: PlatformTargetUnavailable
+        expr: up == 0 or mp_source_up == 0
+        for: 30s
+        labels: {severity: warning}
+        annotations: {summary: 'Scrape or source unavailable; inspect source observation age'}
+      - alert: ConsumerLag
+        expr: mp_kafka_committed_lag > 1000
+        for: 30s
+        labels: {severity: warning}
+      - alert: HistoricalOrStaleBusinessData
+        expr: time() - mp_business_event_timestamp_seconds > 86400
+        labels: {severity: info}
+        annotations: {summary: 'Historical fixture data may legitimately be stale'}
+      - alert: QualityEvidenceStale
+        expr: time() - mp_quality_checked_timestamp_seconds > 180
+        for: 30s
+        labels: {severity: warning}
+      - alert: LiveQualityFailed
+        expr: mp_quality_status{state="failed"} == 1
+        labels: {severity: critical}
+      - alert: LiveQualityUnavailable
+        expr: mp_quality_status{state="unavailable"} == 1
+        labels: {severity: warning}
+      - alert: ControlledQualityProbeFailed
+        expr: mp_quality_probe_active == 1
+        labels: {severity: demo}
+        annotations: {summary: 'Isolated intentional corruption detected; active release unchanged'}
+      - alert: ApiErrors
+        expr: sum(rate(mp_api_requests_total{status="5xx"}[1m])) > 0.1
+        for: 30s
+        labels: {severity: warning}
+      - alert: ApiLatency
+        expr: histogram_quantile(0.95, sum by (le) (rate(mp_api_request_seconds_bucket[1m]))) > 0.5
+        for: 30s
+        labels: {severity: warning}

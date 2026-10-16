@@ -1,3 +1,4 @@
+from app_auth_support import TrustedTestAccess
 """Owned ClickHouse fixtures exercise consent/RFM/cohort edge cases through HTTP."""
 import os,unittest,uuid
 from datetime import datetime,date,timezone
@@ -59,7 +60,7 @@ class LifecycleFaultIntegrationTests(unittest.TestCase):
         self.publication=copy_journeys(self.c,self.release,123,(project_event(r,self.identity) for r in events));self.owned.append(self.publication.database)
         self.journal=patch('marketpulse_app.lifecycle.JourneyJournal.resolve',return_value=self.publication);self.journal.start()
         self.service=LifecycleService(Analytics(self.c,None,release=self.release))
-        self.http=TestClient(create_app(Analytics(self.c,None,release=self.release),SimpleNamespace()))
+        self.http=TestClient(create_app(Analytics(self.c,None,release=self.release),SimpleNamespace(),access=TrustedTestAccess()))
 
     def tearDown(self):
         self.http.close();self.journal.stop()

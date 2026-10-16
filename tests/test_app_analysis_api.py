@@ -1,3 +1,4 @@
+from app_auth_support import TrustedTestAccess
 import unittest
 from datetime import date
 from types import SimpleNamespace
@@ -11,7 +12,7 @@ class AnalysisHttpTests(unittest.TestCase):
         class Analytics:
             def pin(self):return self
             def all_daily(self):return []
-        return TestClient(create_app(Analytics(),SimpleNamespace(settings=lambda:[])))
+        return TestClient(create_app(Analytics(),SimpleNamespace(settings=lambda:[]),access=TrustedTestAccess()))
 
     def test_analysis_routes_validate_before_dependency_queries(self):
         for path in ('funnel','attribution','journeys'):
