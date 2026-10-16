@@ -34,6 +34,121 @@ x-batch-runtime: &batch-runtime
     - ./docker/batch/dagster.yaml:/opt/marketpulse/dagster-home/dagster.yaml:ro
 
 services:
+  journey-publish:
+    <<: *batch-runtime
+    image: marketpulse-360/journeys:mp07
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile.journeys
+    profiles: [app-tools]
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 3072M
+
+  app-postgres:
+    image: postgres:17.6-alpine
+    profiles: [app]
+    environment:
+      POSTGRES_USER: ${APP_POSTGRES_USER:-marketpulse_app}
+      POSTGRES_DB: ${APP_POSTGRES_DB:-marketpulse_app}
+      POSTGRES_PASSWORD: "${APP_POSTGRES_PASSWORD:-}"
+    volumes:
+      - app_metadata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  api:
+    image: marketpulse-360/app:mp06
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    profiles: [app]
+    environment: &app-environment
+      APP_POSTGRES_HOST: app-postgres
+      APP_POSTGRES_USER: ${APP_POSTGRES_USER:-marketpulse_app}
+      APP_POSTGRES_DB: ${APP_POSTGRES_DB:-marketpulse_app}
+      APP_POSTGRES_PASSWORD: "${APP_POSTGRES_PASSWORD:-}"
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-marketpulse}
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-}"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-8000}:8000"
+    depends_on:
+      app-postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/ready', timeout=5)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  campaign-worker:
+    image: marketpulse-360/app:mp06
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    profiles: [app]
+    environment: *app-environment
+    command: ["python", "-m", "marketpulse_app.worker"]
+    depends_on:
+      app-postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib,time; p=pathlib.Path('/tmp/marketpulse-worker-heartbeat'); assert p.exists() and time.time()-p.stat().st_mtime<15"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: on-failure
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  web:
+    image: marketpulse-360/web:mp06
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile.web
+    profiles: [app]
+    environment:
+      API_INTERNAL_URL: http://api:8000
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-3100}:3100"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3100').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
   clickhouse:
     image: clickhouse/clickhouse-server:26.8.25.14@sha256:dd81097e2c38827a438287d8ae5d4dc8afafbdd0e61e83376fdd7ed4580673b9
     profiles: [serving]
@@ -441,6 +556,7 @@ services:
           memory: ${SPARK_CONTAINER_MEMORY_LIMIT:-2560M}
 
 volumes:
+  app_metadata:
   kafka_data:
   flink_checkpoints:
   lakehouse_data:

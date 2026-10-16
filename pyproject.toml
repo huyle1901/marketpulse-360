@@ -10,6 +10,11 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.optional-dependencies]
+app = [
+    "fastapi==0.143.0", "uvicorn==0.54.0", "pydantic==2.14.1",
+    "clickhouse-connect==1.10.0", "psycopg[binary]==3.3.4", "confluent-kafka==2.16.0",
+]
+app-test = ["httpx2==2.13.1"]
 kafka = ["confluent-kafka==2.16.0"]
 lakehouse = ["boto3==1.43.111", "confluent-kafka==2.16.0"]
 batch = [
@@ -33,3 +38,4 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 marketpulse_batch = ["sql/*.sql"]
+marketpulse_app = ["sql/*.sql"]
