@@ -1,6 +1,6 @@
 # MP-09 — Quality, observability, privacy and operations
 
-**Status:** Specified; implementation pending.
+**Status:** Implemented and Docker-verified; final review pending.
 **Base:** complete MP-08 `c25d1b3`; same checkout, new branch
 `feat/mp09-quality-observability-privacy`. Preserve the existing untracked `work/`.
 Scope follows the user's standing backlog delegation and native execution.

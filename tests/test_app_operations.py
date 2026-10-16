@@ -43,6 +43,16 @@ class QualityTests(unittest.TestCase):
         ledger=Mock();ledger.get_receipt.return_value=(receipt,'file:///x');ledger.get_certified_bundle.return_value=SimpleNamespace(certification_uri='file:///cert',export_manifest_uri='file:///manifest',**vars(release))
         service=QualityService(SimpleNamespace(pin=lambda:SimpleNamespace(release=release,client=Mock())),ledger,Path('/'))
         service._path=Mock(return_value=SimpleNamespace(read_bytes=lambda:b'{}'))
-        with patch('marketpulse_app.quality.read_certification',return_value=cert),patch('marketpulse_app.quality.ExportManifest.from_payload',return_value=manifest),patch('marketpulse_app.quality.verify_certification_current'),patch('marketpulse_app.quality.JourneyJournal') as journal,patch('marketpulse_app.quality.verify_projection'):
+        with patch('marketpulse_app.quality.single_currency'),patch('marketpulse_app.quality.read_certification',return_value=cert),patch('marketpulse_app.quality.ExportManifest.from_payload',return_value=manifest),patch('marketpulse_app.quality.verify_certification_current'),patch('marketpulse_app.quality.JourneyJournal') as journal,patch('marketpulse_app.quality.verify_projection'):
             journal.return_value.resolve.return_value=SimpleNamespace(silver_snapshot_id=42)
             self.assertEqual(service._context()[1],receipt)
+    def test_operations_reports_partial_collector_failure_explicitly(self):
+        from marketpulse_app.operations import Operations
+        from unittest.mock import Mock
+        ops=Operations(None,Mock(reports=lambda:[],probe_active=lambda:False),None,telemetry=lambda:(_ for _ in ()).throw(OSError('private')))
+        report=ops.status();self.assertEqual(report['telemetry']['status'],'unavailable');self.assertNotIn('private',str(report))
+    def test_probe_evidence_records_exact_observed_finance_and_hash(self):
+        from marketpulse_app.quality import probe_evidence
+        baseline={'gross_revenue_minor':100,'refund_amount_minor':20,'net_revenue_minor':80}
+        evidence=probe_evidence((10,'a'*64),(10,'b'*64),baseline,baseline|{'gross_revenue_minor':101,'net_revenue_minor':81})
+        self.assertEqual(evidence['observed_checksum'],'b'*64);self.assertEqual(evidence['observed_finance']['net_revenue_minor'],'81');self.assertEqual(evidence['expected_row_count'],evidence['observed_row_count'])

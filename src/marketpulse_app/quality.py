@@ -11,7 +11,7 @@ from marketpulse_batch.export import ExportManifest,business_schema
 from marketpulse_lakehouse.contracts import TABLE_CONTRACTS
 from .journey_projection import JourneyJournal,verify_projection
 from .analytics import wire
-from .analysis import MONEY,MODELS
+from .analysis import MONEY,MODELS,single_currency
 
 class QualityMismatch(ValueError):pass
 
@@ -36,6 +36,7 @@ class QualityService:
         manifest=ExportManifest.from_payload(json.loads(self._path(bundle.export_manifest_uri).read_bytes()))
         if any(getattr(release,k)!=getattr(bundle,k) or getattr(release,k)!=getattr(cert,k) for k in ('identity','database','proof_digest')) or manifest.identity!=release.identity or manifest.digest!=cert.manifest_digest:raise QualityMismatch('release_binding')
         verify_certification_current(session.client,receipt,cert)
+        single_currency(session)
         projection=JourneyJournal(session.client).resolve(release)
         if projection is None:raise OSError('no projection')
         if projection.silver_snapshot_id!=receipt.output_snapshots.get('silver.customer_events'):raise QualityMismatch('projection_snapshot')
@@ -91,6 +92,12 @@ class QualityService:
             self._rowsets(client,owned,proof);self._finance(client,owned,projection)
             key=client.query(f'SELECT event_date,campaign_id,currency FROM {owned}.campaign_performance_daily LIMIT 1').first_row
             client.command(f'ALTER TABLE {owned}.campaign_performance_daily UPDATE gross_revenue_minor=gross_revenue_minor+1,net_revenue_minor=net_revenue_minor+1 WHERE event_date={{day:Date32}} AND campaign_id={{campaign:String}} AND currency={{currency:String}}',parameters={'day':key[0],'campaign':key[1],'currency':key[2]},settings={'mutations_sync':2})
+            columns=business_schema('gold.campaign_performance_daily');names=[r[0] for r in columns]
+            with client.query_rows_stream(f'SELECT * FROM {owned}.campaign_performance_daily',query_tz='UTC',tz_mode='aware') as rows:
+                observed=rowset_checksum(columns,(dict(zip(names,row)) for row in rows))
+            expected=next(r for r in proof['relations'] if r['relation']=='gold.campaign_performance_daily')
+            totals=client.query(f'SELECT sum(toInt128(gross_revenue_minor)),sum(toInt128(refund_amount_minor)),sum(toInt128(net_revenue_minor)) FROM {owned}.campaign_performance_daily').first_row
+            report['corruption_evidence']=probe_evidence((expected['row_count'],expected['checksum']),observed,{k:int(v) for k,v in report['finance'].items()},dict(zip(MONEY,totals)))
             checks=[]
             for name,check in [('rowset',lambda:self._rowsets(client,owned,proof)),('finance',lambda:self._finance(client,owned,projection))]:
                 try:check();checks.append((name,False))
@@ -103,3 +110,9 @@ class QualityService:
                 try:client.command(f'DROP DATABASE {owned} SYNC')
                 except Exception:report.update(status='unavailable',reason='probe_cleanup_failed')
         return report
+
+
+def probe_evidence(expected:tuple[int,str],observed:tuple[int,str],baseline:dict,finance:dict) -> dict:
+    return wire({'expected_row_count':expected[0],'observed_row_count':observed[0],
+                 'expected_checksum':expected[1],'observed_checksum':observed[1],
+                 'expected_finance':baseline,'observed_finance':finance})

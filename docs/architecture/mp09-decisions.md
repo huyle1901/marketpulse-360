@@ -31,3 +31,26 @@ Next.js forwards Cookie/Origin and relays Set-Cookie through an explicit route
 allowlist. A global session gate handles expiry; viewers retain aggregate analysis
 and cohorts while journey/profile/segment fetches require operator access. The
 admin operations workspace guards stale refreshes and displays dependency errors.
+
+## Docker verification before final review
+
+Retained project `marketpulse-mp05-proof`: two Prometheus targets healthy,18 Grafana
+panels provisioned with valid PromQL (15 have actual series; missing Flink metrics
+remain unavailable). Login, admin Operations and Grafana inspected visually;
+390px app viewport has no horizontal overflow.24 direct/proxy role checks,
+anonymous/Origin/metrics enforcement and query/secret redaction passed.
+
+Final pre-review proof:20warmups/100samples p95 dashboard35.573ms,
+cohorts27.547ms, ops/status19.949ms; full quality152.937ms. Exact observed probe
+checksum and gross/net+1 differ with identical row count. Alert fires/clears and
+failed history persists. Restart preserves accounts/roles, active session, audit
+marker, MP06–08 configuration/segments, release/proof and source-finance totals.
+Evidence is ignored `.lakehouse/mp09-proof/final-acceptance.json`.
+
+Five dedicated PG security integrations passed, including concurrent last-admin
+protection and expired-only1000-row cleanup. Python395tests (40opt-in skipped),
+27 browser tests, typecheck/build,615row/22file fixture validation, Compose quiet
+validation and promtool9-rule verification passed. No earlier source replay,
+publication, reseed or analytical deletion occurred. No credentials/artifacts or
+pre-existing `work/` are staged. Tests remain explicit trusted-principal injection;
+there is no runtime bypass.

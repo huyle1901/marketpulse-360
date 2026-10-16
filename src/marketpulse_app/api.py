@@ -219,7 +219,7 @@ def runtime_app() -> FastAPI:
     from pathlib import Path
     auth=AuthStore(store);auth.initialize()
     token=Path(os.environ.get('METRICS_TOKEN_FILE','/run/secrets/metrics_token')).read_text().strip()
-    access=AccessControl(auth,os.environ.get('APP_PUBLIC_ORIGIN','http://localhost:43100'),
+    access=AccessControl(auth,os.environ.get('APP_PUBLIC_ORIGIN','http://localhost:3100'),
                          os.environ.get('APP_COOKIE_SECURE','false')=='true',token)
     from .operations import runtime_operations
     return create_app(analytics, store,access=access,operations=runtime_operations(analytics,store,auth))

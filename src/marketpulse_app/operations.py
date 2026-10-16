@@ -1,9 +1,11 @@
 """Admin operations, immutable evidence and conservative session-only retention."""
 class Operations:
-    def __init__(self,quality,store,auth):self.quality=quality;self.store=store;self.auth=auth
+    def __init__(self,quality,store,auth,telemetry=None):self.quality=quality;self.store=store;self.auth=auth;self.telemetry=telemetry or platform_status
     def status(self):
         reports=self.store.reports()
-        return {'status':'available','quality':next((r for r in reports if r['scope']=='live'),None),'probe_active':self.store.probe_active(),'analytical_deletion_enabled':False}
+        try:telemetry={'status':'available','sources':self.telemetry()}
+        except Exception:telemetry={'status':'unavailable','sources':[]}
+        return {'telemetry':telemetry,'status':'available','quality':next((r for r in reports if r['scope']=='live'),None),'probe_active':self.store.probe_active(),'analytical_deletion_enabled':False}
     def retention(self):
         release=self.quality.analytics.pin().release
         client=self.quality.analytics.client
@@ -38,3 +40,12 @@ def runtime_operations(analytics,store,auth):
     auth.initialize()
     evidence=OpsStore(store);evidence.initialize()
     return Operations(QualityService(analytics,BatchLedger(dsn),Path('/opt/marketpulse/batch-state')),evidence,auth)
+
+
+def platform_status():
+    import json,os,urllib.request
+    from pathlib import Path
+    token=Path(os.environ.get('METRICS_TOKEN_FILE','/run/secrets/metrics_token')).read_text().strip()
+    request=urllib.request.Request('http://collector:9100/status',headers={'Authorization':'Bearer '+token})
+    with urllib.request.urlopen(request,timeout=1) as response:values=json.loads(response.read(256*1024))
+    return [v for v in values if v['name'] in ('mp_source_up','mp_source_observed_timestamp_seconds')]

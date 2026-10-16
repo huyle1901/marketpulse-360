@@ -585,7 +585,7 @@ analytics and marketing consent; unknown/denied consent fails closed. Analytics
 CRM denial suppresses timeline detail. RFM/as_of is pinned to data, not wall time;
 heuristics are explained and exact finance remains single-currency guarded.
 
-### 4.8 MP-09 operational trust boundary (specified; implementation pending)
+### 4.8 MP-09 operational trust boundary (implemented; locally verified)
 
 The [MP-09 spec](../../specs/09-quality-observability-privacy.md) protects the existing
 FastAPI/Next.js application with PostgreSQL accounts, opaque expiring sessions,
