@@ -88,3 +88,18 @@ probe alert fire/clear and restart passes. Final authenticated p95(20warmups/
 finance evidence. No Critical/Important review findings remain open. Two Minor
 findings above are deferred explicitly. App and monitoring remain running;
 branch is retained locally without merge, push or PR.
+
+## GitGuardian PR review
+
+PRs6–8 pass GitGuardian Security Checks. PR9 initially reports four Generic
+Password occurrences in the original `ops_setup.py` filename-to-mode mapping.
+The flagged line assigns filesystem modes0444/0600, not credentials. Comparing
+ten current local credential values against422 unique committed blobs found no
+matches; actual values remain in ignored local files. No credential values are
+included in this record.
+
+Setup now groups service/account filenames and selects permission bits separately,
+retaining filenames, permissions, random generation, idempotence and symlink
+refusal. Existing filesystem tests and the398-test Python suite pass(40 opt-in
+skipped). Published history is preserved and alerts are not ignored; the new head
+must be checked on GitHub before claiming scanner success.
