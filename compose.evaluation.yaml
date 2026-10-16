@@ -1,0 +1,104 @@
+name: marketpulse-evaluation
+x-engine: &engine
+  image: marketpulse-360/evaluation:mp10
+  build:
+    context: .
+    dockerfile: docker/evaluation/Dockerfile
+  profiles: [evaluation]
+  environment: &flink-env
+    FLINK_PROPERTIES: |
+      jobmanager.rpc.address: jobmanager
+      jobmanager.memory.process.size: 768m
+      taskmanager.memory.process.size: 1024m
+      taskmanager.numberOfTaskSlots: 1
+      parallelism.default: 1
+      rest.bind-address: 0.0.0.0
+      execution.checkpointing.interval: 1s
+      execution.checkpointing.timeout: 60s
+      state.checkpoints.dir: file:///tmp/eval-checkpoints
+  volumes:
+    - checkpoints:/tmp/eval-checkpoints
+
+services:
+  kafka:
+    image: apache/kafka:4.3.1
+    profiles: [evaluation]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: CONTROLLER://:29093,PLAINTEXT://:29092,HOST://:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,HOST://localhost:49392
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_HEAP_OPTS: -Xmx512m -Xms256m
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    ports: ["127.0.0.1:49392:9092"]
+    volumes: ["kafka:/var/lib/kafka/data"]
+    healthcheck:
+      test: [CMD-SHELL, /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list >/dev/null 2>&1]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  jobmanager:
+    <<: *engine
+    command: jobmanager
+    ports: ["127.0.0.1:49381:8081"]
+  taskmanager:
+    <<: *engine
+    command: taskmanager
+    depends_on: [jobmanager]
+  streams:
+    <<: *engine
+    entrypoint: [java, -Xmx768m, -cp, /opt/flink/usrlib/evaluation-job.jar:/opt/flink/lib/*, io.marketpulse.eval.StreamsJob]
+    command: [kafka:29092, idle-in, idle-out, eval-idle]
+    volumes: ["streams:/tmp/eval-streams"]
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.8.25.14@sha256:dd81097e2c38827a438287d8ae5d4dc8afafbdd0e61e83376fdd7ed4580673b9
+    profiles: [evaluation]
+    environment:
+      CLICKHOUSE_USER: evaluation
+      CLICKHOUSE_PASSWORD_FILE: /run/secrets/evaluation_password
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    secrets: [evaluation_password]
+    ports: ["127.0.0.1:49323:8123"]
+    volumes: ["clickhouse:/var/lib/clickhouse"]
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+  postgres:
+    image: postgres:17.6-alpine
+    profiles: [evaluation]
+    environment:
+      POSTGRES_USER: evaluation
+      POSTGRES_DB: evaluation
+      POSTGRES_PASSWORD_FILE: /run/secrets/evaluation_password
+    secrets: [evaluation_password]
+    ports: ["127.0.0.1:49332:5432"]
+    volumes: ["postgres:/var/lib/postgresql/data"]
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U evaluation -d evaluation]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+secrets:
+  evaluation_password:
+    file: .secrets/evaluation_password
+volumes:
+  kafka:
+  checkpoints:
+  streams:
+  clickhouse:
+  postgres:

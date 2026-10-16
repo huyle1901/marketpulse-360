@@ -29,6 +29,7 @@ spark-warehouse/
 tmp/
 .worktrees/
 flink-job/target/
+evaluation-job/target/
 
 # Course brief kept as a local reference
 DE_Presentation and Project Descriptions and Requirements-Semester 1-2026-2027 (1).pdf

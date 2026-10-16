@@ -43,7 +43,7 @@ ClickHouse, PostgreSQL 17.6, ReportLab PDF.
 - [ ] Write tests for reproducible hashes, exact anomaly classes/money,
   watermark/horizon edges, malformed/bool values, changed duplicates, count/seq
   mismatches, empty/nonfinite/negative statistics and periodic analytical answers.
-- [ ] Run `.venv/bin/python -m unittest discover -s tests -p test_evaluation.py -v`.
+- [ ] Run `PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -p test_evaluation.py -v`.
   Expected: RED missing module, then GREEN after implementation.
 - [ ] Implement typed pure contracts and independent oracles; no engine calls.
 - [ ] Run focused tests and `git diff --check`; commit `feat: add evaluation workload and oracle contracts`.
