@@ -8,6 +8,10 @@
 !flink-job/pom.xml
 !flink-job/src/
 !flink-job/src/**
+!evaluation-job/
+!evaluation-job/pom.xml
+!evaluation-job/src/
+!evaluation-job/src/**
 !docker/
 !docker/**
 !dbt/
