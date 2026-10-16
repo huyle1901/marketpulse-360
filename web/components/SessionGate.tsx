@@ -1,5 +1,5 @@
 'use client';
-import {createContext,useContext,useEffect,useState} from 'react';
+import {createContext,useContext,useEffect,useRef,useState} from 'react';
 import {usePathname,useRouter} from 'next/navigation';
 import Link from 'next/link';
 type Principal={user_id:string;username:string;role:'viewer'|'operator'|'admin'};
@@ -8,18 +8,41 @@ export const useSession=()=>useContext(Context);
 export default function SessionGate({children}:{children:React.ReactNode}){
  const [principal,setPrincipal]=useState<Principal|null>(null);const [loading,setLoading]=useState(true);const [error,setError]=useState('');const [retry,setRetry]=useState(0);
  const path=usePathname();const router=useRouter();
+ const authEpoch=useRef(0);const checkSequence=useRef(0);
  useEffect(()=>{
   let active=true;const controller=new AbortController();
-  const check=async()=>{try{const r=await fetch('/api/v1/auth/session',{cache:'no-store',signal:controller.signal});if(!active)return;if(r.status===401){setPrincipal(null);setError('');}else if(!r.ok){setPrincipal(null);setError('Authentication service unavailable');}else{const value=await r.json();if(!active)return;if(!['viewer','operator','admin'].includes(value.role))throw new Error();setPrincipal(value);setError('');}}catch{if(active&&!controller.signal.aborted){setPrincipal(null);setError('Authentication service unavailable');}}finally{if(active)setLoading(false);}};
-  void check();const timer=setInterval(()=>void check(),15000);const expired=()=>{setPrincipal(null);setError('Session expired; sign in again');};window.addEventListener('mp-session-expired',expired);
-  const original=window.fetch;window.fetch=async(...args)=>{const r=await original(...args);const url=String(args[0]);if(r.status===401&&url.startsWith('/api/v1/')&&!url.includes('/auth/'))window.dispatchEvent(new Event('mp-session-expired'));return r;};
-  return()=>{active=false;controller.abort();clearInterval(timer);window.removeEventListener('mp-session-expired',expired);window.fetch=original;};
+  const check=async()=>{
+   const epoch=authEpoch.current;const sequence=++checkSequence.current;
+   const current=()=>active&&epoch===authEpoch.current&&sequence===checkSequence.current;
+   try{
+    const r=await fetch('/api/v1/auth/session',{cache:'no-store',signal:controller.signal});
+    if(!current())return;
+    if(r.status===401){setPrincipal(null);setError('');}
+    else if(!r.ok){setPrincipal(null);setError('Authentication service unavailable');}
+    else{
+     const value=await r.json();if(!current())return;
+     if(!['viewer','operator','admin'].includes(value.role))throw new Error();
+     setPrincipal(value);setError('');
+    }
+   }catch{if(current()&&!controller.signal.aborted){setPrincipal(null);setError('Authentication service unavailable');}}
+   finally{if(current())setLoading(false);}
+  };
+  void check();const timer=setInterval(()=>void check(),15000);
+  const expired=()=>{authEpoch.current++;setPrincipal(null);setLoading(false);setError('Session expired; sign in again');};
+  window.addEventListener('mp-session-expired',expired);
+  const original=window.fetch;
+  window.fetch=async(...args)=>{
+   const epoch=authEpoch.current;const r=await original(...args);const url=String(args[0]);
+   if(epoch===authEpoch.current&&r.status===401&&url.startsWith('/api/v1/')&&!url.includes('/auth/'))window.dispatchEvent(new Event('mp-session-expired'));
+   return r;
+  };
+  return()=>{active=false;authEpoch.current++;controller.abort();clearInterval(timer);window.removeEventListener('mp-session-expired',expired);window.fetch=original;};
  },[path,retry]);
  const canOperate=principal?.role==='operator'||principal?.role==='admin';const canAdmin=principal?.role==='admin';
  if(loading)return <main><p role="status">Checking session…</p></main>;
- if(!principal)return <Login error={error} onLogin={()=>setRetry(v=>v+1)}/>;
+ if(!principal)return <Login error={error} onLogin={()=>{authEpoch.current++;setLoading(true);setRetry(v=>v+1);}}/>;
  if(path==='/login')return <main><h1>Signed in</h1><Link href="/">Open Command Center</Link></main>;
- return <Context.Provider value={{principal,canOperate,canAdmin}}><div className="session-bar"><span>{principal.username} · {principal.role}</span><nav aria-label="Session navigation"><Link href="/">Campaigns</Link><Link href="/analysis">Analysis</Link><Link href="/customers">Customers</Link>{canAdmin&&<Link href="/operations">Operations</Link>}<button className="secondary" onClick={async()=>{try{const r=await fetch('/api/v1/auth/logout',{method:'POST'});if(!r.ok&&r.status!==401)throw new Error();setPrincipal(null);router.replace('/login');}catch{setError('Sign out failed; retry');}}}>Sign out</button></nav>{error&&<p role="alert">{error}</p>}</div>{path==='/operations'&&!canAdmin?<main><h1>Administrator access required</h1></main>:path==='/customers'&&!canOperate?<ViewerCohorts/>:children}</Context.Provider>;
+ return <Context.Provider value={{principal,canOperate,canAdmin}}><div className="session-bar"><span>{principal.username} · {principal.role}</span><nav aria-label="Session navigation"><Link href="/">Campaigns</Link><Link href="/analysis">Analysis</Link><Link href="/customers">Customers</Link>{canAdmin&&<Link href="/operations">Operations</Link>}<button className="secondary" onClick={async()=>{authEpoch.current++;try{const r=await fetch('/api/v1/auth/logout',{method:'POST'});if(!r.ok&&r.status!==401)throw new Error();authEpoch.current++;setPrincipal(null);router.replace('/login');}catch{setError('Sign out failed; retry');}}}>Sign out</button></nav>{error&&<p role="alert">{error}</p>}</div>{path==='/operations'&&!canAdmin?<main><h1>Administrator access required</h1></main>:path==='/customers'&&!canOperate?<ViewerCohorts/>:children}</Context.Provider>;
 }
 function Login({error,onLogin}:{error:string;onLogin:()=>void}){
  const [name,setName]=useState('');const [password,setPassword]=useState('');const [message,setMessage]=useState('');const [busy,setBusy]=useState(false);

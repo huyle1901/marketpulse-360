@@ -436,7 +436,7 @@
     {
       "id": 16,
       "type": "timeseries",
-      "title": "Flink JVM heap bytes / CPU load (if available)",
+      "title": "Flink JVM total heap bytes / mean CPU load (up to 4 managers)",
       "datasource": {
         "type": "prometheus",
         "uid": "marketpulse-prometheus"

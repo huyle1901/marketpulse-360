@@ -54,3 +54,27 @@ validation and promtool9-rule verification passed. No earlier source replay,
 publication, reseed or analytical deletion occurred. No credentials/artifacts or
 pre-existing `work/` are staged. Tests remain explicit trusted-principal injection;
 there is no runtime bypass.
+
+## Final review and fix pass
+
+Fresh independent review found no Critical and four Important issues. Each was
+reproduced by a failing regression before its fix: session expiry invalidates an
+auth generation and overlapping checks obey latest-request order; collector
+validates sample shape/names/labels/finite values/unique identities before cache
+acceptance; Flink JVM metrics aggregate total heap and mean available CPU across
+up to four task managers, avoiding duplicate series; quality reports retain pinned
+expected identity/proof and receipt snapshots before validation, then mark the
+binding verified only after every check passes. Probe reuses the pinned session.
+
+The collector reports unavailable when more than four task managers exceed its
+explicit poll bound; missing manager measurements do not become partial totals.
+Fixed gauges use kinds `heap_bytes_sum` and `cpu_load_mean`, not host CPU usage.
+
+Deferred minors: a missing certification file is currently classified failed
+rather than unavailable (still fail-closed, potentially a reconciliation alarm);
+Operations monitoring links assume default43001/49090 and require direct
+navigation for customized ports. These do not weaken authorization or mutate
+certified data. Internet hardening and shared operator-tool SSO were reviewed as
+out of scope under the explicit loopback-demo boundary; public deployment needs
+its own security review. Same checkout was retained as explicitly requested;
+branches continue to share untracked files, with user work/ preserved.
