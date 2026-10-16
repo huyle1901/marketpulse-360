@@ -34,6 +34,44 @@ x-batch-runtime: &batch-runtime
     - ./docker/batch/dagster.yaml:/opt/marketpulse/dagster-home/dagster.yaml:ro
 
 services:
+  prometheus:
+    image: prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0
+    profiles: [observability]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus", "--storage.tsdb.retention.time=7d"]
+    ports:
+      - "127.0.0.1:${PROMETHEUS_HOST_PORT:-49090}:9090"
+    secrets: [metrics_token]
+    volumes:
+      - ./docker/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  grafana:
+    image: grafana/grafana:13.2.1-ubuntu@sha256:ae737b9445c9c89461fd938a8cb732c5416b4dda656bbd058f7b34de27954384
+    profiles: [observability]
+    environment:
+      GF_SECURITY_ADMIN_USER: operator
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_password
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "127.0.0.1:${GRAFANA_HOST_PORT:-43001}:3000"
+    secrets: [grafana_password]
+    volumes:
+      - ./docker/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/observability/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
   journey-publish:
     <<: *batch-runtime
     image: marketpulse-360/journeys:mp07
@@ -82,6 +120,15 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-marketpulse}
       CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-}"
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      APP_PUBLIC_ORIGIN: ${APP_PUBLIC_ORIGIN:-http://localhost:${WEB_HOST_PORT:-3100}}
+      APP_COOKIE_SECURE: ${APP_COOKIE_SECURE:-false}
+      METRICS_TOKEN_FILE: /run/secrets/metrics_token
+      DAGSTER_POSTGRES_USER: ${DAGSTER_POSTGRES_USER:-dagster}
+      DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB:-dagster}
+      DAGSTER_POSTGRES_PASSWORD: "${DAGSTER_POSTGRES_PASSWORD:-}"
+    secrets: [metrics_token]
+    volumes:
+      - batch_state:/opt/marketpulse/batch-state:ro
     ports:
       - "127.0.0.1:${API_HOST_PORT:-8000}:8000"
     depends_on:
@@ -121,6 +168,24 @@ services:
       retries: 20
       start_period: 20s
     restart: on-failure
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  collector:
+    image: marketpulse-360/app:mp06
+    profiles: [observability]
+    environment: *app-environment
+    command: ["python", "-m", "marketpulse_app.collector"]
+    secrets: [metrics_token]
+    volumes:
+      - batch_state:/opt/marketpulse/batch-state:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9100/health',timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
     deploy:
       resources:
         limits:
@@ -556,6 +621,8 @@ services:
           memory: ${SPARK_CONTAINER_MEMORY_LIMIT:-2560M}
 
 volumes:
+  prometheus_data:
+  grafana_data:
   app_metadata:
   kafka_data:
   flink_checkpoints:
@@ -566,3 +633,9 @@ volumes:
   batch_metadata:
   batch_state:
   dagster_home:
+
+secrets:
+  metrics_token:
+    file: ./.secrets/metrics_token
+  grafana_password:
+    file: ./.secrets/grafana_password

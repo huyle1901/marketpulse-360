@@ -115,3 +115,5 @@ test('source identity and versioned alert evidence are inspectable',async({page}
   await page.getByText('Full alert provenance',{exact:true}).click();
   await expect(page.getByText('Rule version 2 · Setting version 3',{exact:false})).toBeVisible();
 });
+
+test.beforeEach(async({page})=>{await page.route('**/api/v1/auth/session',r=>r.fulfill({json:{user_id:'fixture-admin',username:'fixture-admin',role:'admin'}}));});

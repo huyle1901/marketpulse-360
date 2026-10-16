@@ -212,7 +212,20 @@ customer opportunity/risk identification.
 
 ### MP-09 - Quality, observability, privacy, and operations
 
-**Status:** Planned; spans MP-02 through MP-08
+**Status:** Implemented and locally verified; final review fixes verified. Spans MP-02–08; based on complete MP-08.
+
+Scope: [`09-quality-observability-privacy.md`](09-quality-observability-privacy.md).
+Plan: [`2026-10-16-quality-observability-privacy.md`](../docs/superpowers/plans/2026-10-16-quality-observability-privacy.md).
+Runbook: [`operations.md`](../docs/runbooks/operations.md).
+
+**Proof:** PostgreSQL sessions/RBAC/audit, certified seven-relation quality,
+same-count isolated finance corruption and alert fire/clear,18 provisioned Grafana
+panels and two healthy Prometheus scrape targets verified.398 Python tests pass
+(40 opt-in skipped; five real PG auth tests exercised separately),29 browser tests,
+typecheck/build and615-row deterministic fixture validation pass. Restart preserves
+roles, session, audit, app configuration, release/projection and finance.
+Authenticated p95: dashboard39.857ms, cohorts27.398ms, ops/status22.487ms
+(20warmups/100samples each); full manual quality114.597ms, local fixture only.
 
 Make the system's health and data trust visible through Prometheus, Grafana,
 quality checks, lineage, retention controls, and role-based access.

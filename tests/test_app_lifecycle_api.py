@@ -1,3 +1,4 @@
+from app_auth_support import TrustedTestAccess
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -6,7 +7,7 @@ from marketpulse_app.api import create_app
 from marketpulse_app.lifecycle_contracts import SegmentRule
 
 class LifecycleApiTests(unittest.TestCase):
-    def client(self):return TestClient(create_app(SimpleNamespace(),SimpleNamespace()))
+    def client(self):return TestClient(create_app(SimpleNamespace(),SimpleNamespace(),access=TrustedTestAccess()))
 
     def test_validation_routes_and_read_only_preview(self):
         client=self.client()
