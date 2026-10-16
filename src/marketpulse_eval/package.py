@@ -15,9 +15,15 @@ from .analytics import ANALYTICS_SCALES
 
 def _timing(value: dict, count: int) -> None:
     numbers=[value.get('p'+str(p)+'_ms') for p in (50,95,99)]
-    if (value.get('samples')!=count or any(type(v) not in (int,float) or not math.isfinite(v) or v<0 for v in numbers)
+    if (type(value.get('samples')) is not int or value['samples']!=count or any(type(v) not in (int,float) or not math.isfinite(v) or v<0 for v in numbers)
             or numbers!=sorted(numbers)):
         raise ValueError('invalid measured percentile evidence')
+
+
+def _measurement(value: Any, *, positive: bool = False, integer: bool = False) -> None:
+    allowed=(int,) if integer else (int,float)
+    if type(value) not in allowed or not math.isfinite(value) or value<0 or positive and value==0:
+        raise ValueError('measurement must be correctly typed, finite and '+('positive' if positive else 'nonnegative'))
 
 
 def acceptance_status(group_size: int | None) -> dict[str, Any]:
@@ -38,11 +44,27 @@ def validate_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
             if not run.get('correctness',{}).get('passed'): raise ValueError('failed correctness evidence')
             if not run.get('resources'): raise ValueError('missing resource observations')
             for resource in run['resources'].values():
+                for field in ('samples','failed_samples','peak_sampled_working_set_bytes'):
+                    _measurement(resource.get(field),integer=True)
                 if resource['samples']<2: raise ValueError('insufficient resource observations')
+                _measurement(resource.get('cpu_seconds_observed'))
+                for field in ('coverage_seconds','interval_seconds'):
+                    _measurement(resource.get(field),positive=True)
+                if type(resource.get('cpu_reset_may_undercount_restart')) is not bool:
+                    raise ValueError('missing CPU reset interpretation')
             if kind=='stream':
+                _measurement(run['correctness'].get('count'),integer=True,positive=True)
                 if run['correctness']['count']!=STREAM_SCALES.get(run['scale']): raise ValueError('stream scale/count mismatch')
                 _timing(run['latency'],run['correctness']['count'])
-            elif run.get('row_count')!=ANALYTICS_SCALES.get(run['scale']): raise ValueError('analytical scale/count mismatch')
+                _measurement(run.get('elapsed_seconds'),positive=True)
+                _measurement(run.get('producer_ack_seconds'))
+                _measurement(run.get('throughput_inputs_per_second'),positive=True)
+                if not math.isclose(run['throughput_inputs_per_second'],run['correctness']['count']/run['elapsed_seconds'],rel_tol=1e-9):
+                    raise ValueError('throughput differs from count/elapsed observation')
+            else:
+                _measurement(run.get('row_count'),integer=True,positive=True)
+                if run['row_count']!=ANALYTICS_SCALES.get(run['scale']): raise ValueError('analytical scale/count mismatch')
+                _measurement(run.get('load_seconds'))
             key=(kind,run['engine'],run['scale'],bool(run.get('recovery')))
             if key in selected: raise ValueError('ambiguous duplicate benchmark selection')
             selected[key]=run

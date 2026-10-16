@@ -178,7 +178,7 @@ cohort population and high-value opportunity. Configuration is compared before
 and after; no budget, rule, segment or publication is changed. Normal auth/audit
 records are expected. Each task records role, result, elapsed API time and hash.
 
-Dashboard HTTP observations: p50: 30.80 ms; p95: 38.85 ms; p99: 41.97 ms; 100 samples after 20 warmups.
+Dashboard HTTP observations: p50: 37.05 ms; p95: 54.35 ms; p99: 56.12 ms; 100 samples after 20 warmups.
 
 API elapsed time is not human task completion time. Existing browser regression
 tests exercise UI behavior, but neither those nor scripted API checks establish
