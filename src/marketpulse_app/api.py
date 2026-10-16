@@ -184,6 +184,8 @@ def create_app(analytics: Any, store: Any) -> FastAPI:
 
     from .analysis_api import register_analysis_routes
     register_analysis_routes(app, analytics, store)
+    from .lifecycle_api import register_lifecycle_routes
+    register_lifecycle_routes(app, analytics, store)
     return app
 
 
@@ -191,4 +193,6 @@ def runtime_app() -> FastAPI:
     from .settings import clients, load_settings
     analytics, store = clients(load_settings(os.environ))
     store.initialize()
+    from .segment_store import SegmentStore
+    SegmentStore(store).initialize()
     return create_app(analytics, store)

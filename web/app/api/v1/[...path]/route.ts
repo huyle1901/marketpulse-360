@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
 
 function allowed(path:string,method:string):boolean {
+  if(method==='GET' && /^lifecycle\/(cohorts|profiles|profiles\/[a-f0-9]{64}\/timeline|segments|segments\/[a-f0-9-]{36}\/versions\/[0-9]+)$/.test(path)) return true;
+  if(method==='POST' && /^lifecycle\/segments(\/preview)?$/.test(path)) return true;
+  if(method==='PUT' && /^lifecycle\/segments\/[a-f0-9-]{36}$/.test(path)) return true;
   if(method==='GET') return /^(dashboard|campaign-settings|alert-rules|alerts|health\/(live|ready)|budget-pacing\/[^/]+|analysis\/(funnel|attribution|journeys))$/.test(path);
   if(method==='POST') return /^(alert-rules|alerts\/evaluate|budget-simulation)$/.test(path);
   return method==='PUT' && /^(campaign-settings|alert-rules)\/[^/]+$/.test(path);
