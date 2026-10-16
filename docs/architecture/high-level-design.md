@@ -558,8 +558,13 @@ ClickHouse lifecycle reads are implemented. Real queries preserve 60 historical
 profiles and 37 consent-eligible activation profiles at as_of2026-01-03.
 Lifecycle HTTP and immutable PostgreSQL segment revisions now pass real Docker
 reads and dedicated-database concurrency/restart tests. Startup adds definitions
-only through additive migrations, never seeds members/rules. UI and final
-independent proof remain pending. The [MP-08 spec](../../specs/08-customer-lifecycle-intelligence.md) extends the
+only through additive migrations, never seeds members/rules. The `/customers`
+workspace now supports cohort/activity drills, categorical identity/consent evidence,
+RFM/heuristic tables, paginated governed timelines and a versioned segment editor.
+Combined reads and rule/timeline contexts reject stale/mixed releases; saves lock
+the draft and old revisions remain read-only. Twenty-two browser tests, production
+build and actual Docker desktop/mobile inspection pass. Final independent proof
+remains pending. The [MP-08 spec](../../specs/08-customer-lifecycle-intelligence.md) extends the
 existing FastAPI/Next.js app with historical cohorts, pseudonymous RFM profiles,
 governed timelines and versioned segment previews. Analytical queries reuse the
 immutable ClickHouse Customer 360/cohort/CRM relations and MP-07 event sidecar;
