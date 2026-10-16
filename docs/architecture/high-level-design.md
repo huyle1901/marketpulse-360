@@ -553,8 +553,10 @@ fourteen browser tests passed. See [decisions/evidence](mp07-decisions.md) and
 
 ### 4.7 MP-08 Customer 360 and lifecycle boundary (specified; implementation pending)
 
-Strict versioned segment contracts and pure RFM/consent evidence are implemented;
-analytical/HTTP/UI proof remains pending. The [MP-08 spec](../../specs/08-customer-lifecycle-intelligence.md) extends the
+Strict versioned segment contracts, pure RFM/consent evidence and request-pinned
+ClickHouse lifecycle reads are implemented. Real queries preserve 60 historical
+profiles and 37 consent-eligible activation profiles at as_of2026-01-03.
+HTTP/UI and final independent proof remain pending. The [MP-08 spec](../../specs/08-customer-lifecycle-intelligence.md) extends the
 existing FastAPI/Next.js app with historical cohorts, pseudonymous RFM profiles,
 governed timelines and versioned segment previews. Analytical queries reuse the
 immutable ClickHouse Customer 360/cohort/CRM relations and MP-07 event sidecar;
