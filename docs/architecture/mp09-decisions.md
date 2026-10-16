@@ -16,3 +16,8 @@ fresh owned database and never publishes. Its alarm is separate from live qualit
 Retention is session-only: at most1000 expired rows. Immutable history, all source
 snapshots, certified releases and projection databases remain protected. Kafka
 offset advancement includes control records; it is never labeled event count.
+
+Collector polls run independently and scrapes read cached samples only. A failed
+source clears its samples while preserving other source results; source age is
+explicit. API metrics use server-defined templates and process CPU/RSS; no host
+CPU inference or identifiers in labels. Kafka probes never subscribe/commit.
