@@ -1,6 +1,6 @@
 import unittest
 from marketpulse_eval.resources import parse_cgroup
-from marketpulse_eval.runner import comparable, require_recovery
+from marketpulse_eval.runner import comparable, require_recovery, ensure_job_state
 from marketpulse_eval.contracts import verify_recovery
 
 class RuntimeEvidenceTests(unittest.TestCase):
@@ -25,3 +25,9 @@ class RuntimeEvidenceTests(unittest.TestCase):
                      producer_active=True,seconds=float('nan'),same_application_id=True)
         with self.assertRaises(ValueError):verify_recovery(proof,'streams')
         with self.assertRaises(ValueError):verify_recovery(proof | {'seconds':1},'unknown')
+
+    def test_failed_engine_does_not_wait_for_missing_output_timeout(self):
+        ensure_job_state('RUNNING',False)
+        ensure_job_state('RESTARTING',True)
+        for state,expected in [('FAILED',False),('CANCELED',True),('RESTARTING',False)]:
+            with self.assertRaises(ValueError):ensure_job_state(state,expected)

@@ -8,6 +8,19 @@ import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.*;
 
 class EvaluationTest {
+    @Test void readyMarkerAppearsOnlyWhenStreamsOwnsRunningTasks() {
+        var bytes=new java.io.ByteArrayOutputStream();var output=new java.io.PrintStream(bytes);
+        var listener=StreamsJob.readinessListener("run-test",output);
+        listener.onChange(KafkaStreams.State.REBALANCING,KafkaStreams.State.CREATED);
+        assertEquals("",bytes.toString());
+        listener.onChange(KafkaStreams.State.RUNNING,KafkaStreams.State.REBALANCING);
+        assertEquals("EVAL_READY run-test"+System.lineSeparator(),bytes.toString());
+    }
+    @Test void flinkTransactionClientProvidesConnectorInternalAwait() throws Exception {
+        if (System.getProperty("evaluation.engine", "flink").equals("flink")) {
+            assertNotNull(Class.forName("org.apache.kafka.clients.producer.internals.TransactionalRequestResult").getDeclaredMethod("await"));
+        }
+    }
     ObjectNode row(int seq, String id, long time, String kind, int amount) {
         ObjectNode r = Finance.JSON.createObjectNode();
         r.put("seq", seq); r.put("event_id", id); r.put("campaign", 0);

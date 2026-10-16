@@ -56,6 +56,11 @@ def require_recovery(proof: dict | None, engine: str, requested: bool) -> None:
         verify_recovery(proof, engine)
 
 
+def ensure_job_state(state: str, expected_restart: bool) -> None:
+    if state != 'RUNNING' and not (expected_restart and state in ('RESTARTING','FAILING','CREATED','INITIALIZING')):
+        raise ValueError('benchmark Flink job unhealthy: '+state)
+
+
 def rest(path: str) -> dict:
     with urllib.request.urlopen('http://localhost:49381' + path, timeout=10) as response:
         return json.load(response)
@@ -69,11 +74,12 @@ def run_stream(engine: str, scale: str, *, recovery: bool = False, eps: int = 0)
     if recovery and eps == 0: eps = 300
     rows = events(STREAM_SCALES[scale]); run = 'eval-' + uuid.uuid4().hex[:16]
     source, sink = run + '-in', run + '-out'
-    admin = AdminClient({'bootstrap.servers': 'localhost:49392'})
+    admin = AdminClient({'bootstrap.servers': 'localhost:49392', 'broker.address.family':'v4'})
     futures = admin.create_topics([NewTopic(t, 1, 1) for t in (source, sink)])
     for future in futures.values(): future.result(timeout=30)
     job, stream_name = None, None
-    consumer = Consumer({'bootstrap.servers': 'localhost:49392', 'group.id': run + '-observer',
+    cancel = threading.Event(); thread = None
+    consumer = Consumer({'bootstrap.servers': 'localhost:49392', 'broker.address.family':'v4', 'group.id': run + '-observer',
         'isolation.level': 'read_committed', 'enable.auto.commit': False, 'auto.offset.reset': 'earliest'})
     consumer.assign([TopicPartition(sink, 0, 0)])
     try:
@@ -103,8 +109,15 @@ def run_stream(engine: str, scale: str, *, recovery: bool = False, eps: int = 0)
             stream_name = 'mp10-' + run
             dc('run', '-d', '--no-deps', '--name', stream_name, 'streams', 'kafka:29092', source, sink, run)
             containers = [stream_name]
-            time.sleep(3)
-        producer = Producer({'bootstrap.servers': 'localhost:49392', 'enable.idempotence': True, 'linger.ms': 5})
+            deadline=time.monotonic()+90
+            while time.monotonic()<deadline:
+                logs=subprocess.run(['docker','logs',stream_name],capture_output=True,text=True,check=True,timeout=10)
+                if 'EVAL_READY '+run in logs.stdout: break
+                running=subprocess.check_output(['docker','inspect','--format','{{.State.Running}}',stream_name],text=True).strip()
+                if running!='true': raise ValueError('Streams exited before RUNNING readiness')
+                time.sleep(.25)
+            else: raise TimeoutError('Streams did not own running tasks')
+        producer = Producer({'bootstrap.servers': 'localhost:49392', 'broker.address.family':'v4', 'enable.idempotence': True, 'linger.ms': 5})
         state: dict[str, Any] = {'sent': 0, 'acked': 0, 'error': None, 'done_at': None}
         def acknowledged(error: Any, message: Any) -> None:
             if error: state['error'] = str(error)
@@ -113,6 +126,7 @@ def run_stream(engine: str, scale: str, *, recovery: bool = False, eps: int = 0)
             try:
                 start = time.monotonic()
                 for row in rows:
+                    if cancel.is_set(): break
                     if eps:
                         delay = row['seq'] / eps - (time.monotonic() - start)
                         if delay > 0: time.sleep(delay)
@@ -130,9 +144,13 @@ def run_stream(engine: str, scale: str, *, recovery: bool = False, eps: int = 0)
         recovery_proof = None; recovery_thread = None; recovered_at = None
         with ResourceSampler([*containers, 'marketpulse-evaluation-kafka-1']) as resources:
             started = time.monotonic(); thread = threading.Thread(target=publish, daemon=True); thread.start()
+            next_health = started + 1
             deadline = started + max(180, len(rows) / max(eps, 1) + 120) if eps else started + 300
             while len(outputs) < len(rows) and time.monotonic() < deadline:
                 if state['error']: raise ValueError(state['error'])
+                if job and time.monotonic() >= next_health:
+                    ensure_job_state(rest('/jobs/'+job)['state'],recovery_proof is not None)
+                    next_health=time.monotonic()+1
                 for message in consumer.consume(1000, timeout=.1):
                     if message.error(): raise ValueError(str(message.error()))
                     row = json.loads(message.value()); outputs.append(row)
@@ -169,13 +187,17 @@ def run_stream(engine: str, scale: str, *, recovery: bool = False, eps: int = 0)
         checked = verify_outputs(rows, outputs)
         require_recovery(recovery_proof, engine, recovery)
         return {'version': 1, 'kind': 'stream', 'engine': engine, 'scale': scale, 'seed': 360, 'run_id': run,
-            'versions': {'flink': '2.2.1', 'kafka_streams': '4.3.1', 'kafka': '4.3.1', 'java': '17'},
+            'versions': {'flink': '2.2.1', 'kafka_streams': '4.3.1', 'kafka': '4.3.1', 'java': '17',
+                         'kafka_client':'4.2.0' if engine=='flink' else '4.3.1'},
             'correctness': checked, 'recovery': recovery_proof, 'resources': resources.result(),
             'latency': percentiles(latencies), 'timing_scope': 'host_send_to_read_committed_observation',
             'throughput_inputs_per_second': len(rows) / (finished - started), 'elapsed_seconds': finished - started,
             'producer_ack_seconds': state['done_at'] - started, 'rate_limit_eps': eps,
+            'readiness':'all Flink operators RUNNING or Streams state RUNNING before producer start',
             'percentile_method': 'nearest_rank', 'metadata': safe_metadata()}
     finally:
+        cancel.set()
+        if thread is not None: thread.join(timeout=65)
         consumer.close()
         if job:
             try: dc('exec', '-T', 'jobmanager', 'flink', 'cancel', job)

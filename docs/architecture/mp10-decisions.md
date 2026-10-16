@@ -20,6 +20,20 @@ are cgroup CPU counter deltas and sampled working set, with coverage and reset
 flags. CPU accumulated between a last sample and an abrupt process/container
 restart can be missed; recovery resource values explicitly carry that limitation.
 
+Producer start is gated on all Flink operators RUNNING or the Streams state
+listener's RUNNING marker. A fixed sleep is not an equivalent readiness gate.
+Fresh jobs/processes still include JIT effects; separate warmups are not claimed
+to warm the new JVM. Source/output protocol, transaction interval and scale are
+held fixed while reporting adapter and process-topology differences.
+
+The first real Docker warmup exposed a connector ABI constraint: Flink Kafka
+connector5.0.0-2.2 calls `TransactionalRequestResult.await()` without arguments,
+removed from kafka-clients4.3. Therefore two shaded artifacts isolate client4.2.0
+for Flink and client4.3.1 for Streams. A reflection regression checks the Flink
+transaction ABI; both builds run topology/reducer tests. The Streams JAR sits
+outside Flink's `usrlib` to prevent accidental classpath mixing. These client
+versions are reported as part of the measured adapters, not hidden as equivalent.
+
 Pipeline latency is host send to committed observer, including queueing and
 transaction visibility. Authenticated app response timing is a different metric.
 Neither substitutes for production event-to-dashboard propagation. Historical
