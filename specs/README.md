@@ -212,7 +212,9 @@ customer opportunity/risk identification.
 
 ### MP-09 - Quality, observability, privacy, and operations
 
-**Status:** Planned; spans MP-02 through MP-08
+**Status:** Specified; implementation pending. Spans MP-02–08; based on complete MP-08.
+
+Scope: [`09-quality-observability-privacy.md`](09-quality-observability-privacy.md).
 
 Make the system's health and data trust visible through Prometheus, Grafana,
 quality checks, lineage, retention controls, and role-based access.

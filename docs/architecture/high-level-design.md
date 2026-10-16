@@ -585,6 +585,25 @@ analytics and marketing consent; unknown/denied consent fails closed. Analytics
 CRM denial suppresses timeline detail. RFM/as_of is pinned to data, not wall time;
 heuristics are explained and exact finance remains single-currency guarded.
 
+### 4.8 MP-09 operational trust boundary (specified; implementation pending)
+
+The [MP-09 spec](../../specs/09-quality-observability-privacy.md) protects the existing
+FastAPI/Next.js application with PostgreSQL accounts, opaque expiring sessions,
+viewer/operator/admin roles and append-only sanitized audit. Runtime fails closed;
+explicit CLI setup creates credentials without seeding generated source data.
+ClickHouse remains analytical; accounts, quality evidence and auth/retention metadata
+are operational only. Certified data and immutable history are protected from
+analytical deletion; retention expires only sessions and monitoring time series.
+
+An observability Compose profile adds a bounded cached Python collector,
+Prometheus and provisioned Grafana, without a Docker socket or earlier engine
+redesign. Existing Kafka offsets and Flink REST metrics report throughput/lag,
+DLQ, freshness, latency and named process/JVM resource use; missing evidence is
+unavailable rather than zero. Quality checks validate certified typed rowsets and
+finance/lineage. A fixture-bounded explicit corruption probe changes only a fresh
+owned ClickHouse copy, records failure and drives a separate demo alert; it never
+mutates/promotes the active release. Admin `/operations` exposes these controls.
+
 ## 5. Kafka design
 
 Suggested topic naming:
