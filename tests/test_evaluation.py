@@ -5,6 +5,7 @@ from collections import Counter, defaultdict
 from marketpulse_eval.contracts import digest, percentiles, verify_outputs
 from marketpulse_eval.workload import events, oracle
 from marketpulse_eval.analytics import analytical_oracle, fact
+from marketpulse_eval.contracts import verify_recovery
 
 
 class EvaluationTests(unittest.TestCase):
@@ -63,3 +64,14 @@ class EvaluationTests(unittest.TestCase):
         for count in (0, -1, True, 1_000_001):
             with self.assertRaises(ValueError):
                 events(count)
+
+    def test_recovery_requires_progress_and_checkpoint(self):
+        proof = dict(before_outputs=10, after_outputs=20, input_before=40,
+                     input_after=60, producer_active=True, seconds=3)
+        for engine in ('flink', 'streams'):
+            with self.assertRaises(ValueError):
+                verify_recovery(proof, engine)
+        verify_recovery(proof | {'completed_checkpoint': 1, 'restored_checkpoint': 1}, 'flink')
+        verify_recovery(proof | {'same_application_id': True}, 'streams')
+        with self.assertRaises(ValueError):
+            verify_recovery(proof | {'input_after': 40, 'same_application_id': True}, 'streams')

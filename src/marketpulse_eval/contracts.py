@@ -34,6 +34,11 @@ def verify_outputs(inputs: list[dict], outputs: list[dict]) -> dict[str, Any]:
 
 
 def verify_recovery(proof: dict[str, Any], engine: str) -> None:
+    if engine not in ('flink', 'streams'):
+        raise ValueError('unsupported recovery engine')
+    duration = proof.get('seconds')
+    if type(duration) not in (int, float) or not math.isfinite(duration) or duration < 0:
+        raise ValueError('invalid recovery duration')
     if (proof.get('before_outputs', 0) <= 0 or proof.get('after_outputs', 0) <= proof['before_outputs']
             or proof.get('input_after', 0) <= proof.get('input_before', 0)
             or not proof.get('producer_active') or proof.get('seconds', -1) < 0):
