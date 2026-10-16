@@ -67,15 +67,29 @@ def check_decision(task: str, value: Any) -> dict[str, Any]:
 
 def evaluate_app(api: str, origin: str, username: str, password_file: Path) -> dict[str, Any]:
     http=ProofHTTP(api,origin,username,password_file)
+    expected_binding: tuple[str,str] | None=None
     def call(path: str, body: dict | None = None) -> Any:
         request=urllib.request.Request(api+'/api/v1/'+path,data=json.dumps(body).encode() if body is not None else None,
             headers={'Content-Type':'application/json'})
-        with http.open(request) as response: return json.load(response)
+        with http.open(request) as response: value=json.load(response)
+        route=path.split('?',1)[0]
+        analytical=(route in {'dashboard','budget-simulation','analysis/funnel','analysis/attribution',
+                             'lifecycle/cohorts','lifecycle/segments/preview'}
+                    or route.startswith(('budget-pacing/','lifecycle/profiles')))
+        if expected_binding is not None and analytical:
+            try:
+                provenance=value['certified']['provenance'] if route=='dashboard' else value['provenance']
+                binding=(provenance['identity'],provenance['proof_digest'])
+            except (KeyError,TypeError) as error:
+                raise ValueError('missing analytical response provenance') from error
+            if binding!=expected_binding: raise ValueError('release/proof changed during decision evidence')
+        return value
     role=call('auth/session')['role']
     if role not in ('operator','admin'): raise ValueError('decision proof requires operator or admin')
     stable={p:call(p) for p in ('campaign-settings','alert-rules','lifecycle/segments')}
     period='from_date=2026-01-01&to_date=2026-01-03'
     dashboard=call('dashboard?'+period);identity=dashboard['certified']['provenance']['identity']
+    expected_binding=(identity,dashboard['certified']['provenance']['proof_digest'])
     campaign='b00db876-5a1b-55c9-8412-9441821fe3ef'
     rule={'schema_version':'mp08-segment-v1','purpose':'activation','cohort_month':None,'activity_month':None,'profile_type':None,'conditions':[]}
     results=[]
@@ -98,15 +112,12 @@ def evaluate_app(api: str, origin: str, username: str, password_file: Path) -> d
         elif name=='cohorts': value=call('lifecycle/cohorts')
         else: value=call('lifecycle/profiles?opportunity=high_value')
         summary=check_decision(name,value)
-        provenance=value.get('provenance') if isinstance(value,dict) else None
-        if provenance and provenance['identity']!=identity: raise ValueError('release changed during decision proof')
         results.append({**task,'passed':True,'mode':'automated_api_decision_readiness','seconds':time.perf_counter()-start,
                         'summary':summary,'response_hash':digest([value] if isinstance(value,dict) else value)})
     if stable!={p:call(p) for p in stable}: raise ValueError('decision proof changed operational settings')
     timings=[]
     for i in range(120):
         start=time.perf_counter();value=call('dashboard?'+period)
-        if value['certified']['provenance']['identity']!=identity: raise ValueError('dashboard benchmark changed release')
         if i>=20: timings.append((time.perf_counter()-start)*1000)
     return {'version':1,'kind':'app','role':role,'identity':identity,'proof_digest':dashboard['certified']['provenance']['proof_digest'],
             'decisions':results,'dashboard_http':{**percentiles(timings),'warmups':20},

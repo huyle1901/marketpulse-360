@@ -254,7 +254,7 @@ output and input/output hashes. Restart proofs preserve all10k records per engin
 (Flink restored checkpoint4,4.476s; Streams application/state retained,45.277s).
 ClickHouse/PostgreSQL1M/10M/20M three-query comparisons each pass20warmups/100samples
 with CPU/memory coverage. Ten automated API decisions preserve configuration.
-416Python tests succeed(40opt-in skipped),30original Java tests and four new
+423Python tests succeed(40opt-in skipped),30original Java tests and four new
 adapter tests in each client profile pass;29browser tests/typecheck/build and
 615-row fixture/Compose/diff validation pass. Six-section report PDF, twelve-slide
 PDF, hashes and25-minute storyboard generated. Automated readiness is not a human

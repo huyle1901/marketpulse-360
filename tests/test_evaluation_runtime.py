@@ -31,3 +31,13 @@ class RuntimeEvidenceTests(unittest.TestCase):
         ensure_job_state('RESTARTING',True)
         for state,expected in [('FAILED',False),('CANCELED',True),('RESTARTING',False)]:
             with self.assertRaises(ValueError):ensure_job_state(state,expected)
+
+    def test_recovery_counters_and_checkpoint_identity_are_typed(self):
+        proof=dict(before_outputs=10,after_outputs=20,input_before=40,input_after=60,
+                   producer_active=True,seconds=3,completed_checkpoint=4,restored_checkpoint=4)
+        for field in ('before_outputs','after_outputs','input_before','input_after','completed_checkpoint','restored_checkpoint'):
+            for value in (float('nan'),float('inf'),True):
+                with self.subTest(field=field,value=value):
+                    with self.assertRaises(ValueError):verify_recovery(proof | {field:value},'flink')
+        with self.assertRaises(ValueError):verify_recovery(proof | {'producer_active':'yes'},'flink')
+        with self.assertRaises(ValueError):verify_recovery(proof | {'restored_checkpoint':3},'flink')

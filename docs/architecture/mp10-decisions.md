@@ -53,6 +53,15 @@ cannot be inferred from automated checks. Keep these acceptance items pending
 until real group information and recordings exist. A PDF report and slide deck
 are reviewable generated artifacts; a storyboard is not a finished video.
 
+The final independent review found two evidence-gate issues, both fixed with
+RED→GREEN regressions: all reported durations/counters/throughput must have valid
+types and finite values, and each analytical HTTP response must match the initial
+release identity plus proof digest before dashboard/preview values are wrapped.
+The latter also rejects release changes followed by rollback, missing provenance
+and proof-only changes during timed reads. Real retained-app checks were rerun;
+the full423-test Python suite succeeds with40opt-in integrations skipped. There
+were no Critical or deferred Minor review findings.
+
 Primary implementation references:
 
 - [Kafka Streams Processor API](https://kafka.apache.org/43/streams/developer-guide/processor-api/)
