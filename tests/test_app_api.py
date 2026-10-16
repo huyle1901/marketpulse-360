@@ -1,3 +1,4 @@
+from app_auth_support import TrustedTestAccess
 import unittest
 from datetime import date
 from types import SimpleNamespace
@@ -19,7 +20,7 @@ class ApiBoundaryTests(unittest.TestCase):
                 return self
             def campaigns(self):
                 return [{'campaign_id':'a','currency':'VND'}]
-        return TestClient(create_app(Session(),store))
+        return TestClient(create_app(Session(),store,access=TrustedTestAccess()))
 
     def body(self):
         return dict(market='VN',currency='VND',period_start='2026-01-01',period_end='2026-01-03',

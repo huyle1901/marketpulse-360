@@ -56,13 +56,16 @@ class SimulationInput(BaseModel):
     allocations: list[AllocationInput] = Field(min_length=1, max_length=100)
 
 
-def create_app(analytics: Any, store: Any) -> FastAPI:
+def create_app(analytics: Any, store: Any, access: Any = None, operations: Any = None) -> FastAPI:
     app = FastAPI(title="MarketPulse 360 Campaign Operations", version="0.6.0")
 
     @app.middleware("http")
     async def cache_boundary(request: Request, call_next):
         try:
-            response = await call_next(request)
+            if access is None and request.url.path not in ('/api/v1/health/live','/api/v1/health/ready'):
+                response = JSONResponse({'code':'unauthorized'},status_code=401)
+            else:
+                response = await access.enforce(request,call_next) if access else await call_next(request)
         except Exception:
             response = JSONResponse({"code": "dependency_unavailable", "message": "Service dependency unavailable"}, status_code=503)
         response.headers["Cache-Control"] = "no-store"
@@ -186,6 +189,9 @@ def create_app(analytics: Any, store: Any) -> FastAPI:
     register_analysis_routes(app, analytics, store)
     from .lifecycle_api import register_lifecycle_routes
     register_lifecycle_routes(app, analytics, store)
+    if access is not None:
+        from .auth_api import register_auth_routes
+        register_auth_routes(app,access)
     return app
 
 
@@ -195,4 +201,11 @@ def runtime_app() -> FastAPI:
     store.initialize()
     from .segment_store import SegmentStore
     SegmentStore(store).initialize()
-    return create_app(analytics, store)
+    from .auth_store import AuthStore
+    from .access import AccessControl
+    from pathlib import Path
+    auth=AuthStore(store);auth.initialize()
+    token=Path(os.environ.get('METRICS_TOKEN_FILE','/run/secrets/metrics_token')).read_text().strip()
+    access=AccessControl(auth,os.environ.get('APP_PUBLIC_ORIGIN','http://localhost:43100'),
+                         os.environ.get('APP_COOKIE_SECURE','false')=='true',token)
+    return create_app(analytics, store,access=access)
