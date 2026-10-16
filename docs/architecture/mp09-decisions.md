@@ -78,3 +78,13 @@ certified data. Internet hardening and shared operator-tool SSO were reviewed as
 out of scope under the explicit loopback-demo boundary; public deployment needs
 its own security review. Same checkout was retained as explicitly requested;
 branches continue to share untracked files, with user work/ preserved.
+
+Post-review verification:398 Python tests green(40 opt-in skipped),29 browser tests,
+typecheck/production build, changed Docker image builds, source validation and
+Compose/promtool checks pass. Repeated retained-stack acceptance with roles,
+probe alert fire/clear and restart passes. Final authenticated p95(20warmups/
+100samples):dashboard39.857ms,cohorts27.398ms,ops/status22.487ms;full quality114.597ms.
+`post-review-acceptance.json` preserves exact release/proof/snapshot/projection and
+finance evidence. No Critical/Important review findings remain open. Two Minor
+findings above are deferred explicitly. App and monitoring remain running;
+branch is retained locally without merge, push or PR.
