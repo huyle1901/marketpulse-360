@@ -111,4 +111,17 @@ ClickHouse26.8.25.14, PostgreSQL17.6.
 This proves the local fixture, not production capacity. Profiles/timelines are
 paged1..100 with offset<=100000; previews sample20 plus exact total. No production
 throughput claim, activation delivery or earlier-pipeline changes are implied.
-Fresh whole-branch review/fixes remain the final completion gate.
+Fresh whole-branch review of `0512e3d..b9a500f` found no Critical/Important
+issues and assessed the branch ready to merge. No production fix was required.
+
+Deferred minor: saved segment heads load at mount. After another operator edits
+a segment, optimistic locking safely rejects the stale write, but recovering the
+new editable head requires a full browser reload. Preserve the unsaved draft
+before reloading. An explicit metadata refresh preserving drafts is optional
+future UX work. Refresh customers refreshes analytical reports only.
+
+Review scope rulings: production authentication/RBAC/retention remain MP-09
+(they need separate production controls); external audience delivery remains
+excluded (preview does not deliver audiences); production capacity remains
+unproven by this fixture; earlier pipeline redesign remains excluded (new
+requirements belong in later milestones). These preserve the accepted scope.

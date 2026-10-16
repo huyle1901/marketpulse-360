@@ -551,7 +551,7 @@ operational state and MP-07 outputs. Desktop/mobile/drill visual checks and all
 fourteen browser tests passed. See [decisions/evidence](mp07-decisions.md) and
 [runbook](../runbooks/funnel-attribution.md) for bounds and explicit publication.
 
-### 4.7 MP-08 Customer 360 and lifecycle boundary (locally verified; final review pending)
+### 4.7 MP-08 Customer 360 and lifecycle boundary (implemented and locally verified)
 
 Strict versioned segment contracts, pure RFM/consent evidence and request-pinned
 ClickHouse lifecycle reads are implemented. Real queries preserve 60 historical
@@ -569,7 +569,8 @@ activation-eligible profiles and 191 governed events. Owned consent/refund/curre
 faults and PostgreSQL immutable/concurrent revision tests pass. API/web restart
 preserves revisions and MP06–07 outputs. Fixture p95 cohorts/profiles/timeline/preview
 is 13.64/28.53/22.00/32.39ms, 20warmups/100uncached samples each. Fresh review
-remains pending. See [decisions](mp08-decisions.md) and
+found no blocking issues; the documented metadata-reload UX improvement is deferred.
+See [decisions](mp08-decisions.md) and
 [runbook](../runbooks/customer-lifecycle.md). The [MP-08 spec](../../specs/08-customer-lifecycle-intelligence.md) extends the
 existing FastAPI/Next.js app with historical cohorts, pseudonymous RFM profiles,
 governed timelines and versioned segment previews. Analytical queries reuse the

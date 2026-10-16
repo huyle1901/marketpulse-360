@@ -55,6 +55,12 @@ Save a named rule to get version1; edits require the latest version. Load a save
 segment, enter an older revision number and Load revision to inspect/preview it
 read-only; Edit latest revision returns to editable head. Old revisions cannot be
 changed, including direct database UPDATE/DELETE. Stale edit409 requires reloading.
+After another operator edits a segment, a full browser reload is currently
+required to reload the latest editable head. Preserve any unsaved draft before
+reloading and reapply it after loading that head. Refresh customers refreshes
+analytical reports only; selecting the cached segment again does not reload its
+server head. Optimistic locking protects saved revisions throughout.
+
 A saved rule plus the same release/as_of produces the same evaluation identity;
 a newer certified release may legitimately change membership.
 

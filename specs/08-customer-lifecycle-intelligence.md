@@ -1,6 +1,6 @@
 # MP-08 — Customer 360 and lifecycle intelligence
 
-**Status:** Implemented and locally verified; final whole-branch review pending.
+**Status:** Implemented and locally verified; fresh whole-branch review found no blocking issues.
 **Base:** `0512e3d`, complete locally verified MP-07; stacked branch
 `feat/mp08-customer-lifecycle-intelligence` in the same source tree. Existing
 untracked `work/` artifacts are user material and are not part of this feature.
