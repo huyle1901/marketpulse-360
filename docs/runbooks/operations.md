@@ -125,9 +125,11 @@ cohorts44.219ms, ops/status24.058ms; full manual quality133.752ms. Probe alert f
 and cleared, history persisted, all24 direct/proxy role checks passed. Five
 security tests ran against dedicated `mp09_security_test` PostgreSQL, including
 concurrent admin demotions, persistent throttle, expiry, bounded retention,
-revocation and immutable audit. Full Python395tests (40opt-in skipped),27 browser
-tests, typecheck/build, fixture validation and promtool passed before final review.
-Later review fixes and final measured evidence are recorded in MP09 decisions.
+revocation and immutable audit. Full Python398tests (40opt-in skipped),29 browser
+tests, typecheck/build, fixture validation and promtool passed after review fixes.
+Final post-review p95: dashboard39.857ms, cohorts27.398ms, ops/status22.487ms;
+full manual quality114.597ms. Exact proof is `post-review-acceptance.json`.
+Review fixes and final measured evidence are recorded in MP09 decisions.
 
 Active identity remains `31ffb7c713c694b9082b0f1daad7a32d50ca76e9b842fcb988029d3da4fdef06`;
 proof `564bf33845a443ac6ea4b159ba2d8d2172944d3bd5e82a22cdb74c1032c3c356`.
