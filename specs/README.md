@@ -240,7 +240,25 @@ quality checks, lineage, retention controls, and role-based access.
 
 ### MP-10 - Evaluation, alternatives, and final evidence package
 
-**Status:** Planned; depends on all implemented stories
+**Status:** Implemented and technically verified; final human/video/group acceptance
+pending. Based on `main` after PR #9 merged; no earlier pipeline reimplementation.
+
+Scope: [`10-evaluation-and-evidence.md`](10-evaluation-and-evidence.md).
+Plan: [`2026-10-16-evaluation-evidence.md`](../docs/superpowers/plans/2026-10-16-evaluation-evidence.md).
+Proof: [`evaluation report`](../docs/evaluation/report.md),
+[`runbook`](../docs/runbooks/evaluation.md),
+[`submission checklist`](../docs/evaluation/README.md).
+
+**Observed:** Both 10k/100k processing scales match every independent oracle
+output and input/output hashes. Restart proofs preserve all10k records per engine
+(Flink restored checkpoint4,4.476s; Streams application/state retained,45.277s).
+ClickHouse/PostgreSQL1M/10M/20M three-query comparisons each pass20warmups/100samples
+with CPU/memory coverage. Ten automated API decisions preserve configuration.
+416Python tests succeed(40opt-in skipped),30original Java tests and four new
+adapter tests in each client profile pass;29browser tests/typecheck/build and
+615-row fixture/Compose/diff validation pass. Six-section report PDF, twelve-slide
+PDF, hashes and25-minute storyboard generated. Automated readiness is not a human
+study. Group size/naming and actual narrated20–30minute video remain unconfirmed.
 
 Evaluate correctness, performance, and application effectiveness, then package the
 evidence for the final report, slides, video, and executable demonstration.
