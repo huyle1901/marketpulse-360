@@ -640,6 +640,15 @@ explicitly local to the loaded 20-row page. Campaign Analysis links preserve sha
 filters and declare the row currency. No view state or analytical rows are copied
 into PostgreSQL or browser persistent storage.
 
+Customer retention is presented as a shared accessible heatmap for aggregate
+viewers and operators. Observed zero cells retain their exact original cohort
+counts, while absent cells remain unavailable. Operators can drill cells using the
+existing profile filters. Profile timelines open in a labelled modeless panel beside
+the bounded list, with focus transfer/return and existing consent/release guards.
+A live segment-draft summary explains conjunctive conditions and the activation
+consent boundary. Segment membership is still evaluated only by the existing
+release-bound preview; no members or new identity merges are persisted.
+
 Design: [Command Center usability](../superpowers/specs/2026-10-20-command-center-usability-design.md).
 Plan: [implementation](../superpowers/plans/2026-10-20-command-center-usability.md).
 

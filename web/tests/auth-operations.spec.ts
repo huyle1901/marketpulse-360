@@ -45,3 +45,8 @@ test('session polls honor the latest check rather than response arrival order',a
  await page.goto('/operations');await expect(page.getByRole('heading',{name:'Administrator access required'})).toBeVisible();const initial=polls;holdNext=true;await page.clock.fastForward(15000);await expect.poll(()=>polls).toBe(initial+1);await page.clock.fastForward(15000);await expect.poll(()=>polls).toBe(initial+2);release();await done;await page.clock.runFor(100);
  await expect(page.getByRole('heading',{name:'Administrator access required'})).toBeVisible();await expect(page.getByText('obsolete-admin · admin')).toHaveCount(0);
 });
+
+test('viewer receives the aggregate heatmap without profile or segment reads',async({page})=>{
+ const forbidden:string[]=[];await page.route('**/api/v1/**',r=>{const p=new URL(r.request().url()).pathname;if(p.includes('/profiles')||p.includes('/segments'))forbidden.push(p);return r.fulfill({json:p.endsWith('auth/session')?{user_id:'v',username:'viewer',role:'viewer'}:{rows:[{cohort_month:'2026-01-01',activity_month:'2026-01-01',profile_type:'customer',month_number:'0',cohort_size:'2',active_profiles:'1',retained_rate:'0.500000'}],provenance:{identity:'a'.repeat(64)}}});});
+ await page.goto('/customers');await expect(page.getByRole('table',{name:'Retention heatmap'})).toContainText('50%');expect(forbidden).toEqual([]);await expect(page.getByRole('button',{name:/Explore cohort/})).toHaveCount(0);
+});
