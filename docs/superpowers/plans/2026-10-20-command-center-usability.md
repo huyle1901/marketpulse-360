@@ -80,9 +80,9 @@
 
 **Interfaces:** Heatmap consumes existing `Cohort[]`, optional drill callback. ProfileDetail supplies labelled modeless panel and close/focus behavior around existing timeline content. No segment-member API or storage change.
 
-- [ ] Write tests for observed zero/missing heatmap cells, exact denominators, cohort drill, viewer aggregate-only requests, profile close/focus/error/consent behavior, and live segment rule summary. Watch FAIL.
-- [ ] Implement accessible heatmap shared by viewer/operator, focused profile panel beside list and concise segment summary; preserve all digest/revision/race protections.
-- [ ] Run all Python/browser tests, typecheck/build, fixture validation, Compose config and diff checks; commit with architecture presentation update.
+- [x] Write tests for observed zero/missing heatmap cells, exact denominators, cohort drill, viewer aggregate-only requests, profile close/focus/error/consent behavior, and live segment rule summary. Watch FAIL.
+- [x] Implement accessible heatmap shared by viewer/operator, focused profile panel beside list and concise segment summary; preserve all digest/revision/race protections.
+- [x] Run all Python/browser tests, typecheck/build, fixture validation, Compose config and diff checks; commit with architecture presentation update.
 
 ## Task 6: Docker verification and final review
 
