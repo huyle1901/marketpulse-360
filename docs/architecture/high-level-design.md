@@ -614,6 +614,16 @@ entry point. Authentication/session checks and viewer/operator/admin boundaries
 remain the MP-09 contracts. This changes application composition only; it adds no
 service, storage responsibility or runtime dependency.
 
+The existing authenticated `/api/v1/dashboard` contract adds certified daily
+series and an equal-length immediately preceding UTC period. ClickHouse reads for
+current totals, previous totals and published-day coverage use one pinned release.
+Coverage is evaluated before dimension filters: sparse or absent prior history
+cannot become a zero baseline. Monetary fields remain integer strings, grouped by
+currency; the UI uses BigInt formatting, while bounded normalized SVG coordinates
+are presentation only. Prior intervals before the supported 1900 boundary are
+unavailable without invalidating the current selection. Matching alert shortcuts
+require current release identity and overlapping dates; all evidence remains below.
+
 Design: [Command Center usability](../superpowers/specs/2026-10-20-command-center-usability-design.md).
 Plan: [implementation](../superpowers/plans/2026-10-20-command-center-usability.md).
 

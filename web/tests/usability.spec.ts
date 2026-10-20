@@ -17,3 +17,23 @@ test('configuration is discoverable without dominating the campaign overview',as
  await page.getByText('Budget allocation simulator',{exact:true}).click();await expect(page.getByLabel('Scenario total (minor units)')).toBeVisible();
  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
+
+test('daily trends expose exact values and missing prior history stays unavailable',async({page})=>{
+ const daily_series=[{event_date:'2026-01-01',currency:'VND',spend_minor:'100',net_revenue_minor:'9007199254740993'}, {event_date:'2026-01-02',currency:'VND',spend_minor:'200',net_revenue_minor:'-3'}];
+ await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:{...dashboard,certified:{...dashboard.certified,daily_series,comparison:{status:'unavailable',from_date:'2025-12-30',to_date:'2026-01-01',observed_days:'0',expected_days:'2',totals:[]}}}}));
+ await page.goto('/');await expect(page.getByRole('heading',{name:'Daily certified trends'})).toBeVisible();
+ await expect(page.getByText('Previous period unavailable',{exact:true})).toBeVisible();
+ await page.getByText('Exact daily values · VND',{exact:true}).click();const table=page.getByRole('table',{name:'Daily certified values · VND'});
+ await expect(table).toContainText('9007199254740993');await expect(table).toContainText('-3');
+ await expect(page.getByRole('img',{name:'Daily net revenue and ad spend in VND'})).toBeVisible();
+});
+test('readable currency, qualified changes and alert shortcuts retain selection context',async({page})=>{
+ const usd={...metric,currency:'USD',spend_minor:'125',net_revenue_minor:'250'};
+ await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:{...dashboard,certified:{...dashboard.certified,rows:[usd],totals:[{...usd,clicks:'2',impressions:'10'}],daily_series:[{...usd,event_date:'2026-01-02'}],comparison:{status:'complete',from_date:'2025-12-30',to_date:'2026-01-01',observed_days:'2',expected_days:'2',totals:[{...usd,spend_minor:'100',net_revenue_minor:'200'}]}}}}));
+ const evidence={campaign_id:'a',explanation:'Spend rose above configured threshold',currency:'USD',outcome:'triggered',from_date:'2026-01-01',to_date:'2026-01-03',rule_id:'r',rule_version:'1',setting_version:'1',operands:{},provenance};
+ await page.route('**/api/v1/alerts',r=>r.fulfill({json:[{evaluation_key:'valid',evidence},{evaluation_key:'old',evidence:{...evidence,explanation:'Old release only',provenance:{...provenance,identity:'b'.repeat(64)}}},{evaluation_key:'outside',evidence:{...evidence,explanation:'Outside selected period',from_date:'2026-02-01',to_date:'2026-02-03'}}]}));
+ await page.goto('/');const overview=page.getByRole('region',{name:'Decision overview'});
+ await expect(page.getByText('$1.25',{exact:true}).first()).toBeVisible();await expect(overview).toContainText('+25.00%');
+ await expect(overview).toContainText(evidence.explanation);await expect(overview).not.toContainText('Old release only');await expect(overview).not.toContainText('Outside selected period');
+ await overview.getByRole('button',{name:'Investigate Campaign A'}).click();await expect(page.getByRole('combobox',{name:'Campaign',exact:true})).toHaveValue('a');
+});
