@@ -1,7 +1,12 @@
 # MP-10 — Evaluation, alternatives and evidence
 
-Status: designed for implementation on `feat/mp10-evaluation-evidence`, based on
-`main` after PR #9 merged (`cfe63fa`). Scope delegated to the backlog by the user.
+Status: implemented and technically verified on `feat/mp10-evaluation-evidence`,
+based on `main` after PR #9 merged (`cfe63fa`). Implementation and review fixes
+are tracked in [PR #11](https://github.com/huyle1901/marketpulse-360/pull/11).
+Technical acceptance was verified on 2026-10-16; tests, retained-app decisions,
+fixture validation and evidence integrity were rechecked on 2026-10-20.
+Human observations, group information and the narrated submission video remain
+pending. Scope delegated to the backlog by the user.
 
 ## Purpose and boundaries
 
