@@ -45,12 +45,12 @@
 
 **Interfaces:** `Dashboard.certified.daily_series` has `event_date`, `currency`, exact SUM_FIELDS strings. `comparison` has `from_date`, `to_date`, `status`, `observed_days`, `expected_days`, `totals`. Overview consumes those, provenance, current rows/totals and alerts.
 
-- [ ] Write Python tests with independent hand-derived current/prior daily totals, sparse/empty coverage and dimension filters; prove all query database names match pinned release and integers beyond JS precision survive.
-- [ ] Run `.venv/bin/python -m unittest discover -s tests -p test_app_analytics.py`; expect absent trend fields to FAIL.
-- [ ] Add exact daily/prior aggregation in the pinned analytics session; retain existing JSON fields.
-- [ ] Write browser tests for exact trend tables, missing prior comparison, currency precision, and relevant release/date/campaign alert drill; watch FAIL.
-- [ ] Implement SVG/chart-table overview, currency/ROAS helpers and alert shortcuts; preserve historical/provisional labels and raw provenance.
-- [ ] Run focused Python/browser tests, `npm --prefix web run typecheck`, diff check; commit with architecture contract update.
+- [x] Write Python tests with independent hand-derived current/prior daily totals, sparse/empty coverage and dimension filters; prove all query database names match pinned release and integers beyond JS precision survive.
+- [x] Run `.venv/bin/python -m unittest discover -s tests -p test_app_analytics.py`; expect absent trend fields to FAIL.
+- [x] Add exact daily/prior aggregation in the pinned analytics session; retain existing JSON fields.
+- [x] Write browser tests for exact trend tables, missing prior comparison, currency precision, and relevant release/date/campaign alert drill; watch FAIL.
+- [x] Implement SVG/chart-table overview, currency/ROAS helpers and alert shortcuts; preserve historical/provisional labels and raw provenance.
+- [x] Run focused Python/browser tests, `npm --prefix web run typecheck`, diff check; commit with architecture contract update.
 
 ## Task 3: Readable operations summaries
 
