@@ -29,7 +29,7 @@ test('daily trends expose exact values and missing prior history stays unavailab
 });
 test('readable currency, qualified changes and alert shortcuts retain selection context',async({page})=>{
  const usd={...metric,currency:'USD',spend_minor:'125',net_revenue_minor:'250'};
- await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:{...dashboard,certified:{...dashboard.certified,rows:[usd],totals:[{...usd,clicks:'2',impressions:'10'}],daily_series:[{...usd,event_date:'2026-01-02'}],comparison:{status:'complete',from_date:'2025-12-30',to_date:'2026-01-01',observed_days:'2',expected_days:'2',totals:[{...usd,spend_minor:'100',net_revenue_minor:'200'}]}}}}));
+ await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:{...dashboard,certified:{...dashboard.certified,rows:[usd],totals:[{...usd,clicks:'2',impressions:'10'}],daily_series:[{...usd,event_date:'2026-01-02'}],comparison:{status:'complete',previous_status:'complete',current_status:'complete',current_observed_days:'2',current_expected_days:'2',from_date:'2025-12-30',to_date:'2026-01-01',observed_days:'2',expected_days:'2',totals:[{...usd,spend_minor:'100',net_revenue_minor:'200'}]}}}}));
  const evidence={campaign_id:'a',explanation:'Spend rose above configured threshold',currency:'USD',outcome:'triggered',from_date:'2026-01-01',to_date:'2026-01-03',rule_id:'r',rule_version:'1',setting_version:'1',operands:{},provenance};
  await page.route('**/api/v1/alerts',r=>r.fulfill({json:[{evaluation_key:'valid',evidence},{evaluation_key:'old',evidence:{...evidence,explanation:'Old release only',provenance:{...provenance,identity:'b'.repeat(64)}}},{evaluation_key:'outside',evidence:{...evidence,explanation:'Outside selected period',from_date:'2026-02-01',to_date:'2026-02-03'}}]}));
  await page.goto('/');const overview=page.getByRole('region',{name:'Decision overview'});
@@ -63,4 +63,31 @@ test('campaign search, exact numeric sorting, published presets and analysis lin
 test('copy view link reports clipboard failure without claiming success',async({page})=>{
  await page.addInitScript(()=>{Object.defineProperty(navigator,'clipboard',{value:{writeText:async()=>{throw new Error('denied');}},configurable:true});});
  await page.goto('/');await page.getByRole('button',{name:'Copy view link'}).click();await expect(page.getByText('Could not copy; copy the URL from your address bar.',{exact:true})).toBeVisible();
+});
+
+test('automatic campaign dates replace history so Back leaves the workspace',async({page})=>{
+ await page.goto('/login');await page.getByRole('link',{name:'Open Command Center'}).click();await expect(page).toHaveURL(/from_date=/);
+ await page.goBack();await expect(page).toHaveURL(url=>url.pathname==='/login');
+});
+test('missing currency or filtered campaign baselines remain unavailable instead of zero',async({page})=>{
+ for(const totals of [[],[{currency:'USD',spend_minor:'100',net_revenue_minor:'200'}]]){
+  await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:{...dashboard,certified:{...dashboard.certified,comparison:{status:'complete',previous_status:'complete',current_status:'complete',from_date:'2025-12-30',to_date:'2026-01-01',observed_days:'2',expected_days:'2',current_observed_days:'2',current_expected_days:'2',totals}}}}));
+  await page.goto('/?campaign_id=a');const comparison=page.getByRole('region',{name:'Decision overview'}).locator('.period-comparison');await expect(comparison).toContainText('Baseline unavailable');await expect(comparison).not.toContainText('vs ₫0');
+ }
+});
+test('sparse current data cannot appear as a percentage decline',async({page})=>{
+ await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:{...dashboard,certified:{...dashboard.certified,totals:[{...metric,net_revenue_minor:'100',spend_minor:'100',clicks:'2',impressions:'10'}],comparison:{status:'complete',previous_status:'complete',current_status:'partial',from_date:'2025-12-30',to_date:'2026-01-01',observed_days:'2',expected_days:'2',current_observed_days:'1',current_expected_days:'2',totals:[{currency:'VND',net_revenue_minor:'200',spend_minor:'200'}]}}}}));
+ await page.goto('/');const comparison=page.getByRole('region',{name:'Decision overview'}).locator('.period-comparison');await expect(comparison).toContainText('Current period partially covered');await expect(comparison).not.toContainText('-50.00%');
+});
+test('retained campaign rows do not offer drill links for a failed new selection',async({page})=>{
+ await page.goto('/');await expect(page.getByRole('link',{name:'Analyze Campaign A'})).toBeVisible();
+ await page.route('**/api/v1/dashboard*platform=meta*',r=>r.fulfill({status:503,json:{code:'dependency_unavailable'}}));
+ await page.getByRole('combobox',{name:'Platform',exact:true}).selectOption('meta');await expect(page.getByText('Refresh failed; showing last successful data')).toBeVisible();
+ await expect(page.getByRole('table',{name:'Campaign performance'})).toContainText('Campaign A');await expect(page.getByRole('link',{name:'Analyze Campaign A'})).toHaveCount(0);
+});
+
+test('reset hydration replaces its default dates so Back restores the prior selection',async({page})=>{
+ await page.goto('/');await expect(page).toHaveURL(/from_date=/);await page.getByRole('combobox',{name:'Platform',exact:true}).selectOption('google');await expect(page).toHaveURL(/platform=google/);
+ await page.getByRole('button',{name:'Reset filters',exact:true}).click();await expect(page.getByLabel('From (UTC)',{exact:true})).toHaveValue('2026-01-01');await expect(page.getByRole('combobox',{name:'Platform',exact:true})).toHaveValue('');
+ await page.goBack();await expect(page.getByRole('combobox',{name:'Platform',exact:true})).toHaveValue('google');
 });

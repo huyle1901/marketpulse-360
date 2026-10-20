@@ -123,3 +123,12 @@ class DashboardSeriesTests(unittest.TestCase):
         self.assertEqual(result['certified']['totals'][0]['spend_minor'],'3')
         self.assertEqual(result['certified']['comparison']['status'],'unavailable')
         self.assertFalse(any(kw.get('parameters',{}).get('from_date',date(1900,1,1))<date(1900,1,1) for _,kw in client.calls))
+
+    def test_sparse_current_period_suppresses_comparison_with_complete_prior_period(self):
+        rows = [observed('2026-01-01',net=100),observed('2026-01-02',net=100),observed('2026-01-03',net=100)]
+        result, _ = self.dashboard(rows,DashboardFilter(date(2026,1,3),date(2026,1,5)))
+        comparison=result['certified']['comparison']
+        self.assertEqual(comparison['status'],'partial')
+        self.assertEqual(comparison['previous_status'],'complete')
+        self.assertEqual(comparison['current_status'],'partial')
+        self.assertEqual((comparison['current_observed_days'],comparison['current_expected_days']),('1','2'))

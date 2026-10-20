@@ -43,7 +43,7 @@
 
 **Files:** Modify `src/marketpulse_app/analytics.py`, `web/app/types.ts`, `web/app/page.tsx`; create `web/components/CampaignOverview.tsx`, `web/lib/format.ts`; extend `tests/test_app_analytics.py`, `web/tests/usability.spec.ts`.
 
-**Interfaces:** `Dashboard.certified.daily_series` has `event_date`, `currency`, exact SUM_FIELDS strings. `comparison` has `from_date`, `to_date`, `status`, `observed_days`, `expected_days`, `totals`. Overview consumes those, provenance, current rows/totals and alerts.
+**Interfaces:** `Dashboard.certified.daily_series` has `event_date`, `currency`, exact SUM_FIELDS strings. `comparison` has `from_date`, `to_date`, `status`, `previous_status`, `current_status`, previous/current observed/expected day counts, and `totals`. Overview consumes those, provenance, current rows/totals and alerts.
 
 - [x] Write Python tests with independent hand-derived current/prior daily totals, sparse/empty coverage and dimension filters; prove all query database names match pinned release and integers beyond JS precision survive.
 - [x] Run `.venv/bin/python -m unittest discover -s tests -p test_app_analytics.py`; expect absent trend fields to FAIL.
@@ -66,7 +66,7 @@
 
 **Files:** Create `web/lib/useUrlState.ts`, `web/components/FilterActions.tsx`, `web/components/CampaignTable.tsx`; modify three workspaces; extend usability/browser tests.
 
-**Interfaces:** `useUrlState<T extends Record<string,string>>(defaults:T, normalize?:(value:T)=>T)` returns `[T, Dispatch<SetStateAction<T>>]`; serializes allowlisted keys only and listens to popstate. CampaignTable consumes Metric rows plus active shared filters and exposes exact BigInt sort/search and Analysis links. FilterActions consumes date-setting/reset callbacks and published data-through anchor.
+**Interfaces:** `useUrlState<T extends Record<string,string>>(defaults:T, normalize?:(value:T)=>T)` returns `[T, Dispatch<SetStateAction<T>>, Dispatch<SetStateAction<T>>]` (state, user-push setter, automatic-replace setter); serializes allowlisted keys only and listens to popstate. CampaignTable consumes Metric rows plus active shared filters and exposes exact BigInt sort/search and Analysis links. FilterActions consumes date-setting/reset callbacks and published data-through anchor.
 
 - [x] Write deep-link/reload/back tests for campaign, analysis model and customer purpose/offset; test unknown/enumeration/offset normalization and stale response guards. Watch FAIL.
 - [x] Implement hook and workspace integration without passing UI-only query keys to APIs.
@@ -93,5 +93,5 @@
 - [ ] Build API/web and recreate only those services using existing port/environment configuration; expect healthy containers.
 - [ ] Authenticated read-only smoke: independent current/previous/daily totals, status summaries, aggregate/detail permissions; capture all four desktop/mobile views under ignored `.lakehouse/app-review/`.
 - [ ] Run full required validation, inspect fresh Git status; record real results, no invented counts.
-- [ ] Dispatch one fresh whole-branch reviewer per requesting-code-review; fix Important/Critical findings with failing regression tests then green suite.
+- [x] Dispatch one fresh whole-branch reviewer per requesting-code-review; fix Important/Critical findings with failing regression tests then green suite. Five Important findings addressed, no Critical/Minor findings or declined judgments.
 - [ ] Commit verification/runbook/evidence, retain feature branch for review; do not merge automatically.

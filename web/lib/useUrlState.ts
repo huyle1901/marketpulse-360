@@ -2,7 +2,7 @@
 import {useCallback,useEffect,useRef,useState,type Dispatch,type SetStateAction} from 'react';
 
 /** Allowlisted, non-sensitive view state. Consumers select API request keys separately. */
-export function useUrlState<T extends Record<string,string>>(defaults:T,normalize?:(value:T)=>T):[T,Dispatch<SetStateAction<T>>]{
+export function useUrlState<T extends Record<string,string>>(defaults:T,normalize?:(value:T)=>T):[T,Dispatch<SetStateAction<T>>,Dispatch<SetStateAction<T>>]{
  const config=useRef({defaults,normalize});config.current={defaults,normalize};
  const read=()=>{
   const values={...config.current.defaults};
@@ -25,10 +25,10 @@ export function useUrlState<T extends Record<string,string>>(defaults:T,normaliz
   if(replace)window.history.replaceState(null,'',url);else window.history.pushState(null,'',url);
  };
  // Write at the state transition, never from a delayed render effect that can race Back.
- const update:Dispatch<SetStateAction<T>>=useCallback(action=>{
+ const transition=useCallback((action:SetStateAction<T>,replace:boolean)=>{
   const draft=typeof action==='function'?action(current.current):action;
   const next=config.current.normalize?.(draft)??draft;
-  current.current=next;write(next,false);setValue(next);
+  current.current=next;write(next,replace);setValue(next);
  },[]);
  useEffect(()=>{
   const restore=()=>{const next=read();current.current=next;write(next,true);setValue(next);};
@@ -36,6 +36,8 @@ export function useUrlState<T extends Record<string,string>>(defaults:T,normaliz
   restore();
   return()=>window.removeEventListener('popstate',restore);
  },[]);
- return [value,update];
+ const update:Dispatch<SetStateAction<T>>=useCallback(action=>transition(action,false),[transition]);
+ const replace:Dispatch<SetStateAction<T>>=useCallback(action=>transition(action,true),[transition]);
+ return [value,update,replace];
 }
 export const choice=(value:string,allowed:readonly string[],fallback='')=>allowed.includes(value)?value:fallback;
