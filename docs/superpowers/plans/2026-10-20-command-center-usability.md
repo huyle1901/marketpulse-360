@@ -90,8 +90,17 @@
 
 **Interfaces:** Retained project `marketpulse-mp05-proof`, API48000/web43100, same release and PostgreSQL configuration.
 
-- [ ] Build API/web and recreate only those services using existing port/environment configuration; expect healthy containers.
-- [ ] Authenticated read-only smoke: independent current/previous/daily totals, status summaries, aggregate/detail permissions; capture all four desktop/mobile views under ignored `.lakehouse/app-review/`.
-- [ ] Run full required validation, inspect fresh Git status; record real results, no invented counts.
+- [x] Build API/web and recreate only those services using existing port/environment configuration; expect healthy containers.
+- [x] Authenticated read-only smoke: independent current/previous/daily totals, status summaries, aggregate/detail permissions; capture all four desktop/mobile views under ignored `.lakehouse/app-review/`.
+- [x] Run full required validation, inspect fresh Git status; record real results, no invented counts.
 - [x] Dispatch one fresh whole-branch reviewer per requesting-code-review; fix Important/Critical findings with failing regression tests then green suite. Five Important findings addressed, no Critical/Minor findings or declined judgments.
-- [ ] Commit verification/runbook/evidence, retain feature branch for review; do not merge automatically.
+- [x] Commit verification/runbook/evidence, retain feature branch for review; do not merge automatically.
+
+## Acceptance record
+
+Completed in this checkout on `feat/command-center-usability`, source verification
+at `6ef0575`. Five feature commits plus review-fix and verification documentation.
+428 Python tests (40 opt-in skips),54 browser tests, typecheck/build, fixture 615 rows / 22 files,
+Compose/diff and rebuilt API/web verification pass. All five Important review
+findings reproduced RED→GREEN; no Critical/Minor findings or rulings remain.
+See `docs/runbooks/command-center-usability.md` and ignored `.lakehouse/app-review/2026-10-20-usability/verification.json`.
