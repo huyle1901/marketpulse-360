@@ -58,9 +58,9 @@
 
 **Interfaces:** Existing `/ops/status`, `/quality`, `/lineage`, `/retention` payloads unchanged; technical evidence rendered in closed native details.
 
-- [ ] Write tests covering service up/down/unknown, latest live report versus controlled probe, unavailable sections and collapsed technical evidence; watch FAIL.
-- [ ] Render service cards, quality/probe and lineage/retention summaries; collapse quality history; retain raw evidence and original mutation controls/race guards.
-- [ ] Run focused tests and browser suite, diff check; commit `feat: summarize platform health and data trust`.
+- [x] Write tests covering service up/down/unknown, latest live report versus controlled probe, unavailable sections and collapsed technical evidence; watch FAIL.
+- [x] Render service cards, quality/probe and lineage/retention summaries; collapse quality history; retain raw evidence and original mutation controls/race guards.
+- [x] Run focused tests and browser suite, diff check; commit `feat: summarize platform health and data trust`.
 
 ## Task 4: Shareable filters and usable tables
 
