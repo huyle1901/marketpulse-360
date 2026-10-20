@@ -18,8 +18,8 @@ test('navigation, stage unit, exact comparisons and refund context',async({page}
  await expect(page.getByText('All campaigns before dimension filters',{exact:true})).toBeVisible();
  await expect(page.getByText('Outside report interval',{exact:true})).toBeVisible();
  await expect(page.getByText('-3',{exact:true}).first()).toBeVisible();
- await page.getByRole('link',{name:'Campaign Operations',exact:true}).click();await expect(page).toHaveURL('/');
- await page.getByRole('link',{name:'Funnel & Attribution',exact:true}).click();await expect(page).toHaveURL('/analysis');
+ await page.getByRole('link',{name:'Campaign Operations',exact:true}).click();await expect(page).toHaveURL(url=>url.pathname==='/');
+ await page.getByRole('link',{name:'Funnel & Attribution',exact:true}).click();await expect(page).toHaveURL(url=>url.pathname==='/analysis');
 });
 test('channel and campaign drill apply credited filters, model is selectable',async({page})=>{
  await page.goto('/analysis');await page.getByRole('button',{name:'Explore channel google',exact:true}).click();
@@ -52,3 +52,10 @@ test('slow previous selection never replaces current results',async({page})=>{
 });
 
 test.beforeEach(async({page})=>{await page.route('**/api/v1/auth/session',r=>r.fulfill({json:{user_id:'fixture-admin',username:'fixture-admin',role:'admin'}}));});
+
+test('analysis URL restores model and filters across reload and back',async({page})=>{
+ await page.goto('/analysis?from_date=2026-01-01&to_date=2026-01-03&platform=google&campaign_id=a&model=linear');
+ await expect(page.getByLabel('Journey attribution model')).toHaveValue('linear');await expect(page.getByLabel('Paid channel')).toHaveValue('google');await expect(page.getByLabel('Campaign',{exact:true})).toHaveValue('a');
+ await page.getByLabel('Journey attribution model').selectOption('first_touch');await expect(page).toHaveURL(/model=first_touch/);await page.reload();await expect(page.getByLabel('Journey attribution model')).toHaveValue('first_touch');
+ await page.goBack();await expect(page.getByLabel('Journey attribution model')).toHaveValue('linear');await page.goForward();await expect(page.getByLabel('Journey attribution model')).toHaveValue('first_touch');
+});

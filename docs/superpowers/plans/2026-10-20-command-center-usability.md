@@ -68,11 +68,11 @@
 
 **Interfaces:** `useUrlState<T extends Record<string,string>>(defaults:T, normalize?:(value:T)=>T)` returns `[T, Dispatch<SetStateAction<T>>]`; serializes allowlisted keys only and listens to popstate. CampaignTable consumes Metric rows plus active shared filters and exposes exact BigInt sort/search and Analysis links. FilterActions consumes date-setting/reset callbacks and published data-through anchor.
 
-- [ ] Write deep-link/reload/back tests for campaign, analysis model and customer purpose/offset; test unknown/enumeration/offset normalization and stale response guards. Watch FAIL.
-- [ ] Implement hook and workspace integration without passing UI-only query keys to APIs.
-- [ ] Write tests for published-date presets, reset/copy feedback, exact negative/huge numeric sorting, search and campaign-to-analysis links. Watch FAIL.
-- [ ] Implement filter actions, campaign search/sort and explicitly page-local profile search/sort.
-- [ ] Run all browser tests/typecheck, diff check; commit with architecture URL-state responsibility update.
+- [x] Write deep-link/reload/back tests for campaign, analysis model and customer purpose/offset; test unknown/enumeration/offset normalization and stale response guards. Watch FAIL.
+- [x] Implement hook and workspace integration without passing UI-only query keys to APIs.
+- [x] Write tests for published-date presets, reset/copy feedback, exact negative/huge numeric sorting, search and campaign-to-analysis links. Watch FAIL.
+- [x] Implement filter actions, campaign search/sort and explicitly page-local profile search/sort.
+- [x] Run all browser tests/typecheck, diff check; commit with architecture URL-state responsibility update.
 
 ## Task 5: Visual customer exploration
 

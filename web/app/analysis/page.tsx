@@ -1,4 +1,6 @@
 'use client';
+import {useUrlState,choice} from '../../lib/useUrlState';
+import FilterActions from '../../components/FilterActions';
 import {useSession} from '../../components/SessionGate';
 import {useEffect,useState} from 'react';
 import {stages,type Model,type Reports,type Provenance,type Credit} from './types';
@@ -12,10 +14,10 @@ async function read<T>(path:string,signal:AbortSignal):Promise<T>{
 function Source({value,label}:{value:Provenance;label:string}){return <details className="provenance"><summary>{label} source &amp; freshness</summary><p>{value.model} · Serving relation {value.serving_relation} · Generation {value.generation}</p><p>Data through {value.data_through||'No selected data'} · {value.timestamp_resolution} resolution · Maximum event day {value.max_event_date||'None'}</p><p>Read at {value.observed_at}; polling does not advance event freshness.</p><p>Release {value.identity}</p><p>Certification proof {value.proof_digest}</p>{value.silver_snapshot_id&&<p>Silver snapshot {value.silver_snapshot_id} · {value.projection_row_count} governed events · {value.projection_version}<br/>Projection checksum {value.projection_checksum}</p>}</details>}
 export default function Analysis(){
  const {canOperate}=useSession();
- const [filters,setFilters]=useState({from_date:'',to_date:'',platform:'',campaign_id:'',objective:'',market:'',currency:''});
- const [model,setModel]=useState<Model>('last_touch');const [reports,setReports]=useState<(Omit<Reports,'journeys'>&{journeys:Reports['journeys']|null})|null>(null);
+ const [filters,setFilters]=useUrlState({from_date:'',to_date:'',platform:'',campaign_id:'',objective:'',market:'',currency:'',model:'last_touch'},v=>({...v,platform:choice(v.platform,['google','meta','tiktok']),objective:choice(v.objective,['awareness','traffic','conversions']),model:choice(v.model,['last_touch','first_touch','linear'],'last_touch')}));
+ const model=filters.model as Model;const setModel=(model:Model)=>setFilters(current=>({...current,model}));const [reports,setReports]=useState<(Omit<Reports,'journeys'>&{journeys:Reports['journeys']|null})|null>(null);
  const [displayed,setDisplayed]=useState('');const [error,setError]=useState('');const [retry,setRetry]=useState(0);const [success,setSuccess]=useState('');
- const query=new URLSearchParams(Object.entries(filters).filter(([,v])=>!!v)).toString();const context=query+'|'+model;
+ const query=new URLSearchParams(Object.entries(filters).filter(([key,v])=>!!v&&key!=='model')).toString();const context=query+'|'+model;
  useEffect(()=>{
   let active=true,inFlight=false;const controller=new AbortController();
   const load=async()=>{
@@ -25,7 +27,7 @@ export default function Analysis(){
     if(!active)return;
     if(new Set([funnel.provenance.identity,attribution.provenance.identity,...(journeys?[journeys.provenance.identity]:[])]).size!==1)throw new Error('Release changed between reads; refresh analysis again.');
     setReports({funnel,attribution,journeys});setDisplayed(context);setError('');setSuccess(new Date().toLocaleTimeString());
-    setFilters(current=>current.from_date&&current.to_date?current:{...current,...funnel.filters});
+    setFilters(current=>current.from_date&&current.to_date?current:{...current,from_date:funnel.filters.from_date,to_date:funnel.filters.to_date});
    }catch(e){if(active&&!controller.signal.aborted)setError(e instanceof Error?e.message:'Analysis unavailable');}finally{inFlight=false;}
   };void load();const timer=setInterval(()=>void load(),5000);return()=>{active=false;controller.abort();clearInterval(timer);};
  },[query,model,context,retry,canOperate]);
@@ -50,6 +52,7 @@ export default function Analysis(){
  <label>Currency<select value={filters.currency} onChange={e=>update('currency',e.target.value)}><option value="">All / declared currency</option>{[...new Set(options.map(c=>c.currency))].map(v=><option key={v}>{v}</option>)}</select></label>
  <label>Journey attribution model<select value={model} onChange={e=>setModel(e.target.value as Model)}>{Object.entries(names).map(([v,label])=><option key={v} value={v}>{label}</option>)}</select></label>
  </section>
+ <FilterActions through={reports?.funnel.provenance.data_through} onDates={(from_date,to_date)=>setFilters(current=>({...current,from_date,to_date}))} onReset={()=>setFilters({from_date:'',to_date:'',platform:'',campaign_id:'',objective:'',market:'',currency:'',model:'last_touch'})}/>
  <div className="breadcrumbs"><button className="secondary" onClick={()=>setFilters(current=>({...current,platform:'',campaign_id:'',objective:'',market:'',currency:''}))}>All channels</button><span>{filters.platform||'All paid channels'} → {options.find(c=>c.campaign_id===filters.campaign_id)?.name||filters.campaign_id||'All campaigns'}</span></div>
  {reports&&displayed!==context&&<p className="notice" role="status">{error?'Selection unavailable; showing previous analysis':'Loading selection; showing previous analysis'} · {reports.funnel.filters.from_date} → {reports.funnel.filters.to_date}</p>}
  {error&&<div className="error" role="alert"><strong>{reports?'Refresh failed; showing last successful analysis':'Analysis unavailable'}</strong><p>{error}</p></div>}

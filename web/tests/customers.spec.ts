@@ -80,3 +80,10 @@ test('missing detail leaves certified cohorts available and negative net stays e
 });
 
 test.beforeEach(async({page})=>{await page.route('**/api/v1/auth/session',r=>r.fulfill({json:{user_id:'fixture-admin',username:'fixture-admin',role:'admin'}}));});
+
+test('customer URL restores purpose, paging and local search while invalid offsets normalize',async({page})=>{
+ await page.goto('/customers?purpose=activation&profile_type=customer&offset=20&q=dddd&sort=net_desc');
+ await expect(page.getByLabel('Discovery purpose')).toHaveValue('activation');await expect(page.getByLabel('Profile type',{exact:true})).toHaveValue('customer');await expect(page.getByLabel('Search loaded profiles')).toHaveValue('dddd');
+ await page.reload();await expect(page.getByLabel('Discovery purpose')).toHaveValue('activation');await expect(page.getByText('Search and sort apply to this loaded page only.',{exact:true})).toBeVisible();
+ await page.goto('/customers?purpose=invalid&profile_type=invalid&offset=9007199254740993');await expect(page.getByLabel('Discovery purpose')).toHaveValue('analytics');await expect(page.getByLabel('Profile type',{exact:true})).toHaveValue('');await expect(page).not.toHaveURL(/9007199254740993/);
+});

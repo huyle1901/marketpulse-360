@@ -37,3 +37,30 @@ test('readable currency, qualified changes and alert shortcuts retain selection 
  await expect(overview).toContainText(evidence.explanation);await expect(overview).not.toContainText('Old release only');await expect(overview).not.toContainText('Outside selected period');
  await overview.getByRole('button',{name:'Investigate Campaign A'}).click();await expect(page.getByRole('combobox',{name:'Campaign',exact:true})).toHaveValue('a');
 });
+
+test('campaign deep links, reload and back restore filters without sending local table preferences',async({page})=>{
+ const requests:URL[]=[];page.on('request',r=>{if(r.url().includes('/api/v1/dashboard'))requests.push(new URL(r.url()));});
+ await page.goto('/?from_date=2026-01-01&to_date=2026-01-03&platform=google&q=Campaign&sort=net_desc&unknown=ignored');
+ await expect(page.getByRole('combobox',{name:'Platform',exact:true})).toHaveValue('google');
+ await expect(page.getByLabel('Search campaigns')).toHaveValue('Campaign');
+ await page.getByRole('combobox',{name:'Platform',exact:true}).selectOption('meta');await expect(page).toHaveURL(/platform=meta/);
+ await page.reload();await expect(page.getByRole('combobox',{name:'Platform',exact:true})).toHaveValue('meta');
+ await page.goBack();await expect(page.getByRole('combobox',{name:'Platform',exact:true})).toHaveValue('google');
+ expect(requests.length).toBeGreaterThan(0);for(const url of requests){expect(url.searchParams.has('q')).toBe(false);expect(url.searchParams.has('sort')).toBe(false);expect(url.searchParams.has('unknown')).toBe(false);}
+});
+test('campaign search, exact numeric sorting, published presets and analysis links work',async({page})=>{
+ const rows=[{...metric,campaign_id:'negative',campaign_name:'Refund campaign',net_revenue_minor:'-9007199254740993'}, {...metric,campaign_id:'large',campaign_name:'Large campaign',net_revenue_minor:'9007199254740993'}, {...metric,campaign_id:'larger',campaign_name:'Larger campaign',net_revenue_minor:'9007199254740994'}];
+ await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:{...dashboard,certified:{...dashboard.certified,rows}}}));
+ await page.goto('/');await page.getByLabel('Campaign table order').selectOption('net_desc');
+ const table=page.getByRole('table',{name:'Campaign performance'});await expect(table.locator('tbody tr').first()).toContainText('Larger campaign');
+ await page.getByLabel('Campaign table order').selectOption('net_asc');await expect(table.locator('tbody tr').first()).toContainText('Refund campaign');
+ await page.getByLabel('Search campaigns').fill('Larger');await expect(table.locator('tbody tr')).toHaveCount(1);
+ const link=table.getByRole('link',{name:'Analyze Larger campaign'});await expect(link).toHaveAttribute('href',/campaign_id=larger/);await expect(link).toHaveAttribute('href',/from_date=2026-01-01/);
+ await page.getByRole('button',{name:'Last published day',exact:true}).click();await expect(page.getByLabel('From (UTC)',{exact:true})).toHaveValue('2026-01-02');
+ await page.getByRole('button',{name:'Last 7 published days',exact:true}).click();await expect(page.getByLabel('From (UTC)',{exact:true})).toHaveValue('2025-12-27');
+ await page.getByRole('button',{name:'Reset filters',exact:true}).click();await expect(page.getByLabel('Search campaigns')).toHaveValue('');await expect(page.getByLabel('From (UTC)',{exact:true})).toHaveValue('2026-01-01');
+});
+test('copy view link reports clipboard failure without claiming success',async({page})=>{
+ await page.addInitScript(()=>{Object.defineProperty(navigator,'clipboard',{value:{writeText:async()=>{throw new Error('denied');}},configurable:true});});
+ await page.goto('/');await page.getByRole('button',{name:'Copy view link'}).click();await expect(page.getByText('Could not copy; copy the URL from your address bar.',{exact:true})).toBeVisible();
+});
