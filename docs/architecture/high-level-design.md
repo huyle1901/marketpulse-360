@@ -624,6 +624,12 @@ are presentation only. Prior intervals before the supported 1900 boundary are
 unavailable without invalidating the current selection. Matching alert shortcuts
 require current release identity and overlapping dates; all evidence remains below.
 
+Operations presentation summarizes collector availability, latest live quality,
+controlled probe state, validated lineage and protected retention. Missing telemetry
+stays unknown and reports identify their checked release. Raw JSON is expandable
+technical evidence; the quality history starts collapsed. Existing admin APIs and
+mutation/audit semantics remain unchanged.
+
 Design: [Command Center usability](../superpowers/specs/2026-10-20-command-center-usability-design.md).
 Plan: [implementation](../superpowers/plans/2026-10-20-command-center-usability.md).
 

@@ -30,7 +30,7 @@ test('a delayed earlier operations refresh cannot replace the latest',async({pag
  let count=0;let release!:()=>void;const pending=new Promise<void>(resolve=>{release=resolve;});
  await page.route('**/api/v1/auth/session',r=>r.fulfill({json:{user_id:'a',username:'admin',role:'admin'}}));
  await page.route('**/api/v1/ops/**',async r=>{const p=new URL(r.request().url()).pathname;if(p.endsWith('status')){count++;if(count===1){await pending;await r.fulfill({json:{status:'obsolete'}});}else await r.fulfill({json:{status:'current'}});}else await r.fulfill({json:p.endsWith('users')||p.endsWith('audit')||p.endsWith('quality')?[]:{}});});
- await page.goto('/operations');await page.getByRole('button',{name:'Refresh operations'}).click();await expect(page.getByText('"status": "current"',{exact:false})).toBeVisible();release();await expect(page.getByText('"status": "obsolete"',{exact:false})).toHaveCount(0);
+ await page.goto('/operations');await page.getByRole('button',{name:'Refresh operations'}).click();await expect(page.getByText('Operations read: current',{exact:false})).toBeVisible();release();await expect(page.getByText('Operations read: obsolete',{exact:false})).toHaveCount(0);
 });
 test('an obsolete session response cannot restore an expired workspace',async({page})=>{
  await page.clock.install();let polls=0;let holdNext=false;let heldOnce=false;let release!:()=>void;let completed!:()=>void;const held=new Promise<void>(r=>{release=r;});const done=new Promise<void>(r=>{completed=r;});
