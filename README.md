@@ -1,5 +1,12 @@
 # MarketPulse 360
 
+MP-01–09 are integrated on `main`. MP-10 adds isolated Flink/Kafka Streams and
+ClickHouse/PostgreSQL comparisons plus the [final evidence kit](docs/evaluation/README.md).
+See the [measured six-section report](docs/evaluation/report.md) and
+[evaluation runbook](docs/runbooks/evaluation.md). Technical checks are verified;
+representative human trials, real group ID/count and narrated final video remain
+external acceptance items. No benchmark data replaces application publications.
+
 MP-06 adds a FastAPI + Next.js Marketing Command Center, a committed Kafka
 campaign-serving adapter, and separate PostgreSQL app settings/alert evidence.
 Its scope is in [the MP-06 specification](specs/06-live-campaign-and-budget-operations.md).
