@@ -276,6 +276,20 @@ evidence for the final report, slides, video, and executable demonstration.
 - Final report has 4-7 logical sections, at least four technology examples, and less
   than 10% missing required content, targeting the top rubric band.
 
+## Post-MP-10 product improvements
+
+**Status:** In progress on `feat/command-center-usability`; user requested all five
+recommendations. Existing MP-01–10 contracts remain the baseline.
+
+1. Unified navigation and page hierarchy.
+2. Campaign trends, qualified previous-period comparisons and relevant alert shortcuts.
+3. Readable Operations & Trust summaries with expandable technical evidence.
+4. Shareable filters, date presets and searchable/sortable bounded tables.
+5. Retention heatmap and focused Customer 360 exploration.
+
+[Design](../docs/superpowers/specs/2026-10-20-command-center-usability-design.md) ·
+[Plan](../docs/superpowers/plans/2026-10-20-command-center-usability.md).
+
 ## Traceability to the course brief
 
 | Course requirement | Stories |
