@@ -1,6 +1,6 @@
 # MP-10 Evaluation and Evidence Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Deliver reproducible technology comparisons and an honest final evidence kit.
 
@@ -13,6 +13,15 @@ finance reducer in Flink and Kafka Streams.
 ClickHouse, PostgreSQL 17.6, ReportLab PDF.
 
 **Spec:** `specs/10-evaluation-and-evidence.md`
+
+## Execution status
+
+All three tasks and the final review fix pass completed on 2026-10-16.
+The committed implementation ends at `7297310`; the archived execution record is
+`.lakehouse/mp10-proof/execution-ledger.md`. Technical revalidation and handoff
+closeout on 2026-10-20 are documented in `docs/evaluation/README.md`.
+Human trials, group information and narrated video remain external acceptance
+items, as specified in the scope.
 
 ## Global Constraints
 
@@ -40,13 +49,13 @@ ClickHouse, PostgreSQL 17.6, ReportLab PDF.
 `verify_outputs(inputs: list[dict], outputs: list[dict]) -> dict`,
 `analytical_oracle(count: int, workload: str) -> list[tuple]`.
 
-- [ ] Write tests for reproducible hashes, exact anomaly classes/money,
+- [x] Write tests for reproducible hashes, exact anomaly classes/money,
   watermark/horizon edges, malformed/bool values, changed duplicates, count/seq
   mismatches, empty/nonfinite/negative statistics and periodic analytical answers.
-- [ ] Run `PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -p test_evaluation.py -v`.
+- [x] Run `PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -p test_evaluation.py -v`.
   Expected: RED missing module, then GREEN after implementation.
-- [ ] Implement typed pure contracts and independent oracles; no engine calls.
-- [ ] Run focused tests and `git diff --check`; commit `feat: add evaluation workload and oracle contracts`.
+- [x] Implement typed pure contracts and independent oracles; no engine calls.
+- [x] Run focused tests and `git diff --check`; commit `feat: add evaluation workload and oracle contracts`.
 
 ### Task 2: Engine adapters and Docker measurement runner
 
@@ -60,16 +69,16 @@ JUnit tests under `evaluation-job/src`, `docker/evaluation/Dockerfile`,
 with `stream`, `analytics` subcommands and explicit scale/recovery flags. Result
 JSON is version 1, contains inputs/oracle/observations/resources/versions/revision.
 
-- [ ] Write Java reducer and topology tests for every class plus exact snapshot
+- [x] Write Java reducer and topology tests for every class plus exact snapshot
   state across repeated inputs; Python tests reject insufficient recovery proof
   and differing input/output hashes. Run them RED before adapters exist.
-- [ ] Implement persistent engine stores, EOS sinks, bounded producer/consumer,
+- [x] Implement persistent engine stores, EOS sinks, bounded producer/consumer,
   checkpoint-aware recovery, Docker counter sampling and independent SQL checks.
-- [ ] Run Java tests with Maven container; Python focused tests GREEN.
-- [ ] Build/start isolated Compose profile; run both stream scales, restart tests,
+- [x] Run Java tests with Maven container; Python focused tests GREEN.
+- [x] Build/start isolated Compose profile; run both stream scales, restart tests,
   all three analytical scales and exact-answer timing. Expected: every committed
   record matches oracle, complete resource/recovery evidence and no app mutation.
-- [ ] Run full Python suite, original Java suite and `git diff --check`; commit
+- [x] Run full Python suite, original Java suite and `git diff --check`; commit
   `feat: benchmark isolated processing and analytical alternatives`.
 
 ### Task 3: Application decisions and final submission kit
@@ -83,12 +92,12 @@ update `README.md`, backlog and living architecture with actual results.
 slide PDF and evidence index, plus `app` CLI read-only authenticated task results
 using `ProofHTTP`. Human acceptance stays pending unless real observations exist.
 
-- [ ] Write tests rejecting missing benchmark runs, false human/video completion,
+- [x] Write tests rejecting missing benchmark runs, false human/video completion,
   missing required requirements and artifact hash mismatch; observe RED.
-- [ ] Implement read-only task evidence and reproducible six-section kit builder.
-- [ ] Run focused tests GREEN; run retained Docker app checks and render/review
+- [x] Implement read-only task evidence and reproducible six-section kit builder.
+- [x] Run focused tests GREEN; run retained Docker app checks and render/review
   both PDFs. Expected: ten traceable decisions; clear pending external items.
-- [ ] Run full Python/Java/browser suites, typecheck/build, deterministic fixture
+- [x] Run full Python/Java/browser suites, typecheck/build, deterministic fixture
   validation, Compose validation and `git diff --check`; commit final evidence.
-- [ ] Final fresh whole-branch review, one TDD fix pass for Important findings;
+- [x] Final fresh whole-branch review, one TDD fix pass for Important findings;
   verify Git status, then report exact completion limits and artifact locations.
