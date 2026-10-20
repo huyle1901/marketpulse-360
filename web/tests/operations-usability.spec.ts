@@ -23,3 +23,15 @@ test('missing telemetry and failed lineage remain explicit unknown states',async
  await expect(page.locator('main [role=alert]')).toContainText('lineage');
  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
+
+for(const condition of ['stale','different release','unknown current release'])test('a passed report is qualified when '+condition,async({page})=>{
+ const report={...live,observed_at:condition==='stale'?'2020-01-01T00:00:00Z':now,identity:condition==='different release'?'c'.repeat(64):live.identity};
+ await page.route('**/api/v1/ops/status',r=>r.fulfill({json:{...status,quality:report}}));
+ if(condition==='unknown current release'){await page.route('**/api/v1/ops/lineage',r=>r.fulfill({status:503,json:{code:'dependency_unavailable'}}));await page.route('**/api/v1/ops/retention',r=>r.fulfill({status:503,json:{code:'dependency_unavailable'}}));}
+ await page.goto('/operations');const quality=page.getByRole('region',{name:'Latest live quality'});await expect(quality.getByText('Unknown',{exact:true})).toBeVisible();await expect(quality).toContainText('Recorded result: Passed');
+});
+
+test('quality and source observations age out while the page remains open',async({page})=>{
+ await page.clock.install();await page.goto('/operations');const quality=page.getByRole('region',{name:'Latest live quality'});await expect(quality.getByText('Passed',{exact:true})).toBeVisible();await expect(page.getByRole('article',{name:'Kafka status'})).toContainText('Available');
+ await page.clock.fastForward(181000);await expect(quality.getByText('Unknown',{exact:true})).toBeVisible();await expect(quality).toContainText('stale');await expect(page.getByRole('article',{name:'Kafka status'})).toContainText('Unavailable');
+});

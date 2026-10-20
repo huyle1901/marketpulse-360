@@ -617,8 +617,9 @@ service, storage responsibility or runtime dependency.
 The existing authenticated `/api/v1/dashboard` contract adds certified daily
 series and an equal-length immediately preceding UTC period. ClickHouse reads for
 current totals, previous totals and published-day coverage use one pinned release.
-Coverage is evaluated before dimension filters: sparse or absent prior history
-cannot become a zero baseline. Monetary fields remain integer strings, grouped by
+Coverage is evaluated for both periods before dimension filters: sparse current
+or prior history suppresses percentage comparisons. Missing selected currency or
+campaign baselines stay unavailable; only explicitly observed zero remains zero. Monetary fields remain integer strings, grouped by
 currency; the UI uses BigInt formatting, while bounded normalized SVG coordinates
 are presentation only. Prior intervals before the supported 1900 boundary are
 unavailable without invalidating the current selection. Matching alert shortcuts
@@ -626,18 +627,23 @@ require current release identity and overlapping dates; all evidence remains bel
 
 Operations presentation summarizes collector availability, latest live quality,
 controlled probe state, validated lineage and protected retention. Missing telemetry
-stays unknown and reports identify their checked release. Raw JSON is expandable
+stays unknown and reports identify their checked release. Green quality requires
+matching validated current lineage and a report age of at most three minutes; stale
+or mismatched reports preserve their recorded result with current quality unknown.
+A ten-second local clock ages source/quality observations without additional reads. Raw JSON is expandable
 technical evidence; the quality history starts collapsed. Existing admin APIs and
 mutation/audit semantics remain unchanged.
 
 Workspace filters, attribution model, customer offset/purpose and bounded table
 preferences live in allowlisted URL query state. The shared hook writes URL state
-at the transition and restores it on popstate; a delayed render cannot overwrite
+at the transition and restores it on popstate. Automatic server-selected dates use
+replacement history while user edits push history; a delayed render cannot overwrite
 Back/Forward navigation. UI-only search/sort parameters never reach analytical
 APIs. Presets use the selected certified data-through date, not wall-clock dates.
 Campaign search/sort operates on the returned aggregate; profile search/sort is
 explicitly local to the loaded 20-row page. Campaign Analysis links preserve shared
-filters and declare the row currency. No view state or analytical rows are copied
+filters and declare the row currency; retained rows disable these links until the
+requested filter context is successfully displayed. No view state or analytical rows are copied
 into PostgreSQL or browser persistent storage.
 
 Customer retention is presented as a shared accessible heatmap for aggregate

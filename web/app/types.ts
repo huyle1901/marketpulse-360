@@ -1,5 +1,5 @@
 export type DailyMetric={event_date:string;currency:string;spend_minor:string;net_revenue_minor:string};
-export type PeriodComparison={status:'complete'|'partial'|'unavailable';from_date:string;to_date:string;observed_days:string;expected_days:string;totals:{currency:string;spend_minor:string;net_revenue_minor:string}[]};
+export type PeriodComparison={previous_status:'complete'|'partial'|'unavailable';current_status:'complete'|'partial'|'unavailable';current_observed_days:string;current_expected_days:string;status:'complete'|'partial'|'unavailable';from_date:string;to_date:string;observed_days:string;expected_days:string;totals:{currency:string;spend_minor:string;net_revenue_minor:string}[]};
 export type Campaign={campaign_id:string;name:string;currency:string;platform:string;objective:string};
 export type Metric={campaign_id:string;campaign_name:string;currency:string;platform:string;objective:string;configured_market?:string|null;spend_minor:string;net_revenue_minor:string;orders:string;source_roas:string|null};
 export type Provenance={generation:string;identity:string;model:string;data_through?:string|null;observed_at?:string};

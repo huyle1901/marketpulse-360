@@ -19,7 +19,7 @@ async function api<T>(path:string,body?:unknown,method='GET',signal?:AbortSignal
 export default function CommandCenter() {
   const {canOperate}=useSession();
   const [report,setReport]=useState<Dashboard|null>(null);
-  const [filters,setFilters]=useUrlState({from_date:'',to_date:'',platform:'',campaign_id:'',objective:'',market:'',q:'',sort:'name'},v=>({...v,platform:choice(v.platform,['google','meta','tiktok']),objective:choice(v.objective,['awareness','traffic','conversions']),sort:choice(v.sort,['name','net_desc','net_asc','spend_desc','orders_desc'],'name')}));
+  const [filters,setFilters,replaceFilters]=useUrlState({from_date:'',to_date:'',platform:'',campaign_id:'',objective:'',market:'',q:'',sort:'name'},v=>({...v,platform:choice(v.platform,['google','meta','tiktok']),objective:choice(v.objective,['awareness','traffic','conversions']),sort:choice(v.sort,['name','net_desc','net_asc','spend_desc','orders_desc'],'name')}));
   const [refreshError,setRefreshError]=useState('');
   const [lastSuccess,setLastSuccess]=useState('');
   const [displayedQuery,setDisplayedQuery]=useState('');
@@ -61,7 +61,7 @@ export default function CommandCenter() {
         const data=await api<Dashboard>('dashboard?'+query,undefined,'GET',controller.signal);
         if(active) {
           setReport(data);setDisplayedQuery(query);setRefreshError('');setLastSuccess(new Date().toLocaleTimeString());
-          setFilters(current=>current.from_date&&current.to_date?current:{...current,from_date:data.filters.from_date,to_date:data.filters.to_date});
+          replaceFilters(current=>current.from_date&&current.to_date?current:{...current,from_date:data.filters.from_date,to_date:data.filters.to_date});
           setCampaignId(current=>current||data.campaigns[0]?.campaign_id||'');
           setCurrency(current=>current||data.campaigns[0]?.currency||'');
         }
@@ -137,7 +137,7 @@ export default function CommandCenter() {
       <section id="performance" className="section-heading"><div><h2>Certified campaign performance</h2><p>Governed daily data · Currency amounts · UTC dates</p></div><span className="badge">{report.certified.freshness.historical?'Historical data':report.certified.freshness.stale?'Stale data':'Current snapshot'}</span></section>
       <div className="kpis">{report.certified.totals.map(row=><div className="kpi-group" key={row.currency}><article><span>Certified net revenue · {row.currency}</span><strong>{formatMoney(row.net_revenue_minor,row.currency)}</strong></article><article><span>Ad spend · {row.currency}</span><strong>{formatMoney(row.spend_minor,row.currency)}</strong></article><article><span>Orders</span><strong>{money(row.orders)}</strong></article><article><span>Clicks / impressions</span><strong>{money(row.clicks)} <em>/ {money(row.impressions)}</em></strong></article></div>)}</div>
       <CampaignOverview report={report} alerts={alerts} interactive={displayedQuery===query} onInvestigate={id=>{setFilters(current=>({...current,campaign_id:id}));setCampaignId(id);}}/>
-      <CampaignTable rows={report.certified.rows} filters={filters} search={filters.q} sort={filters.sort} onSearch={q=>setFilters(current=>({...current,q}))} onSort={sort=>setFilters(current=>({...current,sort}))}/>
+      <CampaignTable interactive={displayedQuery===query} rows={report.certified.rows} filters={filters} search={filters.q} sort={filters.sort} onSearch={q=>setFilters(current=>({...current,q}))} onSort={sort=>setFilters(current=>({...current,sort}))}/>
       <details className="provenance"><summary>Metric source &amp; freshness · {report.certified.provenance.model}</summary><p>Generation {report.certified.provenance.generation} · Data through {report.certified.provenance.data_through||'No data'} (day resolution)</p><p>Release {report.certified.provenance.identity}</p><p>Read at {report.certified.provenance.observed_at}; polling does not change data freshness.</p></details>
       <section id="streaming" className="panel"><div className="section-heading"><div><h2>Streaming activity</h2><p>Provisional Flink aggregates · Separate from certified finance</p></div><span className="badge neutral">{report.streaming.status}</span></div><p className="source">{report.streaming.source}</p>
         <details className="provenance"><summary>Streaming source provenance</summary><p>{report.streaming.source_identity||'Unavailable'}</p><p>Latest selected offset bounds (gaps may exist): {JSON.stringify(report.streaming.offset_bounds||[])}</p></details>

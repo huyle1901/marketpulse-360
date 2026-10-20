@@ -59,3 +59,7 @@ test('analysis URL restores model and filters across reload and back',async({pag
  await page.getByLabel('Journey attribution model').selectOption('first_touch');await expect(page).toHaveURL(/model=first_touch/);await page.reload();await expect(page.getByLabel('Journey attribution model')).toHaveValue('first_touch');
  await page.goBack();await expect(page.getByLabel('Journey attribution model')).toHaveValue('linear');await page.goForward();await expect(page.getByLabel('Journey attribution model')).toHaveValue('first_touch');
 });
+
+test('automatic analysis dates do not trap Back after an undated entry',async({page})=>{
+ await page.goto('/login');await page.goto('/analysis');await expect(page).toHaveURL(/from_date=/);await page.goBack();await expect(page).toHaveURL(url=>url.pathname==='/login');
+});

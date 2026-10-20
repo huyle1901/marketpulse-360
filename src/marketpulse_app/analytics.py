@@ -85,14 +85,16 @@ class Analytics:
         duration = filters.to_date - filters.from_date
         previous_start = filters.from_date - duration
         previous = []
-        covered_days: set[date] = set()
         if previous_start >= date(1900, 1, 1):
             previous = session.daily(replace(filters, from_date=previous_start, to_date=filters.from_date), settings)
-            coverage = session._query(
-                f"SELECT DISTINCT event_date FROM {session.release.database}.campaign_performance_daily "
-                "WHERE event_date>={from_date:Date32} AND event_date<{to_date:Date32}",
-                {"from_date": previous_start, "to_date": filters.from_date})
-            covered_days = {row["event_date"] for row in coverage if previous_start <= row["event_date"] < filters.from_date}
+        coverage = session._query(
+            f"SELECT DISTINCT event_date FROM {session.release.database}.campaign_performance_daily "
+            "WHERE event_date>={from_date:Date32} AND event_date<{to_date:Date32}",
+            {"from_date": max(previous_start, date(1900, 1, 1)), "to_date": filters.to_date})
+        covered_days = {row["event_date"] for row in coverage if previous_start <= row["event_date"] < filters.from_date}
+        current_days = {row["event_date"] for row in coverage if filters.from_date <= row["event_date"] < filters.to_date}
+        previous_status = "complete" if len(covered_days) == duration.days else "partial" if covered_days else "unavailable"
+        current_status = "complete" if len(current_days) == duration.days else "partial" if current_days else "unavailable"
         series = defaultdict(lambda: {field: 0 for field in SUM_FIELDS})
         prior_totals = defaultdict(lambda: {field: 0 for field in SUM_FIELDS})
         for row in daily:
@@ -102,7 +104,9 @@ class Analytics:
             for field in SUM_FIELDS:
                 prior_totals[row["currency"]][field] += row[field]
         comparison = {"from_date": previous_start, "to_date": filters.from_date,
-            "status": "complete" if len(covered_days) == duration.days else "partial" if covered_days else "unavailable",
+            "status": "complete" if previous_status == current_status == "complete" else "unavailable" if "unavailable" in (previous_status, current_status) else "partial",
+            "previous_status": previous_status, "current_status": current_status,
+            "current_observed_days": len(current_days), "current_expected_days": duration.days,
             "observed_days": len(covered_days), "expected_days": duration.days,
             "totals": [{"currency": currency, **values} for currency, values in sorted(prior_totals.items())]}
         configured = {row.campaign_id: row for row in settings}
