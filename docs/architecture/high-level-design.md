@@ -630,6 +630,16 @@ stays unknown and reports identify their checked release. Raw JSON is expandable
 technical evidence; the quality history starts collapsed. Existing admin APIs and
 mutation/audit semantics remain unchanged.
 
+Workspace filters, attribution model, customer offset/purpose and bounded table
+preferences live in allowlisted URL query state. The shared hook writes URL state
+at the transition and restores it on popstate; a delayed render cannot overwrite
+Back/Forward navigation. UI-only search/sort parameters never reach analytical
+APIs. Presets use the selected certified data-through date, not wall-clock dates.
+Campaign search/sort operates on the returned aggregate; profile search/sort is
+explicitly local to the loaded 20-row page. Campaign Analysis links preserve shared
+filters and declare the row currency. No view state or analytical rows are copied
+into PostgreSQL or browser persistent storage.
+
 Design: [Command Center usability](../superpowers/specs/2026-10-20-command-center-usability-design.md).
 Plan: [implementation](../superpowers/plans/2026-10-20-command-center-usability.md).
 

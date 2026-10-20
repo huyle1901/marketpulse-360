@@ -2,7 +2,10 @@
 
 import {useEffect,useRef,useState} from 'react';
 import CampaignOverview from '../components/CampaignOverview';
-import {formatMoney,roas} from '../lib/format';
+import {formatMoney} from '../lib/format';
+import {useUrlState,choice} from '../lib/useUrlState';
+import FilterActions from '../components/FilterActions';
+import CampaignTable from '../components/CampaignTable';
 import {useSession} from '../components/SessionGate';
 import type {Alert,Campaign,Dashboard,Pace,Rule,Scenario,Setting} from './types';
 
@@ -16,7 +19,7 @@ async function api<T>(path:string,body?:unknown,method='GET',signal?:AbortSignal
 export default function CommandCenter() {
   const {canOperate}=useSession();
   const [report,setReport]=useState<Dashboard|null>(null);
-  const [filters,setFilters]=useState({from_date:'',to_date:'',platform:'',campaign_id:'',objective:'',market:''});
+  const [filters,setFilters]=useUrlState({from_date:'',to_date:'',platform:'',campaign_id:'',objective:'',market:'',q:'',sort:'name'},v=>({...v,platform:choice(v.platform,['google','meta','tiktok']),objective:choice(v.objective,['awareness','traffic','conversions']),sort:choice(v.sort,['name','net_desc','net_asc','spend_desc','orders_desc'],'name')}));
   const [refreshError,setRefreshError]=useState('');
   const [lastSuccess,setLastSuccess]=useState('');
   const [displayedQuery,setDisplayedQuery]=useState('');
@@ -41,7 +44,7 @@ export default function CommandCenter() {
   const [scenarioError,setScenarioError]=useState('');
   const [retry,setRetry]=useState(0);
   const [busy,setBusy]=useState(false);
-  const query=new URLSearchParams(Object.entries(filters).filter(([,value])=>!!value)).toString();
+  const query=new URLSearchParams(Object.entries(filters).filter(([key,value])=>!!value&&!['q','sort'].includes(key))).toString();
   const releaseIdentity=report?.certified.provenance.identity||'';
   const scenarioContext=useRef('');
   const scenarioRequest=useRef(0);
@@ -126,6 +129,7 @@ export default function CommandCenter() {
       <label>Objective<select value={filters.objective} onChange={e=>setFilters({...filters,objective:e.target.value})}><option value="">All objectives</option>{['awareness','traffic','conversions'].map(value=><option key={value}>{value}</option>)}</select></label>
       <label>Configured market<input maxLength={2} placeholder="All / e.g. VN" value={filters.market} onChange={e=>setFilters({...filters,market:e.target.value.toUpperCase()})}/></label>
     </section>
+    <FilterActions through={report?.certified.provenance.data_through} onDates={(from_date,to_date)=>setFilters(current=>({...current,from_date,to_date}))} onReset={()=>setFilters({from_date:'',to_date:'',platform:'',campaign_id:'',objective:'',market:'',q:'',sort:'name'})}/>
     {report&&displayedQuery!==query&&<p className="notice" role="status">{refreshError?'Selection unavailable; showing previous filter results':'Loading selection; showing previous filter results'} · {report.filters.from_date} → {report.filters.to_date}</p>}
     {refreshError&&<div className="error" role="alert"><strong>{report?'Refresh failed; showing last successful data':'Data unavailable'}</strong><p>{refreshError}</p><button onClick={()=>setRetry(value=>value+1)}>Retry</button></div>}
     {!report&&!refreshError&&<p className="empty">Loading published campaign data…</p>}
@@ -133,7 +137,7 @@ export default function CommandCenter() {
       <section id="performance" className="section-heading"><div><h2>Certified campaign performance</h2><p>Governed daily data · Currency amounts · UTC dates</p></div><span className="badge">{report.certified.freshness.historical?'Historical data':report.certified.freshness.stale?'Stale data':'Current snapshot'}</span></section>
       <div className="kpis">{report.certified.totals.map(row=><div className="kpi-group" key={row.currency}><article><span>Certified net revenue · {row.currency}</span><strong>{formatMoney(row.net_revenue_minor,row.currency)}</strong></article><article><span>Ad spend · {row.currency}</span><strong>{formatMoney(row.spend_minor,row.currency)}</strong></article><article><span>Orders</span><strong>{money(row.orders)}</strong></article><article><span>Clicks / impressions</span><strong>{money(row.clicks)} <em>/ {money(row.impressions)}</em></strong></article></div>)}</div>
       <CampaignOverview report={report} alerts={alerts} interactive={displayedQuery===query} onInvestigate={id=>{setFilters(current=>({...current,campaign_id:id}));setCampaignId(id);}}/>
-      {report.certified.rows.length===0?<p className="empty">No campaign data matches these filters.</p>:<div className="table-scroll"><table><thead><tr><th>Campaign</th><th>Platform / market</th><th>Spend</th><th>Net revenue</th><th>Orders</th><th>Net ROAS</th></tr></thead><tbody>{report.certified.rows.map(row=><tr key={row.campaign_id+row.currency}><td><strong>{row.campaign_name||row.campaign_id}</strong><small>{row.objective} · {row.currency}</small></td><td>{row.platform||'Unmapped'}<small>{row.configured_market||'Market unknown'}</small></td><td title={row.spend_minor+' minor units'}>{formatMoney(row.spend_minor,row.currency)}</td><td title={row.net_revenue_minor+' minor units'}>{formatMoney(row.net_revenue_minor,row.currency)}</td><td>{money(row.orders)}</td><td title={row.source_roas??undefined}>{roas(row.source_roas)}</td></tr>)}</tbody></table></div>}
+      <CampaignTable rows={report.certified.rows} filters={filters} search={filters.q} sort={filters.sort} onSearch={q=>setFilters(current=>({...current,q}))} onSort={sort=>setFilters(current=>({...current,sort}))}/>
       <details className="provenance"><summary>Metric source &amp; freshness · {report.certified.provenance.model}</summary><p>Generation {report.certified.provenance.generation} · Data through {report.certified.provenance.data_through||'No data'} (day resolution)</p><p>Release {report.certified.provenance.identity}</p><p>Read at {report.certified.provenance.observed_at}; polling does not change data freshness.</p></details>
       <section id="streaming" className="panel"><div className="section-heading"><div><h2>Streaming activity</h2><p>Provisional Flink aggregates · Separate from certified finance</p></div><span className="badge neutral">{report.streaming.status}</span></div><p className="source">{report.streaming.source}</p>
         <details className="provenance"><summary>Streaming source provenance</summary><p>{report.streaming.source_identity||'Unavailable'}</p><p>Latest selected offset bounds (gaps may exist): {JSON.stringify(report.streaming.offset_bounds||[])}</p></details>
