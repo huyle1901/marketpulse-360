@@ -1,7 +1,6 @@
 'use client';
 
 import {useEffect,useRef,useState} from 'react';
-import Link from 'next/link';
 import {useSession} from '../components/SessionGate';
 import type {Alert,Campaign,Dashboard,Pace,Rule,Scenario,Setting} from './types';
 
@@ -114,8 +113,9 @@ export default function CommandCenter() {
   };
 
   return <main>
-    <nav className="workspace-nav" aria-label="Workspaces"><Link href="/" aria-current="page">Campaign Operations</Link><Link href="/analysis">Funnel &amp; Attribution</Link><Link href="/customers">Customer 360</Link></nav>
+
     <header className="masthead"><div><div className="brand">MARKETPULSE <span>360</span></div><h1>Marketing Command Center</h1><p>Campaign performance, decisions and budget scenarios</p></div><div className="status"><span className="dot"/> Updates every 5 seconds<br/><small>Last successful read: {lastSuccess||'Waiting'}</small></div></header>
+    <nav className="section-links" aria-label="Page sections"><a href="#performance">Performance</a><a href="#streaming">Streaming</a><a href="#campaign-tools">Budgets &amp; rules</a><a href="#alert-evidence">Alert evidence</a><a href="#simulation">Simulator</a></nav>
     <section className="filters" aria-label="Campaign filters">
       <label>From (UTC)<input type="date" value={filters.from_date} onChange={e=>setFilters({...filters,from_date:e.target.value})}/></label>
       <label>To (exclusive UTC)<input type="date" value={filters.to_date} onChange={e=>setFilters({...filters,to_date:e.target.value})}/></label>
@@ -128,16 +128,16 @@ export default function CommandCenter() {
     {refreshError&&<div className="error" role="alert"><strong>{report?'Refresh failed; showing last successful data':'Data unavailable'}</strong><p>{refreshError}</p><button onClick={()=>setRetry(value=>value+1)}>Retry</button></div>}
     {!report&&!refreshError&&<p className="empty">Loading published campaign data…</p>}
     {report&&<>
-      <section className="section-heading"><div><h2>Certified campaign performance</h2><p>Governed daily data · Money in minor units · UTC dates</p></div><span className="badge">{report.certified.freshness.historical?'Historical data':report.certified.freshness.stale?'Stale data':'Current snapshot'}</span></section>
+      <section id="performance" className="section-heading"><div><h2>Certified campaign performance</h2><p>Governed daily data · Money in minor units · UTC dates</p></div><span className="badge">{report.certified.freshness.historical?'Historical data':report.certified.freshness.stale?'Stale data':'Current snapshot'}</span></section>
       <div className="kpis">{report.certified.totals.map(row=><div className="kpi-group" key={row.currency}><article><span>Certified net revenue · {row.currency}</span><strong>{money(row.net_revenue_minor)}</strong></article><article><span>Ad spend · {row.currency}</span><strong>{money(row.spend_minor)}</strong></article><article><span>Orders</span><strong>{money(row.orders)}</strong></article><article><span>Clicks / impressions</span><strong>{money(row.clicks)} <em>/ {money(row.impressions)}</em></strong></article></div>)}</div>
       {report.certified.rows.length===0?<p className="empty">No campaign data matches these filters.</p>:<div className="table-scroll"><table><thead><tr><th>Campaign</th><th>Platform / market</th><th>Spend</th><th>Net revenue</th><th>Orders</th><th>Net ROAS</th></tr></thead><tbody>{report.certified.rows.map(row=><tr key={row.campaign_id+row.currency}><td><strong>{row.campaign_name||row.campaign_id}</strong><small>{row.objective} · {row.currency}</small></td><td>{row.platform||'Unmapped'}<small>{row.configured_market||'Market unknown'}</small></td><td>{money(row.spend_minor)}</td><td>{money(row.net_revenue_minor)}</td><td>{money(row.orders)}</td><td>{row.source_roas??'Unavailable'}</td></tr>)}</tbody></table></div>}
       <details className="provenance"><summary>Metric source &amp; freshness · {report.certified.provenance.model}</summary><p>Generation {report.certified.provenance.generation} · Data through {report.certified.provenance.data_through||'No data'} (day resolution)</p><p>Release {report.certified.provenance.identity}</p><p>Read at {report.certified.provenance.observed_at}; polling does not change data freshness.</p></details>
-      <section className="panel"><div className="section-heading"><div><h2>Streaming activity</h2><p>Provisional Flink aggregates · Separate from certified finance</p></div><span className="badge neutral">{report.streaming.status}</span></div><p className="source">{report.streaming.source}</p>
+      <section id="streaming" className="panel"><div className="section-heading"><div><h2>Streaming activity</h2><p>Provisional Flink aggregates · Separate from certified finance</p></div><span className="badge neutral">{report.streaming.status}</span></div><p className="source">{report.streaming.source}</p>
         <details className="provenance"><summary>Streaming source provenance</summary><p>{report.streaming.source_identity||'Unavailable'}</p><p>Latest selected offset bounds (gaps may exist): {JSON.stringify(report.streaming.offset_bounds||[])}</p></details>
         {report.streaming.rows.length===0?<p className="empty">No committed streaming snapshot is available for this selection.</p>:<div className="table-scroll"><table><thead><tr><th>Campaign</th><th>Sessions</th><th>Orders</th><th>Provisional net</th><th>Business event / processing / arrival</th></tr></thead><tbody>{report.streaming.rows.map(row=><tr key={row.metric_key}><td>{campaigns.find(item=>item.campaign_id===row.campaign_id)?.name||row.campaign_id}<small>{row.mapped?'Mapped':'Unmapped'} · {row.stale?'Historical / stale':'Recent activity'}</small></td><td>{money(row.sessions)}</td><td>{money(row.order_count)}</td><td>{money(row.net_revenue_minor)} {row.currency||''}</td><td><small>{row.max_event_time}<br/>{row.processed_at}<br/>{row.received_at}</small></td></tr>)}</tbody></table></div>}
       </section>
     </>}
-    <div className="operations">
+    <details id="campaign-tools" className="tool-group"><summary>Budgets &amp; alert rules</summary><div className="operations">
       <section className="panel"><h2>Campaign settings &amp; pacing</h2><p>Set an app budget for a UTC period. Source budgets are reference data.</p>
         <fieldset disabled={busy} style={{border:0,padding:0,margin:0}} aria-label="Campaign configuration">
         <label>Campaign to configure<select disabled={busy} value={campaignId} onChange={e=>{setCampaignId(e.target.value);setRuleId('');}}>{campaigns.map(row=><option key={row.campaign_id} value={row.campaign_id}>{row.name}</option>)}</select></label>
@@ -153,18 +153,18 @@ export default function CommandCenter() {
         <label className="checkbox"><input type="checkbox" checked={enabled} onChange={e=>setEnabled(e.target.checked)}/> Enabled</label>
         <div className="actions"><button disabled={!canOperate||busy||!campaignId} onClick={()=>void saveRule()}>Save alert rule</button><button className="secondary" disabled={!canOperate||busy} onClick={()=>void action(async()=>{await api('alerts/evaluate',{},'POST');setAlerts(await api<Alert[]>('alerts'));setMessage('Alert evaluation complete');})}>Evaluate alerts</button></div>
       </section>
-    </div>
+    </div></details>
     {message&&<p className="notice" role="status">{message}</p>}
-    <section className="panel"><div className="section-heading"><div><h2>Alert evidence</h2><p>Immutable decisions tied to source release, rule and budget versions</p></div><span className="badge neutral">{alerts.length} occurrences</span></div>
+    <section id="alert-evidence" className="panel"><div className="section-heading"><div><h2>Alert evidence</h2><p>Immutable decisions tied to source release, rule and budget versions</p></div><span className="badge neutral">{alerts.length} occurrences</span></div>
       {!alerts.length?<p className="empty">No triggered alerts. Create a rule and evaluate certified data.</p>:<div className="alert-grid">{alerts.map(row=><article className="alert" key={row.evaluation_key}><strong>{row.evidence.explanation}</strong><p>{campaigns.find(item=>item.campaign_id===row.evidence.campaign_id)?.name||row.evidence.campaign_id}</p><small>{row.evidence.from_date} → {row.evidence.to_date} · {row.evidence.currency}</small><dl>{Object.entries(row.evidence.operands).map(([key,value])=><div key={key}><dt>{key.replaceAll('_',' ')}</dt><dd>{value}</dd></div>)}</dl><small>Release {row.evidence.provenance?.identity?.slice(0,12)||'recorded'} · {row.evaluated_at}</small><details className="provenance"><summary>Full alert provenance</summary><p>Rule version {row.evidence.rule_version} · Setting version {row.evidence.setting_version}</p><p>Rule {row.evidence.rule_id}</p><p>Release {row.evidence.provenance?.identity}</p><p>Evaluation {row.evaluation_key}</p></details></article>)}</div>}
     </section>
-    <section className="panel"><div className="section-heading"><div><h2>What-if budget allocation</h2><p>Use the selected historical UTC interval. A scenario leaves saved budgets unchanged.</p></div><span className="badge neutral">Read-only scenario</span></div>
+    <details id="simulation" className="tool-group"><summary>Budget allocation simulator</summary><section className="panel"><div className="section-heading"><div><h2>What-if budget allocation</h2><p>Use the selected historical UTC interval. A scenario leaves saved budgets unchanged.</p></div><span className="badge neutral">Read-only scenario</span></div>
       <div className="form-grid"><label>Scenario currency<select value={currency} onChange={e=>{setCurrency(e.target.value);setScenario(null);}}>{Array.from(new Set(campaigns.map(row=>row.currency))).map(value=><option key={value}>{value}</option>)}</select></label><label>Scenario total (minor units)<input inputMode="numeric" value={total} onChange={e=>setTotal(e.target.value)}/></label></div>
       <div className="allocation-grid">{campaigns.filter(row=>row.currency===currency).map(row=><label key={row.campaign_id}>Allocation for {row.name}<input inputMode="numeric" value={allocations[row.campaign_id]||''} placeholder="0" onChange={e=>setAllocations({...allocations,[row.campaign_id]:e.target.value})}/></label>)}</div>
       <button disabled={!campaigns.length} onClick={()=>void simulate()}>Simulate allocation</button>
       {scenarioError&&<p className="error" role="alert">{scenarioError}</p>}
       {scenario&&<div className="result"><h3>Scenario projected net: {money(scenario.projected_net_minor)} {currency}</h3><p>{scenario.assumption}</p><p className="source">Generation {scenario.provenance.generation} · Release {scenario.provenance.identity}</p><div className="table-scroll"><table><thead><tr><th>Campaign</th><th>Historical net ROAS</th><th>Proposed allocation</th><th>Projected net</th></tr></thead><tbody>{scenario.rows.map(row=><tr key={row.campaign_id}><td>{campaigns.find(item=>item.campaign_id===row.campaign_id)?.name||row.campaign_id}</td><td>{row.historical_net_roas||'Insufficient baseline'}</td><td>{money(row.allocated_budget_minor)}</td><td>{money(row.projected_net_minor)}</td></tr>)}</tbody></table></div></div>}
-    </section>
+    </section></details>
     <footer>MarketPulse 360 · MP-06 · Synthetic marketing source data · Application settings created by the operator</footer>
   </main>;
 }

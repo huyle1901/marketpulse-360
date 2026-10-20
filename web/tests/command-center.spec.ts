@@ -20,7 +20,7 @@ test.beforeEach(async ({page})=>{
 });
 
 test('sources, historical status and exact integers stay visible',async({page})=>{
-  await page.goto('/');
+  await page.goto('/');await page.getByText('Budgets & alert rules',{exact:true}).click();await page.getByText('Budget allocation simulator',{exact:true}).click();
   await expect(page.getByRole('heading',{name:'Marketing Command Center'})).toBeVisible();
   await expect(page.getByText('Historical data',{exact:true})).toBeVisible();
   await expect(page.getByText('9,007,199,254,740,993').first()).toBeVisible();
@@ -29,7 +29,7 @@ test('sources, historical status and exact integers stay visible',async({page})=
 });
 
 test('configuration, pacing and simulation are distinct user actions',async({page})=>{
-  await page.goto('/');
+  await page.goto('/');await page.getByText('Budgets & alert rules',{exact:true}).click();await page.getByText('Budget allocation simulator',{exact:true}).click();
   await page.getByLabel('Period budget (minor units)').fill('100');
   await page.getByRole('button',{name:'Save campaign settings'}).click();
   await expect(page.getByText('Campaign settings saved')).toBeVisible();
@@ -46,13 +46,13 @@ test('configuration, pacing and simulation are distinct user actions',async({pag
 
 test('mobile layout stays within viewport and forms have labels',async({page})=>{
   await page.setViewportSize({width:390,height:844});
-  await page.goto('/');
+  await page.goto('/');await page.getByText('Budgets & alert rules',{exact:true}).click();await page.getByText('Budget allocation simulator',{exact:true}).click();
   await expect(page.getByLabel('Configured market')).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
 
 test('failed polling retains last successful results with error state',async({page})=>{
-  await page.goto('/');
+  await page.goto('/');await page.getByText('Budgets & alert rules',{exact:true}).click();await page.getByText('Budget allocation simulator',{exact:true}).click();
   await expect(page.getByText('9,007,199,254,740,993').first()).toBeVisible();
   await page.route('**/api/v1/dashboard*',route=>route.fulfill({status:503,json:{code:'dependency_unavailable'}}));
   await expect(page.getByText('Refresh failed; showing last successful data')).toBeVisible({timeout:10000});
@@ -66,7 +66,7 @@ test('a changed interval discards a pending scenario from the old interval',asyn
     await pending;
     await route.fulfill({json:{projected_net_minor:'777',rows:[],provenance:data.certified.provenance,assumption:'Old scenario must disappear'}});
   });
-  await page.goto('/');
+  await page.goto('/');await page.getByText('Budgets & alert rules',{exact:true}).click();await page.getByText('Budget allocation simulator',{exact:true}).click();
   await page.getByLabel('Scenario total (minor units)').fill('100');
   await page.getByLabel('Allocation for Campaign A').fill('100');
   const request=page.waitForRequest('**/api/v1/budget-simulation');
@@ -83,14 +83,14 @@ test('a pending settings save disables its editable draft',async({page})=>{
   await page.route('**/api/v1/campaign-settings/a',async route=>{
     await pending;await route.fulfill({json:{campaign_id:'a',market:null,currency:'VND',period_start:'2026-01-01',period_end:'2026-01-03',budget_minor:'100',version:'1'}});
   });
-  await page.goto('/');await page.getByLabel('Period budget (minor units)').fill('100');
+  await page.goto('/');await page.getByText('Budgets & alert rules',{exact:true}).click();await page.getByText('Budget allocation simulator',{exact:true}).click();await page.getByLabel('Period budget (minor units)').fill('100');
   const request=page.waitForRequest('**/api/v1/campaign-settings/a');
   await page.getByRole('button',{name:'Save campaign settings'}).click();await request;
   await expect(page.getByLabel('Period budget (minor units)')).toBeDisabled();release();
 });
 
 test('changed filter labels retained results while the next selection loads',async({page})=>{
-  await page.goto('/');await expect(page.getByText('9,007,199,254,740,993').first()).toBeVisible();
+  await page.goto('/');await page.getByText('Budgets & alert rules',{exact:true}).click();await page.getByText('Budget allocation simulator',{exact:true}).click();await expect(page.getByText('9,007,199,254,740,993').first()).toBeVisible();
   let release!:()=>void;const pending=new Promise<void>(resolve=>{release=resolve;});
   await page.route('**/api/v1/dashboard*platform=google*',async route=>{await pending;await route.fulfill({json:data});});
   await page.getByRole('combobox',{name:/^Platform/}).selectOption('google');
@@ -100,7 +100,7 @@ test('changed filter labels retained results while the next selection loads',asy
 test('release change invalidates a pending scenario',async({page})=>{
   let release!:()=>void;const pending=new Promise<void>(resolve=>{release=resolve;});
   await page.route('**/api/v1/budget-simulation',async route=>{await pending;await route.fulfill({json:{projected_net_minor:'777',rows:[],provenance:data.certified.provenance,assumption:'Scenario from old release'}});});
-  await page.goto('/');await page.getByLabel('Scenario total (minor units)').fill('100');await page.getByLabel('Allocation for Campaign A').fill('100');
+  await page.goto('/');await page.getByText('Budgets & alert rules',{exact:true}).click();await page.getByText('Budget allocation simulator',{exact:true}).click();await page.getByLabel('Scenario total (minor units)').fill('100');await page.getByLabel('Allocation for Campaign A').fill('100');
   const request=page.waitForRequest('**/api/v1/budget-simulation');await page.getByRole('button',{name:'Simulate allocation'}).click();await request;
   await page.route('**/api/v1/dashboard*',route=>route.fulfill({json:{...data,certified:{...data.certified,provenance:{...data.certified.provenance,generation:'2',identity:'b'.repeat(64)}}}}));
   await expect(page.locator('details').filter({has:page.locator('summary',{hasText:'Metric source & freshness'})})).toContainText('Generation 2',{timeout:10000});
@@ -109,7 +109,7 @@ test('release change invalidates a pending scenario',async({page})=>{
 });
 
 test('source identity and versioned alert evidence are inspectable',async({page})=>{
-  await page.goto('/');
+  await page.goto('/');await page.getByText('Budgets & alert rules',{exact:true}).click();await page.getByText('Budget allocation simulator',{exact:true}).click();
   await page.getByText('Streaming source provenance',{exact:true}).click();
   await expect(page.getByText('cluster/topic',{exact:false})).toBeVisible();
   await page.getByText('Full alert provenance',{exact:true}).click();

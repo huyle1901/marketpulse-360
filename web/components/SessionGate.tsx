@@ -42,7 +42,14 @@ export default function SessionGate({children}:{children:React.ReactNode}){
  if(loading)return <main><p role="status">Checking session…</p></main>;
  if(!principal)return <Login error={error} onLogin={()=>{authEpoch.current++;setLoading(true);setRetry(v=>v+1);}}/>;
  if(path==='/login')return <main><h1>Signed in</h1><Link href="/">Open Command Center</Link></main>;
- return <Context.Provider value={{principal,canOperate,canAdmin}}><div className="session-bar"><span>{principal.username} · {principal.role}</span><nav aria-label="Session navigation"><Link href="/">Campaigns</Link><Link href="/analysis">Analysis</Link><Link href="/customers">Customers</Link>{canAdmin&&<Link href="/operations">Operations</Link>}<button className="secondary" onClick={async()=>{authEpoch.current++;try{const r=await fetch('/api/v1/auth/logout',{method:'POST'});if(!r.ok&&r.status!==401)throw new Error();authEpoch.current++;setPrincipal(null);router.replace('/login');}catch{setError('Sign out failed; retry');}}}>Sign out</button></nav>{error&&<p role="alert">{error}</p>}</div>{path==='/operations'&&!canAdmin?<main><h1>Administrator access required</h1></main>:path==='/customers'&&!canOperate?<ViewerCohorts/>:children}</Context.Provider>;
+ const links=[['/','Campaign Operations'],['/analysis','Funnel & Attribution'],['/customers','Customer 360'],...(canAdmin?[['/operations','Operations']]:[])];
+ return <Context.Provider value={{principal,canOperate,canAdmin}}>
+ <a className="skip-link" href="#main-content">Skip to content</a>
+ <header className="app-shell"><Link href="/" className="shell-brand" aria-label="MarketPulse 360 home">MARKETPULSE <span>360</span></Link>
+ <nav aria-label="Workspaces">{links.map(([href,label])=><Link key={href} href={href} aria-current={path===href?'page':undefined}>{label}</Link>)}</nav>
+ <div className="account"><span>{principal.username} · {principal.role}</span><button className="secondary" onClick={async()=>{authEpoch.current++;try{const r=await fetch('/api/v1/auth/logout',{method:'POST'});if(!r.ok&&r.status!==401)throw new Error();authEpoch.current++;setPrincipal(null);router.replace('/login');}catch{setError('Sign out failed; retry');}}}>Sign out</button></div>{error&&<p role="alert">{error}</p>}</header>
+ <div id="main-content" tabIndex={-1}>{path==='/operations'&&!canAdmin?<main><h1>Administrator access required</h1></main>:path==='/customers'&&!canOperate?<ViewerCohorts/>:children}</div></Context.Provider>;
+
 }
 function Login({error,onLogin}:{error:string;onLogin:()=>void}){
  const [name,setName]=useState('');const [password,setPassword]=useState('');const [message,setMessage]=useState('');const [busy,setBusy]=useState(false);

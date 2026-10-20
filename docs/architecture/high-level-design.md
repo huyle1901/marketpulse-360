@@ -604,6 +604,19 @@ finance/lineage. A fixture-bounded explicit corruption probe changes only a fres
 owned ClickHouse copy, records failure and drives a separate demo alert; it never
 mutates/promotes the active release. Admin `/operations` exposes these controls.
 
+### 4.9 Command Center usability extension (after MP-10)
+
+The application shell is owned by `SessionGate`: one role-aware workspace menu,
+current-page indication, account controls and a keyboard skip target. Campaign,
+analysis and customer pages provide local section links. Budget/rule configuration
+and budget simulation are expandable tools so the campaign overview is the main
+entry point. Authentication/session checks and viewer/operator/admin boundaries
+remain the MP-09 contracts. This changes application composition only; it adds no
+service, storage responsibility or runtime dependency.
+
+Design: [Command Center usability](../superpowers/specs/2026-10-20-command-center-usability-design.md).
+Plan: [implementation](../superpowers/plans/2026-10-20-command-center-usability.md).
+
 ## 5. Kafka design
 
 Suggested topic naming:
