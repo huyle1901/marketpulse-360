@@ -225,7 +225,7 @@ panels and two healthy Prometheus scrape targets verified.398 Python tests pass
 typecheck/build and615-row deterministic fixture validation pass. Restart preserves
 roles, session, audit, app configuration, release/projection and finance.
 Authenticated p95: dashboard39.857ms, cohorts27.398ms, ops/status22.487ms
-(20warmups/100samples each); full manual quality114.597ms, local fixture only.
+(20 warmups / 100 samples each); full manual quality114.597ms, local fixture only.
 
 Make the system's health and data trust visible through Prometheus, Grafana,
 quality checks, lineage, retention controls, and role-based access.
@@ -252,9 +252,9 @@ Proof: [`evaluation report`](../docs/evaluation/report.md),
 **Observed:** Both 10k/100k processing scales match every independent oracle
 output and input/output hashes. Restart proofs preserve all10k records per engine
 (Flink restored checkpoint4,4.476s; Streams application/state retained,45.277s).
-ClickHouse/PostgreSQL1M/10M/20M three-query comparisons each pass20warmups/100samples
+ClickHouse/PostgreSQL1M/10M/20M three-query comparisons each pass20 warmups / 100 samples
 with CPU/memory coverage. Ten automated API decisions preserve configuration.
-423Python tests succeed(40opt-in skipped),30original Java tests and four new
+423Python tests succeed(40 opt-in skipped),30original Java tests and four new
 adapter tests in each client profile pass;29browser tests/typecheck/build and
 615-row fixture/Compose/diff validation pass. Six-section report PDF, twelve-slide
 PDF, hashes and25-minute storyboard generated. Automated readiness is not a human
@@ -275,6 +275,29 @@ evidence for the final report, slides, video, and executable demonstration.
   credit is available.
 - Final report has 4-7 logical sections, at least four technology examples, and less
   than 10% missing required content, targeting the top rubric band.
+
+## Post-MP-10 product improvements
+
+**Status:** Implemented and locally verified on `feat/command-center-usability`;
+user requested all five recommendations. Existing MP-01–10 contracts remain the baseline.
+
+1. Unified navigation and page hierarchy.
+2. Campaign trends, qualified previous-period comparisons and relevant alert shortcuts.
+3. Readable Operations & Trust summaries with expandable technical evidence.
+4. Shareable filters, date presets and searchable/sortable bounded tables.
+5. Retention heatmap and focused Customer 360 exploration.
+
+**Proof:** 428 Python tests (388 pass, 40 opt-in skips), 54 browser tests,
+typecheck/production build, fixture615 rows / 22 files, Compose/diff checks and healthy
+rebuilt API/web. Authenticated desktop/mobile verification covers all four
+workspaces, exact SQL/API daily/prior totals, URL/focus behavior, viewer boundaries
+and unchanged settings/rules/segments. One independent review's five Important
+findings were fixed with regression tests; no deferred findings. Local fixture
+API p95=44.829ms (default dashboard,20 warmups / 100 samples), not a capacity claim.
+[Runbook and acceptance evidence](../docs/runbooks/command-center-usability.md).
+
+[Design](../docs/superpowers/specs/2026-10-20-command-center-usability-design.md) ·
+[Plan](../docs/superpowers/plans/2026-10-20-command-center-usability.md).
 
 ## Traceability to the course brief
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import date, datetime, time, timedelta, timezone
+from dataclasses import replace
 from decimal import Decimal
 from typing import Any
 
@@ -80,6 +81,34 @@ class Analytics:
         session = self.pin()
         daily = session.daily(filters, settings)
         campaigns = session.campaigns()
+        # All three views share this pinned release and the same dimension filters.
+        duration = filters.to_date - filters.from_date
+        previous_start = filters.from_date - duration
+        previous = []
+        if previous_start >= date(1900, 1, 1):
+            previous = session.daily(replace(filters, from_date=previous_start, to_date=filters.from_date), settings)
+        coverage = session._query(
+            f"SELECT DISTINCT event_date FROM {session.release.database}.campaign_performance_daily "
+            "WHERE event_date>={from_date:Date32} AND event_date<{to_date:Date32}",
+            {"from_date": max(previous_start, date(1900, 1, 1)), "to_date": filters.to_date})
+        covered_days = {row["event_date"] for row in coverage if previous_start <= row["event_date"] < filters.from_date}
+        current_days = {row["event_date"] for row in coverage if filters.from_date <= row["event_date"] < filters.to_date}
+        previous_status = "complete" if len(covered_days) == duration.days else "partial" if covered_days else "unavailable"
+        current_status = "complete" if len(current_days) == duration.days else "partial" if current_days else "unavailable"
+        series = defaultdict(lambda: {field: 0 for field in SUM_FIELDS})
+        prior_totals = defaultdict(lambda: {field: 0 for field in SUM_FIELDS})
+        for row in daily:
+            for field in SUM_FIELDS:
+                series[(row["event_date"], row["currency"])][field] += row[field]
+        for row in previous:
+            for field in SUM_FIELDS:
+                prior_totals[row["currency"]][field] += row[field]
+        comparison = {"from_date": previous_start, "to_date": filters.from_date,
+            "status": "complete" if previous_status == current_status == "complete" else "unavailable" if "unavailable" in (previous_status, current_status) else "partial",
+            "previous_status": previous_status, "current_status": current_status,
+            "current_observed_days": len(current_days), "current_expected_days": duration.days,
+            "observed_days": len(covered_days), "expected_days": duration.days,
+            "totals": [{"currency": currency, **values} for currency, values in sorted(prior_totals.items())]}
         configured = {row.campaign_id: row for row in settings}
         totals = defaultdict(lambda: {field: 0 for field in SUM_FIELDS})
         groups = {}
@@ -139,7 +168,8 @@ class Analytics:
                     "offset_scope": "Bounds of latest selected keyed snapshots; gaps may exist"}
         return wire({"filters": vars_filter(filters), "certified": {"rows": list(groups.values()),
             "totals": [{"currency": currency, **values} for currency, values in sorted(totals.items())],
-            "provenance": provenance, "freshness": freshness}, "streaming": streaming, "campaigns": campaigns})
+            "daily_series": [{"event_date": day, "currency": currency, **values} for (day, currency), values in sorted(series.items())],
+            "comparison": comparison, "provenance": provenance, "freshness": freshness}, "streaming": streaming, "campaigns": campaigns})
 
 
 def vars_filter(filters: DashboardFilter) -> dict[str, object]:

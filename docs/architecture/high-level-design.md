@@ -604,6 +604,60 @@ finance/lineage. A fixture-bounded explicit corruption probe changes only a fres
 owned ClickHouse copy, records failure and drives a separate demo alert; it never
 mutates/promotes the active release. Admin `/operations` exposes these controls.
 
+### 4.9 Command Center usability extension (after MP-10)
+
+The application shell is owned by `SessionGate`: one role-aware workspace menu,
+current-page indication, account controls and a keyboard skip target. Campaign,
+analysis and customer pages provide local section links. Budget/rule configuration
+and budget simulation are expandable tools so the campaign overview is the main
+entry point. Authentication/session checks and viewer/operator/admin boundaries
+remain the MP-09 contracts. This changes application composition only; it adds no
+service, storage responsibility or runtime dependency.
+
+The existing authenticated `/api/v1/dashboard` contract adds certified daily
+series and an equal-length immediately preceding UTC period. ClickHouse reads for
+current totals, previous totals and published-day coverage use one pinned release.
+Coverage is evaluated for both periods before dimension filters: sparse current
+or prior history suppresses percentage comparisons. Missing selected currency or
+campaign baselines stay unavailable; only explicitly observed zero remains zero. Monetary fields remain integer strings, grouped by
+currency; the UI uses BigInt formatting, while bounded normalized SVG coordinates
+are presentation only. Prior intervals before the supported 1900 boundary are
+unavailable without invalidating the current selection. Matching alert shortcuts
+require current release identity and overlapping dates; all evidence remains below.
+
+Operations presentation summarizes collector availability, latest live quality,
+controlled probe state, validated lineage and protected retention. Missing telemetry
+stays unknown and reports identify their checked release. Green quality requires
+matching validated current lineage and a report age of at most three minutes; stale
+or mismatched reports preserve their recorded result with current quality unknown.
+A ten-second local clock ages source/quality observations without additional reads. Raw JSON is expandable
+technical evidence; the quality history starts collapsed. Existing admin APIs and
+mutation/audit semantics remain unchanged.
+
+Workspace filters, attribution model, customer offset/purpose and bounded table
+preferences live in allowlisted URL query state. The shared hook writes URL state
+at the transition and restores it on popstate. Automatic server-selected dates use
+replacement history while user edits push history; a delayed render cannot overwrite
+Back/Forward navigation. UI-only search/sort parameters never reach analytical
+APIs. Presets use the selected certified data-through date, not wall-clock dates.
+Campaign search/sort operates on the returned aggregate; profile search/sort is
+explicitly local to the loaded 20-row page. Campaign Analysis links preserve shared
+filters and declare the row currency; retained rows disable these links until the
+requested filter context is successfully displayed. No view state or analytical rows are copied
+into PostgreSQL or browser persistent storage.
+
+Customer retention is presented as a shared accessible heatmap for aggregate
+viewers and operators. Observed zero cells retain their exact original cohort
+counts, while absent cells remain unavailable. Operators can drill cells using the
+existing profile filters. Profile timelines open in a labelled modeless panel beside
+the bounded list, with focus transfer/return and existing consent/release guards.
+A live segment-draft summary explains conjunctive conditions and the activation
+consent boundary. Segment membership is still evaluated only by the existing
+release-bound preview; no members or new identity merges are persisted.
+
+Design: [Command Center usability](../superpowers/specs/2026-10-20-command-center-usability-design.md).
+Plan: [implementation](../superpowers/plans/2026-10-20-command-center-usability.md).
+
 ## 5. Kafka design
 
 Suggested topic naming:
