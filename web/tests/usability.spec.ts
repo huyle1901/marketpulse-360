@@ -7,13 +7,13 @@ test.beforeEach(async({page})=>{
 });
 test('one workspace navigation exposes current page and a keyboard skip link',async({page})=>{
  await page.goto('/');const nav=page.getByRole('navigation',{name:'Workspaces',exact:true});
- await expect(nav).toHaveCount(1);await expect(nav.getByRole('link',{name:'Campaign Operations',exact:true})).toHaveAttribute('aria-current','page');
- await expect(page.getByRole('link',{name:'Customer 360',exact:true})).toHaveCount(1);
+ await expect(nav).toHaveCount(1);await expect(nav.getByRole('link',{name:'Overview',exact:true})).toHaveAttribute('aria-current','page');
+ await expect(page.getByRole('link',{name:'Customers',exact:true})).toHaveCount(1);
  await page.getByRole('link',{name:'Skip to content'}).focus();await page.keyboard.press('Enter');await expect(page.locator('#main-content')).toBeFocused();
 });
 test('configuration is discoverable without dominating the campaign overview',async({page})=>{
  await page.goto('/');await expect(page.getByRole('heading',{name:'Marketing Command Center'})).toBeVisible();await expect(page.getByLabel('Period budget (minor units)')).not.toBeVisible();
- await page.getByText('Budgets & alert rules',{exact:true}).click();await expect(page.getByLabel('Period budget (minor units)')).toBeVisible();
+ await page.getByRole('button',{name:'Open details for Campaign A',exact:true}).click();await expect(page.getByRole('dialog',{name:'Campaign A'}).getByLabel('Period budget (minor units)')).toBeVisible();await page.keyboard.press('Escape');
  await page.getByText('Budget allocation simulator',{exact:true}).click();await expect(page.getByLabel('Scenario total (minor units)')).toBeVisible();
  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
@@ -21,11 +21,11 @@ test('configuration is discoverable without dominating the campaign overview',as
 test('daily trends expose exact values and missing prior history stays unavailable',async({page})=>{
  const daily_series=[{event_date:'2026-01-01',currency:'VND',spend_minor:'100',net_revenue_minor:'9007199254740993'}, {event_date:'2026-01-02',currency:'VND',spend_minor:'200',net_revenue_minor:'-3'}];
  await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:{...dashboard,certified:{...dashboard.certified,daily_series,comparison:{status:'unavailable',from_date:'2025-12-30',to_date:'2026-01-01',observed_days:'0',expected_days:'2',totals:[]}}}}));
- await page.goto('/');await expect(page.getByRole('heading',{name:'Daily certified trends'})).toBeVisible();
+ await page.goto('/');await expect(page.getByRole('heading',{name:'Certified trends'})).toBeVisible();
  await expect(page.getByText('Previous period unavailable',{exact:true})).toBeVisible();
  await page.getByText('Exact daily values · VND',{exact:true}).click();const table=page.getByRole('table',{name:'Daily certified values · VND'});
  await expect(table).toContainText('9007199254740993');await expect(table).toContainText('-3');
- await expect(page.getByRole('img',{name:'Daily net revenue and ad spend in VND'})).toBeVisible();
+ await expect(page.getByRole('img',{name:'Daily net revenue in VND'})).toBeVisible();
 });
 test('readable currency, qualified changes and alert shortcuts retain selection context',async({page})=>{
  const usd={...metric,currency:'USD',spend_minor:'125',net_revenue_minor:'250'};

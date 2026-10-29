@@ -40,6 +40,35 @@ include missing historical days and does not create observations. All intervals
 are UTC `[from,to)` with the end exclusive. Budget/scenario forms and segment money
 thresholds continue to use exact currency minor units.
 
+## Visual workspaces (2026-10-29 redesign)
+
+The [visual redesign](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
+renames the sidebar workspaces. The behavior described above is unchanged except
+where noted here.
+
+- **Overview** (`/`): four KPIs; one trend whose metric is Revenue, Spend or Orders
+  and whose interval is Daily, Weekly or Monthly. Weeks start on UTC Monday, and long
+  ranges default to monthly. Each bucket sums only observed certified days and lists
+  its observed-day count under **Exact … values**. Channel finance and stage reach
+  (release-matched) sit beside each other. Select a campaign name, or **Investigate**
+  an alert, to open its detail panel: daily results, pacing, settings, rules and
+  campaign alerts. Escape closes it and returns focus. **All alert evidence** and the
+  **Budget allocation simulator** are collapsed below the table.
+- **Live activity** (`/live`): provisional committed snapshots. The default window
+  runs from seven days before certified data-through to real UTC tomorrow; widen it
+  with the date fields. **Updated** marks a replaced snapshot. Replay state is
+  unknown until the demo controller exists.
+- **Journey analysis** (`/analysis`): grouped net-credit bars for all three models by
+  channel, plus campaign credit for the model chosen under **Attribution model**.
+  The same choice drives journey sampling. Exact tables are under **Exact credit
+  tables**, and reconciliation stays visible.
+- **Customers** (`/customers`): exact profile-mix and opportunity counts for the
+  displayed release; select a count to filter profiles. Unavailable detail stays
+  unavailable.
+- **Data health** (`/operations`, admin): a status strip summarizes certified
+  coverage (the served release must match validated lineage), live quality, source
+  counts with failing stages named, and Kafka/replay input. Detailed evidence follows.
+
 ## Local validation
 
 ```bash

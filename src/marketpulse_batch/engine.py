@@ -26,8 +26,13 @@ def execute(spark, operation: str, payload: dict[str, object]) -> dict[str, obje
     if operation == "ingest_files":
         selected = payload.get("selection")
         selection = BatchSelection(date.fromisoformat(selected["logical_day"]), tuple(selected["required_platforms"])) if selected else None
+        source_window = payload.get("source_window")
+        if source_window is not None and not isinstance(source_window, dict):
+            raise ValueError("source_window must be a date-range object")
         return ingest_source_files(spark, Path(payload["source_root"]), run_id=run_id,
                                    ingested_at=datetime.now(UTC), selection=selection,
+                                   from_date=date.fromisoformat(source_window["from_date"]) if source_window else None,
+                                   to_date=date.fromisoformat(source_window["to_date"]) if source_window else None,
                                    datasets=tuple(payload["datasets"]) if payload.get("datasets") else None)
     if operation == "bounded_kafka":
         manifest = capture_offset_manifest(spark, bootstrap_servers=payload["bootstrap_servers"], captured_at=datetime.now(UTC))

@@ -40,6 +40,23 @@ class DatasetWriterTests(unittest.TestCase):
             },
         )
 
+    def test_sealing_a_completed_day_bounds_open_parts_without_changing_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            records = [self._web_record(0), SourceRecord(
+                dataset="web_events",
+                event_time=self.start + timedelta(days=1),
+                payload=self._web_record(1).payload,
+            )]
+            normal = DatasetWriter(Path(first), rows_per_file=10)
+            bounded = DatasetWriter(Path(second), rows_per_file=10)
+            for record in records:
+                normal.write(record)
+                bounded.write(record)
+                bounded.seal_day(record.event_time.date())
+            with self.assertRaisesRegex(ValueError, "sealed"):
+                bounded.write(records[0])
+            self.assertEqual(normal.close(), bounded.close())
+
     def test_jsonl_writer_rotates_and_preserves_key_order(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             writer = DatasetWriter(Path(temporary_directory), rows_per_file=2)

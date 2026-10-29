@@ -33,6 +33,12 @@ def register_lifecycle_routes(app:FastAPI,analytics:Analytics,store:AppStore) ->
     @app.get('/api/v1/lifecycle/cohorts')
     def cohorts():return service.cohorts()
 
+    @app.get('/api/v1/lifecycle/email-engagement')
+    def email_engagement():return service.email_engagement()
+
+    @app.get('/api/v1/lifecycle/customer-mix')
+    def customer_mix():return service.customer_mix()
+
     @app.get('/api/v1/lifecycle/profiles')
     def profiles(cohort_month:str|None=None,activity_month:str|None=None,profile_type:str|None=None,purpose:str='analytics',opportunity:str|None=None,limit:int=20,offset:int=0):
         return service.profiles(cohort_month=cohort_month,activity_month=activity_month,profile_type=profile_type,purpose=purpose,opportunity=opportunity,limit=limit,offset=offset)

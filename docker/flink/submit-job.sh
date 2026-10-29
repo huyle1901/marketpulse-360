@@ -17,7 +17,13 @@ if [[ -n "${existing_state}" ]]; then
   exit 0
 fi
 
-submission="$(flink run -d \
+# An explicit retained checkpoint/savepoint keeps dedupe and aggregate state across a job failure.
+restore_args=()
+if [[ -n "${FLINK_RESTORE_PATH:-}" ]]; then
+  restore_args=(-s "${FLINK_RESTORE_PATH}")
+fi
+
+submission="$(flink run -d ${restore_args[@]+"${restore_args[@]}"} \
   -m flink-jobmanager:8081 \
   -c io.marketpulse.flink.MarketPulseFlinkJob \
   "${job_jar}" \

@@ -658,6 +658,124 @@ release-bound preview; no members or new identity merges are persisted.
 Design: [Command Center usability](../superpowers/specs/2026-10-20-command-center-usability-design.md).
 Plan: [implementation](../superpowers/plans/2026-10-20-command-center-usability.md).
 
+### 4.10 Long-range story-demo input and read boundary
+
+The opt-in `story-demo` generator profile spans 638 UTC days beginning
+2025-01-01: 608 history days through 2026-08-31 and 30 continuation days in
+September 2026. It keeps one seed and master-data identity across the boundary;
+the profile rejects an alternate start date. The generator still writes ignored
+synthetic files and does not publish them automatically when Compose starts.
+
+Read-only campaign dashboard selections allow up to 731 UTC days so the full
+history can be requested. Application budget and alert write periods retain their
+366-day contract. The dashboard's default window follows the latest certified
+date but cannot exceed the read limit. This extends an analytical query boundary;
+it does not move analytics into PostgreSQL or blend provisional live values with
+certified finance.
+
+The visual Command Center keeps authenticated FastAPI responses authoritative.
+`SessionGate` renders a compact dark sidebar around the existing pages; the
+overview places four currency-safe certified KPIs, a single-unit selectable
+revenue/spend/orders trend (daily, weekly from UTC Monday, or monthly; long
+ranges default to monthly; buckets sum only observed certified days and
+unobserved periods stay gaps), release-matched alert evidence and channel comparison
+ahead of the detailed campaign table. The channel bars aggregate certified
+campaign rows by platform and currency; they do not represent attribution
+credit or merge currencies. Beside them, a stage-reach summary reads the
+existing `/analysis/funnel` route for the exact displayed window and draws it
+only when its release identity equals the overview's; counts are labeled
+campaign-day session incidences, never a sequential funnel or unique audience. BigInt arithmetic formats net ROAS and money before
+the browser draws bounded chart coordinates. Missing or negative results remain
+explicit, and the exact-value tables remain available. The application uses
+local CSS tokens inspired by the shadcn dashboard composition, without a new
+analytics service or runtime CDN. Next.js 16.4.3 is the patched application
+runtime.
+
+The sidebar names the task workspaces Overview, Live activity, Journey analysis,
+Customers and (admin) Data health; routes and role checks are unchanged. Live
+activity (`/live`) moves the committed MP-03 snapshot view off the overview. It
+reads the same authenticated dashboard response with its own window, from seven
+days before certified data-through to real UTC tomorrow, so provisional days
+after the latest certified release stay visible. Snapshot replacement is shown
+as a change marker; it is never labeled a raw event or a throughput rate. Replay
+state is reported unknown until the demo controller exposes a status contract.
+
+Campaign configuration moved from inline overview forms into a per-campaign
+modal side panel opened from the campaign table or an alert's Investigate
+action. It shows the campaign's certified daily rows (a `/dashboard` read for
+that campaign, accepted only for the displayed release identity), pacing,
+budget/market settings, alert rules and that campaign's alert evidence, with
+focus trapping, Escape and focus return. Open and save actions are disabled while
+a new filter selection is not yet displayed, and the server role checks still
+govern writes. Needs attention shows one card per campaign with an occurrence
+count, and the full alert history is a collapsed disclosure. With 12 campaigns the
+overview is at most 2,000 px tall at 1440×1000. The cross-campaign simulator
+stays a page-level disclosure that the panel links to.
+
+Journey analysis (`/analysis`) leads attribution with signed grouped bars:
+net credit by channel for all three models on one zero baseline, and campaign
+credit for an explicit first/last/linear selector that shares the journey
+sampling model URL state. Charts are labeled as attribution credit, distinct
+from source campaign finance. Exact comparison tables sit in a disclosure, and
+the global reconciliation stays visible. No new endpoint or computation is added.
+
+Customers (`/customers`) leads with exact profile-mix and opportunity counts. These
+are the filtered `total` values of one-row `/lifecycle/profiles` reads per
+identity type and heuristic, accepted only for the displayed release, so they
+are population counts rather than statistics of the loaded 20-row page.
+Heuristics remain labeled rule-based. Unavailable event detail stays unavailable,
+and each count drills into the existing profile filter. The retention heatmap and
+consent-gated segment workflow are unchanged.
+
+Data health (`/operations`) opens with a status strip. It shows certified coverage
+from the served dashboard release, which is trusted only when it equals validated
+lineage; current live quality under the existing three-minute and release rules;
+collector source counts with failing stages named; and Kafka input with replay
+state unknown. The certified read runs independently, so a slow or missing
+dashboard cannot block the operations reads.
+
+History preparation primitives are implemented. `ingest-files --from-date
+--to-date` pins complete daily ad/CRM inputs for one half-open window. It
+requires every date to have CRM and all three platform reports, and keeps
+shared master files and manifest lineage. Replay accepts the same UTC window,
+merges one day at a time in event-time order, and with `--resume-state` keeps a
+fail-closed cursor. The cursor is bound to manifest digest, window, Kafka cluster
+ID and DLQ choice. It records a pending batch before sending, and refuses to
+resume after an ambiguous acknowledgement. Day sealing in the generator closes
+completed partitions so a 638-day run keeps only current files open.
+`scripts/story-demo-env.sh` selects the isolated `marketpulse-story-demo`
+project, its non-conflicting ports and a 3 GiB Flink TaskManager. The
+TaskManager size and an explicit checkpoint restore path are Compose variables,
+with unchanged defaults.
+
+The isolated story demo is operated and measured in
+[story-demo.md](../runbooks/story-demo.md). Its release certifies 608 days, and
+impressions, clicks and spend exactly equal generator ground truth. Batch Spark
+driver memory and timeout (`BATCH_SPARK_DRIVER_MEMORY`,
+`BATCH_SPARK_TIMEOUT_SECONDS`), ClickHouse and batch-code container limits, the
+Flink TaskManager size, and a checkpoint restore path are Compose variables
+whose defaults keep the fixture budgets. The continuation replay persists its
+cursor in a `replay_state` volume and accepts `--batch-size`.
+
+The application now uses Tailwind CSS v4 with copied-in shadcn/ui components
+(Radix primitives) and Recharts. All are exact-pinned and locally bundled; the
+`cn` helper is local. The sidebar adds Ad performance (`/ads`: CTR, CPC, cost per
+order, ROAS and spend-vs-revenue share per channel and campaign, computed with
+BigInt from certified `/dashboard` rows) and Email (`/email`). Two viewer-level
+reads, `/lifecycle/email-engagement` (monthly sent/delivered/opened/clicked/
+unsubscribed with delivered-based rates) and `/lifecycle/customer-mix` (new
+versus returning ordering profiles per month), query the release-pinned journey
+projection after its existing consistency check. An unpublished projection is
+unavailable, never zero. Email is not credited with revenue because the certified
+attribution policy credits paid clicks only. Overview KPI cards show compact
+money (exact on hover), change against the equal prior period when coverage is
+complete, and interval-matched sparklines. A history longer than 180 days opens
+on the latest 90 days. Partially published periods are marked partial rather
+than drawn as unqualified drops.
+
+The remaining controller automation (daily certification of continuation days) is specified in [the redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
+and remain separate implementation tasks.
+
 ## 5. Kafka design
 
 Suggested topic naming:

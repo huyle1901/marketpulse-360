@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from marketpulse_mock.config import (
@@ -21,6 +21,7 @@ class ScaleProfileTests(unittest.TestCase):
             "smoke": (3, 2_000, 12, 200, 10_000, 50_000),
             "demo": (14, 50_000, 30, 1_000, 150_000, 100_000),
             "benchmark": (30, 250_000, 60, 5_000, 1_000_000, 250_000),
+            "story-demo": (638, 1_000, 12, 100, 2_000, 50_000),
         }
 
         actual = {
@@ -67,6 +68,14 @@ class ScaleProfileTests(unittest.TestCase):
 
 
 class GenerationConfigTests(unittest.TestCase):
+    def test_story_demo_is_one_world_across_history_and_replay(self) -> None:
+        config = resolve_config("story-demo", seed=360, output_dir=Path("data/generated/story"))
+        self.assertEqual(date(2025, 1, 1), config.start_date)
+        self.assertEqual(date(2026, 9, 1), config.start_date + timedelta(days=608))
+        self.assertEqual(date(2026, 9, 30), config.start_date + timedelta(days=config.profile.days - 1))
+        with self.assertRaisesRegex(ValueError, "fixed UTC world"):
+            resolve_config("story-demo", seed=360, output_dir=Path("data/generated/story"), start_date=date(2026, 9, 1))
+
     def test_resolve_config_uses_fixed_utc_calendar_start(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             config = resolve_config(

@@ -4,6 +4,7 @@ import io
 import json
 import tempfile
 import unittest
+from datetime import date
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
@@ -34,6 +35,12 @@ class LakehouseCliTests(unittest.TestCase):
             ["ingest-files", "--run-id", "run-1", "--input", "/data/fixture"]
         )
         self.assertEqual(ingest_files.input, Path("/data/fixture"))
+        history_files = parser.parse_args([
+            "ingest-files", "--run-id", "history", "--input", "/data/story",
+            "--from-date", "2025-01-01", "--to-date", "2026-09-01",
+        ])
+        self.assertEqual(history_files.from_date, date(2025, 1, 1))
+        self.assertEqual(history_files.to_date, date(2026, 9, 1))
         build_silver = parser.parse_args(
             [
                 "build-silver",

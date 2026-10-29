@@ -77,6 +77,7 @@ def generate_dataset(
                     totals,
                 )
                 writer.write(record)
+            writer.seal_day(config.start_date + timedelta(days=day_index))
         file_stats = writer.close()
     except BaseException:
         writer.close()

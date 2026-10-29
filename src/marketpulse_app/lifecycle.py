@@ -11,6 +11,7 @@ from .analysis import single_currency
 from .journey_projection import JourneyJournal,reference
 from .lifecycle_contracts import SegmentRule,month,validate_selection
 from .lifecycle_math import activation_eligible,identity_evidence,lifecycle_metrics
+from .math import ratio
 
 POLICY='Identified CRM customer with historical analytics and latest certified analytics + marketing consent true.'
 GOLD_FIELDS=('profile_type','first_activity_at','last_activity_at','event_count','session_count','order_count','refund_count',
@@ -113,6 +114,49 @@ class LifecycleService:
                 sum(toUInt128(event_count)) AS gold_events FROM profiles''',{'identity':session.release.identity,'as_of':as_of})[0]
             if check['mismatches'] or check['gold_events']!=publication.row_count:raise LifecycleError('projection_mismatch')
         return session,publication,as_of,provenance
+
+    def email_engagement(self) -> dict[str,object]:
+        """Monthly email funnel from the release-pinned governed event projection."""
+        session,publication,_,provenance=self._context()
+        provenance=provenance|{'model':'silver.customer_events projection','serving_relation':'journey events'}
+        if not publication:return wire({'status':'unavailable','months':[],'message':'Publish the pinned journey detail for this certified release first.','provenance':provenance})
+        rows=session._query(f"""SELECT toStartOfMonth(event_date) AS month,countIf(event_name='email_sent') AS sent,
+            countIf(event_name='email_delivered') AS delivered,countIf(event_name='email_opened') AS opened,
+            countIf(event_name='email_clicked') AS clicked,countIf(event_name='email_unsubscribed') AS unsubscribed,
+            uniqExactIf(profile_ref,event_name='email_sent') AS recipients
+            FROM {publication.database}.events WHERE source='email' GROUP BY month ORDER BY month""")
+        fields=('sent','delivered','opened','clicked','unsubscribed')
+        def rates(row:Mapping[str,object]) -> dict[str,object]:
+            delivered=int(row['delivered'])
+            return {'open_rate':ratio(int(row['opened']),delivered),'click_rate':ratio(int(row['clicked']),delivered),
+                    'unsubscribe_rate':ratio(int(row['unsubscribed']),delivered)}
+        months=[{'month':row['month'],**{f:int(row[f]) for f in (*fields,'recipients')},**rates(row)} for row in rows]
+        totals={f:sum(int(row[f]) for row in rows) for f in fields}
+        return wire({'status':'available' if months else 'empty','months':months,'totals':totals|rates(totals),
+            'definition':'Rates use delivered emails as the denominator; recipients are distinct governed profiles sent an email that month.',
+            'provenance':provenance})
+
+    def customer_mix(self) -> dict[str,object]:
+        """New versus returning ordering profiles per month; new means the month of a profile's first original order."""
+        session,publication,_,provenance=self._context()
+        provenance=provenance|{'model':'silver.customer_events projection','serving_relation':'journey events'}
+        currency=provenance.get('currency')
+        if not publication:return wire({'status':'unavailable','months':[],'currency':currency,'message':'Publish the pinned journey detail for this certified release first.','provenance':provenance})
+        rows=session._query(f"""WITH firsts AS (SELECT profile_ref,toStartOfMonth(min(event_date)) AS first_order
+                FROM {publication.database}.events WHERE event_name='order_created' GROUP BY profile_ref)
+            SELECT toStartOfMonth(e.event_date) AS month,
+              uniqExactIf(e.profile_ref,f.first_order=toStartOfMonth(e.event_date)) AS new_customers,
+              uniqExactIf(e.profile_ref,f.first_order<toStartOfMonth(e.event_date)) AS returning_customers,
+              countIf(f.first_order=toStartOfMonth(e.event_date)) AS new_orders,
+              countIf(f.first_order<toStartOfMonth(e.event_date)) AS returning_orders,
+              sumIf(toInt128(ifNull(e.gross_amount_minor,0)),f.first_order=toStartOfMonth(e.event_date)) AS new_gross_minor,
+              sumIf(toInt128(ifNull(e.gross_amount_minor,0)),f.first_order<toStartOfMonth(e.event_date)) AS returning_gross_minor
+            FROM {publication.database}.events e INNER JOIN firsts f USING(profile_ref)
+            WHERE e.event_name='order_created' GROUP BY month ORDER BY month""")
+        months=[{**{k:row[k] for k in row},'returning_share':ratio(int(row['returning_customers']),int(row['new_customers'])+int(row['returning_customers']))} for row in rows]
+        return wire({'status':'available' if months else 'empty','months':months,'currency':currency,
+            'definition':'A profile is new in the month of its first original order and returning in later months; gross excludes refunds.',
+            'provenance':provenance})
 
     def cohorts(self) -> dict[str,object]:
         session,_,as_of,provenance=self._context(detail=False)

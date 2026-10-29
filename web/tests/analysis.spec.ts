@@ -11,15 +11,15 @@ const attribution={provenance,currency:'VND',definitions:defs,models:models.map(
 const journeys={provenance:{...provenance,silver_snapshot_id:'42',projection_checksum:'c'.repeat(64),projection_row_count:'10'},status:'available',model:'last_touch',currency:'VND',representative:true,candidates_scanned:'1',context_unavailable:'0',candidate_scan_capped:false,sample_limit:'5',rows:[{journey_id:'d'.repeat(64),purchase_time:'2026-01-02T00:00:00Z',context_from:'2025-12-03T00:00:00Z',context_to:'2026-01-02T00:00:00Z',touches:[{touch_ref:'t',event_time:'2025-12-31T00:00:00Z',campaign_name:'Campaign A',campaign_id:'a',channel:'google',outside_report_interval:true}],financial_events:[{event_ref:'e',event_name:'order_refunded',event_time:'2026-01-02T01:00:00Z',gross_revenue_minor:'0',refund_amount_minor:'3'}],allocations:models.map(model=>({model,event_date:'2026-01-02',campaign_id:'a',campaign_name:'Campaign A',channel:'google',allocated_gross_minor:'0',allocated_refund_minor:'3',allocated_net_minor:'-3',allocated_order_count:'0.000000'}))}]};
 test.beforeEach(async({page})=>{await page.route('**/api/v1/analysis/**',route=>{const name=new URL(route.request().url()).pathname.split('/').pop();return route.fulfill({json:name==='funnel'?funnel:name==='attribution'?attribution:{...journeys,model:new URL(route.request().url()).searchParams.get('model')||'last_touch'}});});});
 test('navigation, stage unit, exact comparisons and refund context',async({page})=>{
- await page.goto('/analysis');await expect(page.getByRole('heading',{name:'Funnel & Attribution',exact:true})).toBeVisible();
+ await page.goto('/analysis');await expect(page.getByRole('heading',{name:'Journey analysis',exact:true})).toBeVisible();
  await expect(page.getByText('campaign-day session incidences',{exact:true})).toBeVisible();
  await expect(page.getByText('9,007,199,254,740,993').first()).toBeVisible();
  await expect(page.getByText(defs.linear)).toBeVisible();
  await expect(page.getByText('All campaigns before dimension filters',{exact:true})).toBeVisible();
  await expect(page.getByText('Outside report interval',{exact:true})).toBeVisible();
  await expect(page.getByText('-3',{exact:true}).first()).toBeVisible();
- await page.getByRole('link',{name:'Campaign Operations',exact:true}).click();await expect(page).toHaveURL(url=>url.pathname==='/');
- await page.getByRole('link',{name:'Funnel & Attribution',exact:true}).click();await expect(page).toHaveURL(url=>url.pathname==='/analysis');
+ await page.getByRole('link',{name:'Overview',exact:true}).click();await expect(page).toHaveURL(url=>url.pathname==='/');
+ await page.getByRole('link',{name:'Journey analysis',exact:true}).click();await expect(page).toHaveURL(url=>url.pathname==='/analysis');
 });
 test('channel and campaign drill apply credited filters, model is selectable',async({page})=>{
  await page.goto('/analysis');await page.getByRole('button',{name:'Explore channel google',exact:true}).click();
