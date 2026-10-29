@@ -86,6 +86,8 @@ class InsightsTests(unittest.TestCase):
         self.assertEqual(sources['web']['conversion_rate'], '0.050000'); self.assertEqual(sources['unknown']['orders'], '1')
         self.assertIsNone(sources['unknown']['conversion_rate'])
         self.assertIn("'unknown'", next(sql for sql, _ in calls if 'AS session_source' in sql))
+        # ClickHouse fills unmatched LEFT JOIN columns with '' unless NULLs are requested, which would lose unknown orders.
+        self.assertIn('join_use_nulls=1', next(sql for sql, _ in calls if 'AS session_source' in sql))
 
     def test_mixed_currency_and_missing_projection(self):
         service, _ = self.service(currency=None)

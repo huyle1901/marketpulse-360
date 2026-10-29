@@ -100,7 +100,8 @@ class InsightsService(LifecycleService):
                 LEFT JOIN origin o ON o.session_id=e.session_id WHERE e.event_name='order_created' GROUP BY source)
             SELECT s.source AS source, s.sessions AS sessions, ifNull(r.orders, 0) AS orders FROM
                 (SELECT session_source AS source, count() AS sessions FROM origin GROUP BY source
-                 UNION ALL SELECT 'unknown', 0) s LEFT JOIN orders r ON r.source=s.source""")
+                 UNION ALL SELECT 'unknown', 0) s LEFT JOIN orders r ON r.source=s.source
+            SETTINGS join_use_nulls=1""")
         merged: dict[str, list[int]] = {}
         for row in rows:
             entry = merged.setdefault(row['source'], [0, 0]); entry[0] += int(row['sessions']); entry[1] = max(entry[1], int(row['orders']))
