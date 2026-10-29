@@ -345,3 +345,11 @@ class GoldModelTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GoldSilverInputTests(unittest.TestCase):
+    def test_gold_requires_every_silver_contract_including_products(self) -> None:
+        from marketpulse_lakehouse.gold import build_gold
+        five = {f"silver.{name}": 1 for name in ("customer_events", "customers", "campaigns", "ad_spend_daily", "quality_summary")}
+        with self.assertRaisesRegex(ValueError, "silver.products"):
+            build_gold(None, silver_snapshots=five, run_id="r")

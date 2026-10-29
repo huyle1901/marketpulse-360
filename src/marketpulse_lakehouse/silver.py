@@ -660,6 +660,46 @@ def build_customers(source_rows: Iterable[Mapping[str, object]]) -> tuple[dict[s
     return tuple(output)
 
 
+PRODUCT_CATEGORIES = frozenset({"electronics", "home", "beauty", "fashion", "sports"})
+
+
+def _product(payload: Mapping[str, object], source_file: str, row_number: int) -> dict[str, object]:
+    category = _required_string(payload.get("category"), "category")
+    if category not in PRODUCT_CATEGORIES:
+        raise ValueError(f"unsupported product category: {category}")
+    currency = _required_string(payload.get("currency"), "currency")
+    if currency != "VND":
+        raise ValueError("unsupported product currency")
+    price = int(_integer_text(payload.get("unit_price_minor"), "unit_price_minor"))
+    if price <= 0:
+        raise ValueError("product unit price must be positive")
+    return {
+        "product_id": _required_string(payload.get("product_id"), "product_id"),
+        "sku": _required_string(payload.get("sku"), "sku"),
+        "name": _required_string(payload.get("name"), "name"),
+        "category": category,
+        "brand": _required_string(payload.get("brand"), "brand"),
+        "unit_price_minor": price,
+        "currency": currency,
+        "source_file": source_file,
+        "source_row_number": row_number,
+    }
+
+
+def build_products(source_rows: Iterable[Mapping[str, object]]) -> tuple[dict[str, object], ...]:
+    """Product catalog from archived master rows; category/brand feed commerce Gold."""
+    products: dict[str, dict[str, object]] = {}
+    for row in source_rows:
+        if row.get("source_dataset") != "master/products":
+            continue
+        source_file, row_number = _row_lineage(row)
+        product = _product(_source_payload(row), source_file, row_number)
+        if product["product_id"] in products:
+            raise ValueError(f"duplicate product_id: {product['product_id']}")
+        products[str(product["product_id"])] = product
+    return tuple(products[key] for key in sorted(products))
+
+
 def build_campaigns(source_rows: Iterable[Mapping[str, object]]) -> tuple[dict[str, object], ...]:
     campaigns: dict[str, tuple[Mapping[str, object], dict[str, Any]]] = {}
     platform_ids: dict[str, str] = {}
@@ -1442,10 +1482,23 @@ def _build_dimension_frames(spark: Any, source: Any) -> dict[str, Any]:
     ad_spend = spend.withColumn(
         "spend_key", digest_udf("spend_date", "campaign_id", "platform")
     ).select(*[column.name for column in TABLE_CONTRACTS["silver.ad_spend_daily"].columns])
+    def parse_product(row: Any) -> tuple[object, ...]:
+        value = as_dict(row)
+        source_file, row_number = _row_lineage(value)
+        product = _product(_source_payload(value), source_file, row_number)
+        return tuple(product[column.name] for column in TABLE_CONTRACTS["silver.products"].columns)
+
+    products = spark.createDataFrame(
+        source.filter(F.col("source_dataset") == "master/products").rdd.map(parse_product),
+        ", ".join(f"{column.name} {'long' if column.iceberg_type == 'long' else 'string'}" for column in TABLE_CONTRACTS["silver.products"].columns),
+    )
+    if products.groupBy("product_id").count().filter(F.col("count") != 1).limit(1).count():
+        raise ValueError("duplicate product_id")
     return {
         "customers": customers,
         "campaigns": campaigns,
         "ad_spend_daily": ad_spend,
+        "products": products,
     }
 
 

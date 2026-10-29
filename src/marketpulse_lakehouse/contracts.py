@@ -197,6 +197,21 @@ TABLE_CONTRACTS: dict[str, TableContract] = {
             ("campaign_id",),
         ),
         TableContract(
+            "silver.products",
+            (
+                _c("product_id", "string", False),
+                _c("sku", "string", False),
+                _c("name", "string", False),
+                _c("category", "string", False),
+                _c("brand", "string", False),
+                _c("unit_price_minor", "long", False),
+                _c("currency", "string", False),
+                _c("source_file", "string", False),
+                _c("source_row_number", "long", False),
+            ),
+            ("product_id",),
+        ),
+        TableContract(
             "silver.ad_spend_daily",
             (
                 _c("spend_key", "string", False),

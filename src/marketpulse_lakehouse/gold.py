@@ -827,19 +827,18 @@ def build_gold(
     source_namespace: str = "silver",
     target_namespace: str = "gold",
 ) -> dict[str, object]:
-    """Build all five Gold models from explicit immutable Silver snapshots."""
-
-    from pyspark.storagelevel import StorageLevel
+    """Build every Gold model from explicit immutable Silver snapshots."""
 
     if not run_id:
         raise ValueError("run_id must not be empty")
     source_namespace = validate_namespace(source_namespace)
     target_namespace = validate_namespace(target_namespace)
-    expected = {f"silver.{name}" for name in (
-        "customer_events", "customers", "campaigns", "ad_spend_daily", "quality_summary"
-    )}
+    expected = {name for name in TABLE_CONTRACTS if name.startswith("silver.")}
     if set(silver_snapshots) != expected:
-        raise ValueError("Silver snapshots must contain exactly five table IDs")
+        raise ValueError("Silver snapshots must contain exactly: " + ", ".join(sorted(expected)))
+
+    from pyspark.storagelevel import StorageLevel
+
     _ensure_gold_tables(spark, target_namespace)
     events = _read_silver(
         spark, source_namespace, "customer_events", silver_snapshots["silver.customer_events"]

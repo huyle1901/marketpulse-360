@@ -15,6 +15,8 @@ from marketpulse_lakehouse.bronze import (
 from marketpulse_lakehouse.evidence import checksum_sorted_encoded_rows
 from marketpulse_lakehouse.verify import (
     EVIDENCE_TABLES,
+    GOLD_TABLES,
+    SILVER_TABLES,
     compare_manifest_tables,
     evidence_table_from_mapping,
     rebuild_namespace,
@@ -55,8 +57,8 @@ def _blob(value: bytes) -> dict[str, object]:
 
 
 def _manifest() -> dict[str, object]:
-    silver = EVIDENCE_TABLES[:5]
-    gold = EVIDENCE_TABLES[5:]
+    silver = SILVER_TABLES
+    gold = GOLD_TABLES
     baseline = {name: index + 100 for index, name in enumerate(EVIDENCE_TABLES)}
     later = {name: value + 100 for name, value in baseline.items()}
     return {
