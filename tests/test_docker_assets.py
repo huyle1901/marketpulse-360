@@ -116,7 +116,8 @@ class DockerAssetTests(unittest.TestCase):
         self.assertIn('"${FLINK_HOST_PORT:-8082}:8081"', compose)
         self.assertIn("taskmanager.numberOfTaskSlots: 2", compose)
         self.assertIn("jobmanager.memory.process.size: 768m", compose)
-        self.assertIn("taskmanager.memory.process.size: 1024m", compose)
+        self.assertIn("taskmanager.memory.process.size: ${FLINK_TASKMANAGER_PROCESS_SIZE:-1024m}", compose)
+        self.assertIn("memory: ${FLINK_TASKMANAGER_MEMORY_LIMIT:-1280M}", compose)
         self.assertIn("flink_checkpoints:/opt/flink/checkpoints", compose)
         self.assertGreaterEqual(compose.count("- flink"), 3)
         self.assertGreaterEqual(compose.count("condition: service_healthy"), 7)
@@ -173,6 +174,9 @@ class DockerAssetTests(unittest.TestCase):
         self.assertIn('state != "FINISHED"', script)
         self.assertIn("already active", script)
         self.assertIn("flink run -d", script)
+        self.assertIn("FLINK_RESTORE_PATH", script)
+        self.assertIn('restore_args=(-s "${FLINK_RESTORE_PATH}")', script)
+        self.assertIn("FLINK_RESTORE_PATH", (ROOT / "compose.yaml").read_text())
         self.assertIn("apt-get install -y --no-install-recommends jq", dockerfile)
 
     def test_lakehouse_image_pins_spark_and_offline_runtime_jars(self) -> None:
