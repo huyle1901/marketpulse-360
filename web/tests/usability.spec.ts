@@ -25,7 +25,7 @@ test('daily trends expose exact values and missing prior history stays unavailab
  await expect(page.getByText('Previous period unavailable',{exact:true})).toBeVisible();
  await page.getByText('Exact daily values · VND',{exact:true}).click();const table=page.getByRole('table',{name:'Daily certified values · VND'});
  await expect(table).toContainText('9007199254740993');await expect(table).toContainText('-3');
- await expect(page.getByRole('img',{name:'Daily net revenue and ad spend in VND'})).toBeVisible();
+ await expect(page.getByRole('img',{name:'Daily net revenue in VND'})).toBeVisible();
 });
 test('readable currency, qualified changes and alert shortcuts retain selection context',async({page})=>{
  const usd={...metric,currency:'USD',spend_minor:'125',net_revenue_minor:'250'};

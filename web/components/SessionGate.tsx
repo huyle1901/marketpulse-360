@@ -47,10 +47,10 @@ export default function SessionGate({children}:{children:React.ReactNode}){
  const links=[['/','Campaign Operations'],['/analysis','Funnel & Attribution'],['/customers','Customer 360'],...(canAdmin?[['/operations','Operations']]:[])];
  return <Context.Provider value={{principal,canOperate,canAdmin}}>
  <a className="skip-link" href="#main-content">Skip to content</a>
- <header className="app-shell"><Link href="/" className="shell-brand" aria-label="MarketPulse 360 home">MARKETPULSE <span>360</span></Link>
+ <div className="app-frame"><header className="app-shell"><Link href="/" className="shell-brand" aria-label="MarketPulse 360 home"><span className="brand-mark" aria-hidden="true">ϟ</span> MarketPulse <span>360</span></Link><p className="shell-caption">Marketing workspace</p>
  <nav aria-label="Workspaces">{links.map(([href,label])=><Link key={href} href={href} aria-current={path===href?'page':undefined}>{label}</Link>)}</nav>
  <div className="account"><span>{principal.username} · {principal.role}</span><button className="secondary" onClick={async()=>{authEpoch.current++;try{const r=await fetch('/api/v1/auth/logout',{method:'POST'});if(!r.ok&&r.status!==401)throw new Error();authEpoch.current++;setPrincipal(null);router.replace('/login');}catch{setError('Sign out failed; retry');}}}>Sign out</button></div>{error&&<p role="alert">{error}</p>}</header>
- <div id="main-content" tabIndex={-1}>{path==='/operations'&&!canAdmin?<main><h1>Administrator access required</h1></main>:path==='/customers'&&!canOperate?<ViewerCohorts/>:children}</div></Context.Provider>;
+ <div id="main-content" tabIndex={-1}>{path==='/operations'&&!canAdmin?<main><h1>Administrator access required</h1></main>:path==='/customers'&&!canOperate?<ViewerCohorts/>:children}</div></div></Context.Provider>;
 
 }
 function Login({error,onLogin}:{error:string;onLogin:()=>void}){

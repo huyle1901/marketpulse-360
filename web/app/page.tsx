@@ -2,6 +2,7 @@
 
 import {useEffect,useRef,useState} from 'react';
 import CampaignOverview from '../components/CampaignOverview';
+import ChannelBreakdown from '../components/ChannelBreakdown';
 import {formatMoney} from '../lib/format';
 import {useUrlState,choice} from '../lib/useUrlState';
 import FilterActions from '../components/FilterActions';
@@ -10,6 +11,7 @@ import {useSession} from '../components/SessionGate';
 import type {Alert,Campaign,Dashboard,Pace,Rule,Scenario,Setting} from './types';
 
 const money=(value:string|null|undefined)=>value==null?'Unavailable':BigInt(value).toLocaleString('en-US');
+const roas=(net:string,spend:string)=>{const denominator=BigInt(spend);if(denominator<=0n)return 'Unavailable';const scaled=BigInt(net)*100n/denominator;const absolute=scaled<0n?-scaled:scaled;return (scaled<0n?'-':'')+(absolute/100n).toString()+'.'+(absolute%100n).toString().padStart(2,'0')+'×';};
 async function api<T>(path:string,body?:unknown,method='GET',signal?:AbortSignal):Promise<T> {
   const response=await fetch('/api/v1/'+path,{method,body:body===undefined?undefined:JSON.stringify(body),headers:{'Content-Type':'application/json'},cache:'no-store',signal});
   if(!response.ok) {const error=await response.json();throw new Error(error.message||error.detail||error.code||'Request failed');}
@@ -135,8 +137,9 @@ export default function CommandCenter() {
     {!report&&!refreshError&&<p className="empty">Loading published campaign data…</p>}
     {report&&<>
       <section id="performance" className="section-heading"><div><h2>Certified campaign performance</h2><p>Governed daily data · Currency amounts · UTC dates</p></div><span className="badge">{report.certified.freshness.historical?'Historical data':report.certified.freshness.stale?'Stale data':'Current snapshot'}</span></section>
-      <div className="kpis">{report.certified.totals.map(row=><div className="kpi-group" key={row.currency}><article><span>Certified net revenue · {row.currency}</span><strong>{formatMoney(row.net_revenue_minor,row.currency)}</strong></article><article><span>Ad spend · {row.currency}</span><strong>{formatMoney(row.spend_minor,row.currency)}</strong></article><article><span>Orders</span><strong>{money(row.orders)}</strong></article><article><span>Clicks / impressions</span><strong>{money(row.clicks)} <em>/ {money(row.impressions)}</em></strong></article></div>)}</div>
+      <div className="kpis">{report.certified.totals.map(row=><div className="kpi-group" key={row.currency}><article><span>Certified net revenue · {row.currency}</span><strong>{formatMoney(row.net_revenue_minor,row.currency)}</strong></article><article><span>Ad spend · {row.currency}</span><strong>{formatMoney(row.spend_minor,row.currency)}</strong></article><article><span>Orders</span><strong>{money(row.orders)}</strong></article><article><span>Net ROAS · {row.currency}</span><strong>{roas(row.net_revenue_minor,row.spend_minor)}</strong><small>Net revenue / ad spend</small></article></div>)}</div>
       <CampaignOverview report={report} alerts={alerts} interactive={displayedQuery===query} onInvestigate={id=>{setFilters(current=>({...current,campaign_id:id}));setCampaignId(id);}}/>
+      <ChannelBreakdown rows={report.certified.rows}/>
       <CampaignTable interactive={displayedQuery===query} rows={report.certified.rows} filters={filters} search={filters.q} sort={filters.sort} onSearch={q=>setFilters(current=>({...current,q}))} onSort={sort=>setFilters(current=>({...current,sort}))}/>
       <details className="provenance"><summary>Metric source &amp; freshness · {report.certified.provenance.model}</summary><p>Generation {report.certified.provenance.generation} · Data through {report.certified.provenance.data_through||'No data'} (day resolution)</p><p>Release {report.certified.provenance.identity}</p><p>Read at {report.certified.provenance.observed_at}; polling does not change data freshness.</p></details>
       <section id="streaming" className="panel"><div className="section-heading"><div><h2>Streaming activity</h2><p>Provisional Flink aggregates · Separate from certified finance</p></div><span className="badge neutral">{report.streaming.status}</span></div><p className="source">{report.streaming.source}</p>
