@@ -199,6 +199,8 @@ def create_app(analytics: Any, store: Any, access: Any = None, operations: Any =
     register_analysis_routes(app, analytics, store)
     from .lifecycle_api import register_lifecycle_routes
     register_lifecycle_routes(app, analytics, store)
+    from .insights_api import register_insights_routes
+    register_insights_routes(app, analytics)
     if access is not None:
         from .auth_api import register_auth_routes
         register_auth_routes(app,access)
