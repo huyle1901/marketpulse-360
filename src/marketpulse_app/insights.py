@@ -82,7 +82,7 @@ class InsightsService(LifecycleService):
             row = found.get(tier, {'customers': 0, 'orders': 0, 'net_revenue_minor': 0})
             customers, net = int(row['customers']), int(row['net_revenue_minor'])
             tiers.append({'tier': tier, 'customers': customers, 'orders': int(row['orders']), 'net_revenue_minor': net,
-                          'net_per_customer_minor': int(net / customers) if customers else None})
+                          'net_per_customer_minor': (abs(net) // customers) * (-1 if net < 0 else 1) if customers else None})
         if sum(t['net_revenue_minor'] for t in tiers) != gold_net:
             raise LifecycleError('reconciliation_failed')
         return wire({'status': 'available', 'currency': provenance.get('currency'), 'tiers': tiers, 'total_net_revenue_minor': gold_net,

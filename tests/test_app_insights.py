@@ -118,3 +118,13 @@ class InsightsRouteTests(unittest.TestCase):
         with patch('marketpulse_app.insights_api.InsightsService.order_values', side_effect=LifecycleError('unsupported_currency')):
             response = client.get('/api/v1/insights/order-values')
         self.assertEqual(response.status_code, 409); self.assertEqual(response.json()['code'], 'unsupported_currency')
+
+
+class LoyaltyPrecisionTests(InsightsTests):
+    def test_net_per_customer_uses_exact_integer_division(self):
+        tiers = [{'tier': 'gold', 'customers': 1, 'orders': 1, 'net_revenue_minor': 9007199254740993},
+                 {'tier': 'none', 'customers': 3, 'orders': 1, 'net_revenue_minor': -7}]
+        service, _ = self.service(loyalty=tiers, gold_net=9007199254740986)
+        result = {t['tier']: t for t in service.loyalty()['tiers']}
+        self.assertEqual(result['gold']['net_per_customer_minor'], '9007199254740993')
+        self.assertEqual(result['none']['net_per_customer_minor'], '-2')
