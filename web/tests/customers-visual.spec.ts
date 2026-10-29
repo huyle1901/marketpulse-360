@@ -37,3 +37,8 @@ test('opportunity counts drill into the profile list',async({page})=>{
  await page.goto('/customers');await page.getByRole('region',{name:'Opportunity heuristics'}).getByRole('button',{name:'Show churn risk profiles'}).click();
  await expect(page).toHaveURL(/opportunity=churn_risk/);
 });
+test('an observed zero count stays zero rather than unavailable',async({page})=>{
+ await page.route('**/api/v1/lifecycle/profiles?*high_value*',r=>r.fulfill({json:{provenance:prov,purpose:'analytics',status:'empty',rows:[],total:'0',limit:'1',offset:'0',has_more:false}}));
+ await page.goto('/customers');const opportunity=page.getByRole('region',{name:'Opportunity heuristics'});
+ await expect(opportunity.getByRole('button',{name:'Show high value profiles'})).toHaveText('0');
+});
