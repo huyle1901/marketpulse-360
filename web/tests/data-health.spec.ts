@@ -13,6 +13,7 @@ test('data health leads with a compact status strip naming failing stages',async
  await expect(tile('Live quality')).toContainText('Passed');
  await expect(tile('Platform sources')).toContainText('1 available · 1 unavailable · 7 unknown');
  await expect(tile('Platform sources')).toContainText('Needs attention: Flink');
+ await expect(tile('Platform sources')).toContainText('1 source needs attention');
  await expect(tile('Input & replay')).toContainText('Kafka available');await expect(tile('Input & replay')).toContainText('Replay controller status unavailable');
 });
 test('status strip quality ages locally and a release mismatch is not certified',async({page})=>{
