@@ -76,6 +76,22 @@ compares the Spark commerce frame with the pure builder. Before re-certifying af
 a continuation replay, let Flink reach zero lag so Silver can reconcile every raw
 event.
 
+## Geography evidence (Phase 3, release `669e1c2b…`, refresh `edcc8238`, 283 s)
+
+Per-city net matches an independent join of exported `customer_360` with the generator `master/customers` city:
+
+| City | Customers | Net |
+| --- | ---: | ---: |
+| Can Tho | 199 | ₫3,575,576,000 |
+| Da Nang | 216 | ₫3,501,781,000 |
+| Ho Chi Minh City | 189 | ₫2,997,326,000 |
+| Hai Phong | 165 | ₫2,857,067,000 |
+| Ha Noi | 181 | ₫2,811,863,000 |
+
+Location unknown is ₫7,451,983,000 and the total ₫23,195,596,000 equals Gold. History
+is unchanged (11,124 orders through 2026-08-31), and the journey projection has
+247,789 events.
+
 ## Continue September
 
 ```bash
