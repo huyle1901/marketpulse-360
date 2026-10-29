@@ -26,15 +26,15 @@ export default function GeographyPage(){
   {error?<p className="empty">Geography unavailable: {error}</p>:!data?<p className="empty">Loading certified customer locations…</p>:data.status==='unavailable'?<p className="empty">{data.message}</p>:
   <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] [&>*]:min-w-0">
    <Card><CardHeader><CardTitle>Revenue map</CardTitle><CardDescription>Bubble area is proportional to certified net revenue · {currency}</CardDescription></CardHeader><CardContent>
-    <div role="img" aria-label="Customer net revenue by city" className="mx-auto max-w-[360px]">
-     <svg viewBox={`-20 -10 ${FRAME.width+40} ${FRAME.height+20}`} className="h-auto w-full">
+    <div role="img" aria-label="Customer net revenue by city" className="mx-auto max-w-[460px]">
+     <svg viewBox={`-130 -10 ${FRAME.width+260} ${FRAME.height+20}`} className="h-auto w-full">
       <defs><radialGradient id="bubble" cx="35%" cy="35%" r="75%"><stop offset="0%" stopColor="var(--primary)" stopOpacity="0.95"/><stop offset="100%" stopColor="var(--primary)" stopOpacity="0.55"/></radialGradient></defs>
       <rect x={0} y={0} width={FRAME.width} height={FRAME.height} rx={14} fill="var(--muted)" opacity="0.6"/>
       {[10,12,14,16,18,20,22].map(lat=><g key={lat}><line x1={0} x2={FRAME.width} y1={project(lat,FRAME.minLon).y} y2={project(lat,FRAME.minLon).y} stroke="var(--border)" strokeDasharray="3 4"/><text x={4} y={project(lat,FRAME.minLon).y-3} fontSize={9} fill="var(--muted-foreground)">{lat}°N</text></g>)}
       {[103,105,107,109].map(lon=><line key={lon} y1={0} y2={FRAME.height} x1={project(FRAME.minLat,lon).x} x2={project(FRAME.minLat,lon).x} stroke="var(--border)" strokeDasharray="3 4"/>)}
-      {plotted.map(c=>{const {x,y}=project(CITY_COORDINATES[c.city].lat,CITY_COORDINATES[c.city].lon);const r=8+Math.sqrt(Number(BigInt(c.net_revenue_minor)*10000n/max)/10000)*46;
-       return <g key={c.city}><circle data-city={c.city} cx={x} cy={y} r={r} fill="url(#bubble)" stroke="var(--card)" strokeWidth={2}><title>{`${c.city}: ${formatMoney(c.net_revenue_minor,currency)} from ${c.customers} customers`}</title></circle>
-        <text x={x+r+6} y={y-2} fontSize={13} fontWeight={600} fill="var(--foreground)">{c.city}</text><text x={x+r+6} y={y+13} fontSize={11} fill="var(--muted-foreground)">{compactMoney(c.net_revenue_minor,currency)}</text></g>;})}
+      {plotted.map(c=>{const {x,y}=project(CITY_COORDINATES[c.city].lat,CITY_COORDINATES[c.city].lon);const r=5+Math.sqrt(Number(BigInt(c.net_revenue_minor)*10000n/max)/10000)*24,side=CITY_COORDINATES[c.city].label,lx=side==='left'?x-r-6:x+r+6,anchor=side==='left'?'end':'start';
+       return <g key={c.city}><circle data-city={c.city} cx={x} cy={y} r={r} fill="url(#bubble)" fillOpacity={0.85} stroke="var(--primary)" strokeWidth={1.5}><title>{`${c.city}: ${formatMoney(c.net_revenue_minor,currency)} from ${c.customers} customers`}</title></circle>
+        <text x={lx} y={y-2} textAnchor={anchor} fontSize={14} fontWeight={600} fill="var(--foreground)">{c.city}</text><text x={lx} y={y+14} textAnchor={anchor} fontSize={12} fill="var(--muted-foreground)">{compactMoney(c.net_revenue_minor,currency)}</text></g>;})}
      </svg>
     </div>
     {skipped.length>0&&<p className="mt-2 text-xs text-muted-foreground">Not on the map: {skipped.join(', ')}.</p>}
@@ -42,10 +42,9 @@ export default function GeographyPage(){
    </CardContent></Card>
    <div className="space-y-4">
     <Card><CardHeader><CardTitle>Net revenue by city</CardTitle><CardDescription>{data.definition}</CardDescription></CardHeader><CardContent>
-     <Table aria-label="Net revenue by city"><TableHeader><TableRow><TableHead>City</TableHead><TableHead className="text-right">Customers</TableHead><TableHead className="text-right">Orders</TableHead><TableHead className="text-right">Net revenue</TableHead><TableHead className="w-[28%]">Share of located</TableHead></TableRow></TableHeader>
+     <Table aria-label="Net revenue by city"><TableHeader><TableRow><TableHead>City</TableHead><TableHead className="text-right">Customers</TableHead><TableHead className="text-right">Orders</TableHead><TableHead className="text-right">Net revenue</TableHead></TableRow></TableHeader>
       <TableBody>{cities.map(c=>{const pct=share(BigInt(c.net_revenue_minor),located);return <TableRow key={c.city}><TableCell><div className="font-medium">{c.city}</div><div className="text-xs text-muted-foreground">{c.country} · per customer {c.net_per_customer_minor==null?'—':formatMoney(c.net_per_customer_minor,currency)}</div></TableCell>
-       <TableCell className="text-right tabular-nums">{exact(c.customers)}</TableCell><TableCell className="text-right tabular-nums">{exact(c.orders)}</TableCell><TableCell className="text-right tabular-nums">{formatMoney(c.net_revenue_minor,currency)}</TableCell>
-       <TableCell><div className="flex items-center gap-2"><div className="h-2 flex-1 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{width:pct+'%'}}/></div><span className="w-11 text-right text-xs tabular-nums text-muted-foreground">{BigInt(c.net_revenue_minor)>0n?pct.toFixed(1)+'%':'—'}</span></div></TableCell></TableRow>;})}</TableBody></Table>
+       <TableCell className="text-right tabular-nums">{exact(c.customers)}</TableCell><TableCell className="text-right tabular-nums">{exact(c.orders)}</TableCell><TableCell className="text-right"><div className="tabular-nums">{formatMoney(c.net_revenue_minor,currency)}</div><div className="mt-1 ml-auto flex w-32 items-center gap-2"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{width:pct+'%'}}/></div><span className="w-10 text-right text-[11px] tabular-nums text-muted-foreground">{BigInt(c.net_revenue_minor)>0n?pct.toFixed(1)+'%':'—'}</span></div></TableCell></TableRow>;})}</TableBody></Table>
     </CardContent></Card>
     <div role="article" aria-label="Location unknown" className="rounded-xl border bg-card p-4 shadow-[var(--shadow-card)]">
      <div className="text-xs font-medium text-muted-foreground">Location unknown</div>
