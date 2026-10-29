@@ -18,8 +18,8 @@ test('navigation, stage unit, exact comparisons and refund context',async({page}
  await expect(page.getByText('All campaigns before dimension filters',{exact:true})).toBeVisible();
  await expect(page.getByText('Outside report interval',{exact:true})).toBeVisible();
  await expect(page.getByText('-3',{exact:true}).first()).toBeVisible();
- await page.getByRole('link',{name:'Campaign Operations',exact:true}).click();await expect(page).toHaveURL(url=>url.pathname==='/');
- await page.getByRole('link',{name:'Funnel & Attribution',exact:true}).click();await expect(page).toHaveURL(url=>url.pathname==='/analysis');
+ await page.getByRole('link',{name:'Overview',exact:true}).click();await expect(page).toHaveURL(url=>url.pathname==='/');
+ await page.getByRole('link',{name:'Journey analysis',exact:true}).click();await expect(page).toHaveURL(url=>url.pathname==='/analysis');
 });
 test('channel and campaign drill apply credited filters, model is selectable',async({page})=>{
  await page.goto('/analysis');await page.getByRole('button',{name:'Explore channel google',exact:true}).click();

@@ -7,8 +7,8 @@ test.beforeEach(async({page})=>{
 });
 test('one workspace navigation exposes current page and a keyboard skip link',async({page})=>{
  await page.goto('/');const nav=page.getByRole('navigation',{name:'Workspaces',exact:true});
- await expect(nav).toHaveCount(1);await expect(nav.getByRole('link',{name:'Campaign Operations',exact:true})).toHaveAttribute('aria-current','page');
- await expect(page.getByRole('link',{name:'Customer 360',exact:true})).toHaveCount(1);
+ await expect(nav).toHaveCount(1);await expect(nav.getByRole('link',{name:'Overview',exact:true})).toHaveAttribute('aria-current','page');
+ await expect(page.getByRole('link',{name:'Customers',exact:true})).toHaveCount(1);
  await page.getByRole('link',{name:'Skip to content'}).focus();await page.keyboard.press('Enter');await expect(page.locator('#main-content')).toBeFocused();
 });
 test('configuration is discoverable without dominating the campaign overview',async({page})=>{
