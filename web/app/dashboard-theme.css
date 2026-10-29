@@ -39,3 +39,12 @@ body{background:var(--mp-bg);color:var(--mp-ink);font-family:Inter,-apple-system
 .period-comparison{display:flex;flex-wrap:wrap;gap:2px 12px;align-items:baseline}.period-comparison h3{margin:0}.period-comparison p{margin:0;font-size:11px;color:var(--mp-muted)}.period-comparison .empty{padding:0;border:0;background:none;font-size:11px}.period-comparison .comparison-row{flex-basis:100%}
 .trend{margin:8px 0 10px}.trend svg{max-height:200px}.decision-overview{margin-bottom:0}.overview-grid{margin-bottom:0}.insight-grid{margin:16px 0 12px}
 .tool-group{margin:10px 0}.tool-group>summary{padding:11px 18px;font-size:14px}footer{margin-top:14px;padding:8px 0}
+.model-switch{display:inline-flex;margin:4px 0 14px}
+.credit-charts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;margin-bottom:12px}.credit-chart{border:1px solid var(--mp-line);border-radius:9px;padding:14px 16px;min-width:0}.credit-chart h3{margin:0 0 4px;font-size:13px}
+.credit-legend{display:flex;gap:12px;list-style:none;padding:0;margin:8px 0;font-size:11px;color:var(--mp-muted)}.credit-legend li{display:flex;align-items:center;gap:5px}.swatch{width:10px;height:10px;border-radius:3px;display:inline-block}
+.credit-group{display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px;align-items:center;margin:10px 0;font-size:12px}.credit-group>button,.credit-group>strong{text-transform:capitalize;overflow-wrap:anywhere}.credit-group.compact{margin:6px 0}
+.credit-line{display:grid;grid-template-columns:minmax(0,1fr) 100px;gap:8px;align-items:center;margin:2px 0;opacity:.55}.credit-line.selected{opacity:1}.credit-line small{text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.credit-track{position:relative;height:9px;background:#edf1f3;border-radius:4px}.credit-zero{position:absolute;top:-2px;bottom:-2px;width:1px;background:#8aa0a7}.credit-bar{position:absolute;top:0;height:100%;border-radius:4px}
+.swatch.first_touch,.credit-bar.first_touch{background:#4386c7}.swatch.last_touch,.credit-bar.last_touch{background:#2f9e7d}.swatch.linear,.credit-bar.linear{background:#9067d5}.credit-bar.negative{background-image:repeating-linear-gradient(45deg,transparent 0 3px,#ffffff88 3px 5px)}
+@media(max-width:1100px){.credit-charts{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:760px){.credit-group{grid-template-columns:minmax(0,1fr)}.credit-line{grid-template-columns:minmax(0,1fr) 80px}}
