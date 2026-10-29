@@ -889,13 +889,7 @@ def _target_table(namespace: str, table: str) -> str:
 def _ensure_silver_tables(spark: Any, namespace: str) -> None:
     namespace = validate_namespace(namespace)
     spark.sql(f"CREATE NAMESPACE IF NOT EXISTS lakehouse.`{namespace}`")
-    for name in (
-        "silver.customer_events",
-        "silver.customers",
-        "silver.campaigns",
-        "silver.ad_spend_daily",
-        "silver.quality_summary",
-    ):
+    for name in (name for name in TABLE_CONTRACTS if name.startswith("silver.")):
         statement = _table_statement("lakehouse", TABLE_CONTRACTS[name])
         spark.sql(statement.replace("`silver`", f"`{namespace}`", 1))
 

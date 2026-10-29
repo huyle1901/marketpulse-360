@@ -28,10 +28,7 @@ from .source_files import ALLOWED_SOURCE_DATASETS
 
 
 SILVER_TABLES = tuple(name for name in TABLE_CONTRACTS if name.startswith("silver."))
-GOLD_TABLES = (
-    "gold.funnel_daily", "gold.attribution_daily", "gold.customer_360",
-    "gold.cohort_retention", "gold.campaign_performance_daily",
-)
+GOLD_TABLES = tuple(name for name in TABLE_CONTRACTS if name.startswith("gold."))
 EVIDENCE_TABLES = SILVER_TABLES + GOLD_TABLES
 BRONZE_TABLES = (
     "bronze.kafka_records",
