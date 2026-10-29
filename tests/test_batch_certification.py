@@ -27,11 +27,12 @@ class DbtArtifactTests(unittest.TestCase):
 
     def artifacts(self, root: Path) -> None:
         names = ("funnel_daily", "attribution_daily", "customer_360", "cohort_retention",
-                 "campaign_performance_daily", "campaigns", "customers", "campaign_dashboard")
+                 "campaign_performance_daily", "commerce_daily", "campaigns", "customers", "campaign_dashboard")
         nodes = {f"model.marketpulse_serving.{name}": {"resource_type": "model", "name": name,
                  "schema": "mp_release_" + "a" * 64 + "_1"} for name in names}
         gates = ("financial_equations", "attribution_conservation", "cohort_invariants", "funnel_invariants",
-                 "consent_eligibility", "campaign_relationships", "customer_relationships", "accepted_domains")
+                 "consent_eligibility", "campaign_relationships", "customer_relationships", "accepted_domains",
+                 "commerce_conservation")
         nodes.update({f"test.marketpulse_serving.{name}": {"resource_type": "test", "name": name} for name in gates})
         for logical_name, contract in TABLE_CONTRACTS.items():
             model = logical_name.split(".")[1]
@@ -52,6 +53,16 @@ class DbtArtifactTests(unittest.TestCase):
         results = [{"unique_id": uid, "status": "success" if node["resource_type"] == "model" else "pass"}
                    for uid, node in nodes.items()]
         (root / "run_results.json").write_text(json.dumps({"metadata": metadata, "results": results}))
+
+    def test_commerce_conservation_gate_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root)
+            self.artifacts(path)
+            manifest = json.loads((path / "manifest.json").read_text())
+            del manifest["nodes"]["test.marketpulse_serving.commerce_conservation"]
+            (path / "manifest.json").write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, "complete successful build"):
+                validate_dbt_artifacts(path, "mp_release_" + "a" * 64 + "_1")
 
     def test_missing_dbt_result_blocks(self) -> None:
         with tempfile.TemporaryDirectory() as root:

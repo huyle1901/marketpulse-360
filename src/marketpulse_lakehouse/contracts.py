@@ -350,5 +350,25 @@ TABLE_CONTRACTS: dict[str, TableContract] = {
             ("event_date", "campaign_id"),
             ("months(event_date)",),
         ),
+        TableContract(
+            "gold.commerce_daily",
+            (
+                _c("event_date", "date", False),
+                _c("product_id", "string", False),
+                _c("device_type", "string", False),
+                _c("currency", "string", False),
+                _c("product_name", "string", False),
+                _c("category", "string", False),
+                _c("brand", "string", False),
+                _c("orders", "long", False),
+                _c("units", "long", False),
+                _c("refunds", "long", False),
+                _c("gross_revenue_minor", "long", False),
+                _c("refund_amount_minor", "long", False),
+                _c("net_revenue_minor", "long", False),
+            ),
+            ("event_date", "product_id", "device_type", "currency"),
+            ("months(event_date)",),
+        ),
     )
 }
