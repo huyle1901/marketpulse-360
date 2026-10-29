@@ -18,6 +18,7 @@ test('insights leads with a weekday-hour heatmap and a busiest-slot callout',asy
  const grid=region.getByRole('table',{name:'Sessions by weekday and hour (UTC)'});
  await expect(grid.getByRole('cell',{name:'Wednesday 10:00–11:00 UTC: 12 sessions'})).toBeVisible();
  await expect(region).toContainText('Busiest: Wednesday 10:00–11:00 UTC');
+ await expect(region).toContainText('Color scale: 0 to 12 sessions per hour');
  await region.getByRole('button',{name:'Show orders'}).click();
  await expect(region.getByRole('table',{name:'Orders by weekday and hour (UTC)'}).getByRole('cell',{name:'Wednesday 10:00–11:00 UTC: 4 orders'})).toBeVisible();
 });
@@ -55,4 +56,15 @@ test('insights fits a phone',async({page})=>{
  await page.setViewportSize({width:390,height:844});await page.goto('/insights');
  await expect(page.getByRole('region',{name:'When customers act'})).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+});
+
+test('the heatmap color scale spans the observed range so near-uniform activity still shows a pattern',async({page})=>{
+ const flat={...activity,cells:cells.map(c=>({...c,sessions:String(500+Number(c.hour)),orders:'1'})),busiest:{weekday:'1',hour:'23',sessions:'523'}};
+ await page.route('**/api/v1/insights/activity',r=>r.fulfill({json:flat}));
+ await page.goto('/insights');const region=page.getByRole('region',{name:'When customers act'});
+ await expect(region).toContainText('Color scale: 500 to 523 sessions per hour');
+ const grid=region.getByRole('table',{name:'Sessions by weekday and hour (UTC)'});
+ const low=await grid.getByRole('cell',{name:'Monday 00:00–01:00 UTC: 500 sessions'}).evaluate(e=>getComputedStyle(e).backgroundColor);
+ const high=await grid.getByRole('cell',{name:'Monday 23:00–00:00 UTC: 523 sessions'}).evaluate(e=>getComputedStyle(e).backgroundColor);
+ expect(low).not.toBe(high);
 });
