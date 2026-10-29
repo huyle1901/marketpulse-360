@@ -727,6 +727,13 @@ Heuristics remain labeled rule-based. Unavailable event detail stays unavailable
 and each count drills into the existing profile filter. The retention heatmap and
 consent-gated segment workflow are unchanged.
 
+Data health (`/operations`) opens with a status strip. It shows certified coverage
+from the served dashboard release, which is trusted only when it equals validated
+lineage; current live quality under the existing three-minute and release rules;
+collector source counts with failing stages named; and Kafka input with replay
+state unknown. The certified read runs independently, so a slow or missing
+dashboard cannot block the operations reads.
+
 The history preparation/replay controller and isolated Compose deployment are
 specified in [the redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
 and remain separate implementation tasks.

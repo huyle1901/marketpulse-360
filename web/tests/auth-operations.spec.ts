@@ -18,13 +18,13 @@ test('admin failed action stays authoritative and sign-out removes content',asyn
  if(p.endsWith('quality/probe'))return r.fulfill({status:503,json:{code:'dependency_unavailable'}});
  return r.fulfill({json:p.endsWith('users')||p.endsWith('audit')||p.endsWith('quality')?[]:{status:'available',probe_active:false}});
  });
- await page.goto('/operations');await expect(page.getByRole('heading',{name:'Operations & trust'})).toBeVisible();await page.getByRole('button',{name:'Run isolated corruption probe'}).click();await expect(page.locator('main [role=alert]')).toContainText('dependency_unavailable');
+ await page.goto('/operations');await expect(page.getByRole('heading',{name:'Data health',level:1})).toBeVisible();await page.getByRole('button',{name:'Run isolated corruption probe'}).click();await expect(page.locator('main [role=alert]')).toContainText('dependency_unavailable');
  await page.getByRole('button',{name:'Sign out'}).click();await expect(page.getByRole('heading',{name:'Sign in to MarketPulse 360'})).toBeVisible();
 });
 test('an expired protected read removes the workspace immediately',async({page})=>{
  await page.route('**/api/v1/auth/session',r=>r.fulfill({json:{user_id:'a',username:'admin',role:'admin'}}));
  await page.route('**/api/v1/ops/**',r=>r.fulfill({status:401,json:{code:'unauthorized'}}));
- await page.goto('/operations');await expect(page.getByRole('heading',{name:'Sign in to MarketPulse 360'})).toBeVisible();await expect(page.getByRole('heading',{name:'Operations & trust'})).toHaveCount(0);
+ await page.goto('/operations');await expect(page.getByRole('heading',{name:'Sign in to MarketPulse 360'})).toBeVisible();await expect(page.getByRole('heading',{name:'Data health',level:1})).toHaveCount(0);
 });
 test('a delayed earlier operations refresh cannot replace the latest',async({page})=>{
  let count=0;let release!:()=>void;const pending=new Promise<void>(resolve=>{release=resolve;});
@@ -36,8 +36,8 @@ test('an obsolete session response cannot restore an expired workspace',async({p
  await page.clock.install();let polls=0;let holdNext=false;let heldOnce=false;let release!:()=>void;let completed!:()=>void;const held=new Promise<void>(r=>{release=r;});const done=new Promise<void>(r=>{completed=r;});
  await page.route('**/api/v1/auth/session',async r=>{polls++;if(holdNext&&!heldOnce){heldOnce=true;await held;try{await r.fulfill({json:{user_id:'a',username:'admin',role:'admin'}});}finally{completed();}}else await r.fulfill({json:{user_id:'a',username:'admin',role:'admin'}});});
  await page.route('**/api/v1/ops/**',r=>r.fulfill({json:new URL(r.request().url()).pathname.match(/(users|audit|quality)$/)?[]:{status:'available'}}));
- await page.goto('/operations');await expect(page.getByRole('heading',{name:'Operations & trust'})).toBeVisible();const initial=polls;holdNext=true;await page.clock.fastForward(15000);await expect.poll(()=>polls).toBe(initial+1);
- await page.evaluate(()=>window.dispatchEvent(new Event('mp-session-expired')));await expect(page.getByRole('heading',{name:'Sign in to MarketPulse 360'})).toBeVisible();release();await done;await page.clock.runFor(100);await expect(page.getByRole('heading',{name:'Sign in to MarketPulse 360'})).toBeVisible();await expect(page.getByRole('heading',{name:'Operations & trust'})).toHaveCount(0);
+ await page.goto('/operations');await expect(page.getByRole('heading',{name:'Data health',level:1})).toBeVisible();const initial=polls;holdNext=true;await page.clock.fastForward(15000);await expect.poll(()=>polls).toBe(initial+1);
+ await page.evaluate(()=>window.dispatchEvent(new Event('mp-session-expired')));await expect(page.getByRole('heading',{name:'Sign in to MarketPulse 360'})).toBeVisible();release();await done;await page.clock.runFor(100);await expect(page.getByRole('heading',{name:'Sign in to MarketPulse 360'})).toBeVisible();await expect(page.getByRole('heading',{name:'Data health',level:1})).toHaveCount(0);
 });
 test('session polls honor the latest check rather than response arrival order',async({page})=>{
  await page.clock.install();let polls=0;let holdNext=false;let heldOnce=false;let release!:()=>void;let completed!:()=>void;const held=new Promise<void>(r=>{release=r;});const done=new Promise<void>(r=>{completed=r;});
