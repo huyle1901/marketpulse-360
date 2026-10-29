@@ -673,10 +673,22 @@ date but cannot exceed the read limit. This extends an analytical query boundary
 it does not move analytics into PostgreSQL or blend provisional live values with
 certified finance.
 
-The full preparation/replay controller, isolated Compose deployment and visual
-redesign are specified in [the approved redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
-and are tracked as separate implementation tasks. This section records only the
-input/read contract currently implemented.
+The visual Command Center keeps authenticated FastAPI responses authoritative.
+`SessionGate` renders a compact dark sidebar around the existing pages; the
+overview places four currency-safe certified KPIs, a single-unit selectable
+daily revenue/spend trend, release-matched alert evidence and channel comparison
+ahead of the detailed campaign table. The channel bars aggregate certified
+campaign rows by platform and currency; they do not represent attribution
+credit or merge currencies. BigInt arithmetic formats net ROAS and money before
+the browser draws bounded chart coordinates. Missing or negative results remain
+explicit, and the exact-value tables remain available. The application uses
+local CSS tokens inspired by the shadcn dashboard composition, without a new
+analytics service or runtime CDN. Next.js 16.4.3 is the patched application
+runtime.
+
+The history preparation/replay controller and isolated Compose deployment are
+specified in [the redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
+and remain separate implementation tasks.
 
 ## 5. Kafka design
 

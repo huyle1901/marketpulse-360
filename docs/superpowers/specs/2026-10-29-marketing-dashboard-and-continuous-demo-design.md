@@ -1,6 +1,7 @@
 # Marketing dashboard and continuous demo — design proposal
 
-Status: draft for visual feedback; not approved for product implementation.
+Status: implementation authorized by the user's 2026-10-29 request; delivery is
+tracked in the linked implementation plan.
 Date: 2026-10-29.
 
 ## Intent
@@ -11,9 +12,9 @@ investigate from the first screen. The user explicitly requested research into
 real marketing products and established UI templates, a substantial visual
 redesign, and a populated historical dataset that continues into streaming.
 
-The user accepted an interactive browser mockup. That approval covers a
-throwaway design preview, not this entire implementation scope. The preview
-contains clearly labeled synthetic illustrative values and makes no API calls.
+The earlier interactive browser mockup contains clearly labeled synthetic
+illustrative values and makes no API calls. The subsequent user request explicitly
+authorized implementation and a PR after planning and brainstorming.
 
 ## Current evidence
 

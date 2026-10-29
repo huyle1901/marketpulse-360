@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './styles.css';
+import './dashboard-theme.css';
 import SessionGate from '../components/SessionGate';
 export const metadata: Metadata = {title:'MarketPulse 360 | Command Center',description:'Traceable campaign operations, funnel reach and attribution analysis'};
 export default function Layout({children}:{children:React.ReactNode}) {

@@ -1,0 +1,30 @@
+import {test,expect} from '@playwright/test';
+
+const provenance={generation:'1',identity:'a'.repeat(64),model:'gold.campaign_performance_daily',data_through:'2026-01-03T00:00:00Z'};
+const rows=[
+ {campaign_id:'g',campaign_name:'Google Traffic 1',currency:'VND',platform:'google',objective:'traffic',spend_minor:'100',net_revenue_minor:'300',orders:'2',source_roas:'3'},
+ {campaign_id:'m',campaign_name:'Meta Traffic 2',currency:'VND',platform:'meta',objective:'traffic',spend_minor:'200',net_revenue_minor:'400',orders:'3',source_roas:'2'},
+];
+const dashboard={filters:{from_date:'2026-01-01',to_date:'2026-01-03'},campaigns:rows.map(r=>({campaign_id:r.campaign_id,name:r.campaign_name,currency:r.currency,platform:r.platform,objective:r.objective})),certified:{rows,totals:[{currency:'VND',spend_minor:'300',net_revenue_minor:'700',orders:'5',clicks:'20',impressions:'100'}],daily_series:[{event_date:'2026-01-01',currency:'VND',spend_minor:'100',net_revenue_minor:'300'},{event_date:'2026-01-02',currency:'VND',spend_minor:'200',net_revenue_minor:'400'}],comparison:{status:'unavailable',current_status:'complete',previous_status:'unavailable',from_date:'2025-12-30',to_date:'2026-01-01',observed_days:'0',expected_days:'2',current_observed_days:'2',current_expected_days:'2',totals:[]},provenance,freshness:{historical:true,stale:true}},streaming:{status:'unavailable',source:'marketing.gold.campaign-metrics.v1',rows:[]}};
+
+test.beforeEach(async({page})=>{await page.route('**/api/v1/**',r=>{const p=new URL(r.request().url()).pathname;return r.fulfill({json:p.endsWith('auth/session')?{user_id:'a',username:'admin',role:'admin'}:p.endsWith('dashboard')?dashboard:[]});});});
+
+test('visual overview shows net ROAS and switches a one-unit trend',async({page})=>{
+ await page.goto('/');
+ await expect(page.getByText('Net ROAS · VND',{exact:true})).toBeVisible();
+ await expect(page.getByText('2.33×',{exact:true})).toBeVisible();
+ const chart=page.getByRole('img',{name:'Daily net revenue in VND'});
+ await expect(chart).toBeVisible();
+ await page.getByRole('button',{name:'Show spend trend'}).click();
+ await expect(page.getByText('Ad spend trend · VND',{exact:true})).toBeVisible();
+ await expect(page.getByRole('img',{name:'Daily ad spend in VND'})).toBeVisible();
+ await page.getByText('Exact daily values · VND',{exact:true}).click();
+ await expect(page.getByRole('table',{name:'Daily certified values · VND'})).toContainText('400');
+});
+
+test('channel comparison is backed by certified campaign rows',async({page})=>{
+ await page.goto('/');const region=page.getByRole('region',{name:'Channel comparison'});
+ await expect(region).toContainText('Google');await expect(region).toContainText('Meta');
+ await expect(region).toContainText('VND');
+ await expect(region).toContainText('300');await expect(region).toContainText('400');
+});
