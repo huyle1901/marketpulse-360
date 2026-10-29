@@ -172,6 +172,8 @@ TABLE_CONTRACTS: dict[str, TableContract] = {
                 _c("last_order_at", "timestamp"),
                 _c("consent_analytics", "boolean", False),
                 _c("consent_marketing", "boolean", False),
+                _c("country", "string", False),
+                _c("city", "string", False),
                 _c("source_file", "string", False),
                 _c("source_row_number", "long", False),
             ),
