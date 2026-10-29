@@ -91,6 +91,12 @@ class CommandLineTests(unittest.TestCase):
         self.assertEqual(date(2026, 1, 1), args.from_date)
         self.assertEqual(Path("cursor.json"), args.resume_state)
         self.assertTrue(args.init_state)
+        self.assertEqual(500, args.batch_size)
+        small = build_parser().parse_args([
+            "kafka", "replay", "--input", "fixture", "--from-date", "2026-01-01",
+            "--to-date", "2026-01-03", "--resume-state", "cursor.json", "--batch-size", "25",
+        ])
+        self.assertEqual(25, small.batch_size)
 
     @patch("marketpulse_mock.cli.create_topics")
     def test_kafka_topics_returns_nonzero_on_failure(self, create: Mock) -> None:

@@ -177,6 +177,10 @@ class DockerAssetTests(unittest.TestCase):
         self.assertIn("FLINK_RESTORE_PATH", script)
         self.assertIn('restore_args=(-s "${FLINK_RESTORE_PATH}")', script)
         self.assertIn("FLINK_RESTORE_PATH", (ROOT / "compose.yaml").read_text())
+        compose = (ROOT / "compose.yaml").read_text()
+        replay = compose[compose.index("\n  replay:"):compose.index("\n  flink-jobmanager:")]
+        self.assertIn("replay_state:/app/state", replay)
+        self.assertIn("\n  replay_state:", compose[compose.index("\nvolumes:"):])
         self.assertIn("apt-get install -y --no-install-recommends jq", dockerfile)
 
     def test_lakehouse_image_pins_spark_and_offline_runtime_jars(self) -> None:

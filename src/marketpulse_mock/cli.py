@@ -61,6 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     kafka_replay.add_argument("--to-date", type=date.fromisoformat, help="exclusive UTC event date")
     kafka_replay.add_argument("--resume-state", type=Path, help="durable acknowledged replay cursor")
     kafka_replay.add_argument("--init-state", action="store_true", help="initialize a new cursor after history preparation")
+    kafka_replay.add_argument("--batch-size", type=int, default=500, help="records per acknowledged cursor batch")
     pacing = kafka_replay.add_mutually_exclusive_group()
     pacing.add_argument("--speed", type=float)
     pacing.add_argument("--events-per-second", type=float)
@@ -166,7 +167,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args.input, args.resume_state, args.from_date, args.to_date,
                     publisher, ReplayPacer(config, controller), controller,
                     target_id=publisher.cluster_id(), initialize=args.init_state,
-                    include_dlq=args.include_dlq,
+                    include_dlq=args.include_dlq, batch_size=args.batch_size,
                 )
                 print(json.dumps(summary.to_dict(), sort_keys=True))
                 return 0
