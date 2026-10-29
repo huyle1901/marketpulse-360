@@ -312,7 +312,7 @@ analysis, Customers, Email, Data health) over a certified January 2025 – Augus
 2026 history with September 2026 streaming. Daily certification of continuation
 days remains pending.
 
-Richer insights Phase 1 (Insights workspace: activity heatmap, order values, loyalty tiers, web vs app) is implemented on `feat/insights-phase-1`; Phase 2 (certified `gold.commerce_daily` and the Products workspace) is implemented on `feat/commerce-phase-2`; Phase 3 (geography) is specified in [the phased design](../docs/superpowers/specs/2026-10-30-richer-marketing-insights-design.md).
+Richer insights Phase 1 (Insights workspace: activity heatmap, order values, loyalty tiers, web vs app) is implemented on `feat/insights-phase-1`; Phase 2 (certified `gold.commerce_daily` and the Products workspace) is implemented on `feat/commerce-phase-2`; Phase 3 (certified customer city and the Geography workspace) is implemented on `feat/geography-phase-3`; Phase 4 (new generator fields) needs separate approval and is specified in [the phased design](../docs/superpowers/specs/2026-10-30-richer-marketing-insights-design.md).
 
 ## Traceability to the course brief
 
