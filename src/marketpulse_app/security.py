@@ -42,7 +42,7 @@ ROUTES = (
  ('GET',r'analysis/journeys','operator','analysis/journeys'),
  ('GET',r'lifecycle/cohorts','viewer','lifecycle/cohorts'),
  ('GET',r'lifecycle/(?:email-engagement|customer-mix)','viewer','lifecycle/aggregate'),
- ('GET',r'insights/(?:activity|order-values|loyalty|channels|products)','viewer','insights/aggregate'),
+ ('GET',r'insights/(?:activity|order-values|loyalty|channels|products|geography)','viewer','insights/aggregate'),
  ('GET',r'lifecycle/profiles','operator','lifecycle/profiles'),
  ('GET',r'lifecycle/profiles/[^/]+/timeline','operator','lifecycle/profiles/{profile_ref}/timeline'),
  ('GET',r'lifecycle/segments(?:/[^/]+/versions/[0-9]+)?','operator','lifecycle/segments'),
