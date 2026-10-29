@@ -681,7 +681,10 @@ ranges default to monthly; buckets sum only observed certified days and
 unobserved periods stay gaps), release-matched alert evidence and channel comparison
 ahead of the detailed campaign table. The channel bars aggregate certified
 campaign rows by platform and currency; they do not represent attribution
-credit or merge currencies. BigInt arithmetic formats net ROAS and money before
+credit or merge currencies. Beside them, a stage-reach summary reads the
+existing `/analysis/funnel` route for the exact displayed window and draws it
+only when its release identity equals the overview's; counts are labeled
+campaign-day session incidences, never a sequential funnel or unique audience. BigInt arithmetic formats net ROAS and money before
 the browser draws bounded chart coordinates. Missing or negative results remain
 explicit, and the exact-value tables remain available. The application uses
 local CSS tokens inspired by the shadcn dashboard composition, without a new
