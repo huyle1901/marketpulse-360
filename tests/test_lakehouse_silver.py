@@ -6,9 +6,11 @@ import unittest
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+from marketpulse_lakehouse.contracts import TABLE_CONTRACTS
 from marketpulse_lakehouse.silver import (
     build_ad_spend_daily,
     build_campaigns,
+    build_products,
     build_customers,
     govern_customer_events,
     parse_clean_bronze_record,
@@ -334,6 +336,22 @@ class SilverEventTests(unittest.TestCase):
 
 
 class SilverDimensionTests(unittest.TestCase):
+    def test_build_products_parses_master_rows_and_rejects_duplicates(self) -> None:
+        plan = build_source_archive_plan(ROOT / "data/mock/fixtures/seed-360")
+        rows = [row for source in plan.source_files if source.source_dataset == "master/products"
+                for row in normalize_source_file(source, run_id="silver-fixture", ingested_at=datetime(2026, 1, 3, tzinfo=UTC))]
+        products = build_products(rows)
+        self.assertEqual(len(products), 50)  # fixture manifest: master/products = 50
+        self.assertEqual([p["product_id"] for p in products], sorted(p["product_id"] for p in products))
+        self.assertTrue({p["category"] for p in products} <= {"electronics", "home", "beauty", "fashion", "sports"})
+        self.assertTrue(all(type(p["unit_price_minor"]) is int and p["unit_price_minor"] > 0 and p["currency"] == "VND" for p in products))
+        self.assertEqual(tuple(products[0]), tuple(column.name for column in TABLE_CONTRACTS["silver.products"].columns))
+        with self.assertRaisesRegex(ValueError, "duplicate product_id"):
+            build_products([*rows, rows[0]])
+        broken = dict(rows[0]); broken["payload_json"] = json.dumps({**json.loads(str(rows[0]["payload_json"])), "category": "toys"})
+        with self.assertRaisesRegex(ValueError, "category"):
+            build_products([broken])
+
     def test_fixture_dimension_counts_and_spend_totals_are_literal(self) -> None:
         plan = build_source_archive_plan(ROOT / "data/mock/fixtures/seed-360")
         source_rows = [

@@ -4,6 +4,8 @@ import base64
 import hashlib
 import json
 import unittest
+
+from marketpulse_lakehouse.contracts import TABLE_CONTRACTS
 from datetime import UTC, datetime
 from unittest.mock import patch
 
@@ -246,7 +248,7 @@ class BronzeKafkaTests(unittest.TestCase):
             },),
         )
 
-    def test_bootstrap_generates_all_namespaces_and_thirteen_partitioned_v2_tables(self) -> None:
+    def test_bootstrap_generates_all_namespaces_and_every_contract_table(self) -> None:
         statements = bootstrap_statements("lakehouse")
 
         self.assertEqual(
@@ -257,7 +259,7 @@ class BronzeKafkaTests(unittest.TestCase):
                 "CREATE NAMESPACE IF NOT EXISTS `lakehouse`.`silver`",
             ),
         )
-        self.assertEqual(len(statements), 16)
+        self.assertEqual(len(statements), 3 + len(TABLE_CONTRACTS))
         kafka_ddl = next(
             statement
             for statement in statements

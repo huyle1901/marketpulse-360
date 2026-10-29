@@ -16,6 +16,7 @@ class LakehouseContractTests(unittest.TestCase):
                 "silver.customer_events",
                 "silver.customers",
                 "silver.campaigns",
+                "silver.products",
                 "silver.ad_spend_daily",
                 "silver.quality_summary",
                 "gold.funnel_daily",
@@ -56,6 +57,11 @@ class LakehouseContractTests(unittest.TestCase):
             "silver.campaigns": (
                 ("campaign_id", "platform", "platform_campaign_id", "name", "objective", "status", "start_date", "end_date", "daily_budget_minor", "currency", "ad_count", "source_file", "source_row_number"),
                 ("campaign_id",),
+                (),
+            ),
+            "silver.products": (
+                ("product_id", "sku", "name", "category", "brand", "unit_price_minor", "currency", "source_file", "source_row_number"),
+                ("product_id",),
                 (),
             ),
             "silver.ad_spend_daily": (
