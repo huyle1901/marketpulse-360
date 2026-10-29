@@ -5,7 +5,7 @@ function allowed(path:string,method:string):boolean {
   if(method==='POST'&&/^(auth\/(login|logout)|ops\/(quality\/check|quality\/probe|quality\/probe\/clear|retention\/sessions))$/.test(path))return true;
   if(method==='PUT'&&/^ops\/users\/[a-f0-9-]{36}$/.test(path))return true;
   if(method==='GET' && /^lifecycle\/(cohorts|email-engagement|customer-mix|profiles|profiles\/[a-f0-9]{64}\/timeline|segments|segments\/[a-f0-9-]{36}\/versions\/[0-9]+)$/.test(path)) return true;
-  if(method==='GET' && /^insights\/(activity|order-values|loyalty|channels|products)$/.test(path)) return true;
+  if(method==='GET' && /^insights\/(activity|order-values|loyalty|channels|products|geography)$/.test(path)) return true;
   if(method==='POST' && /^lifecycle\/segments(\/preview)?$/.test(path)) return true;
   if(method==='PUT' && /^lifecycle\/segments\/[a-f0-9-]{36}$/.test(path)) return true;
   if(method==='GET') return /^(dashboard|campaign-settings|alert-rules|alerts|health\/(live|ready)|budget-pacing\/[^/]+|analysis\/(funnel|attribution|journeys))$/.test(path);

@@ -180,3 +180,46 @@ class ProductsTests(unittest.TestCase):
     def test_products_route_is_viewer_level(self):
         from marketpulse_app.security import policy
         self.assertEqual(policy('GET', '/api/v1/insights/products')[1], 'viewer')
+
+
+class GeographyTests(unittest.TestCase):
+    def service(self, *, has_city=True, gold_net=100):
+        calls = []
+
+        class Session:
+            release = SimpleNamespace(database='mp_release_a_1', identity='a' * 64, proof_digest='b' * 64, logical_day=date(2026, 8, 31))
+            client = SimpleNamespace(query=lambda *a, **kw: SimpleNamespace(result_rows=[('VND',)]))
+            def pin(self): return self
+            def provenance(self): return {'identity': self.release.identity, 'proof_digest': self.release.proof_digest, 'generation': '1'}
+            def _query(self, sql, parameters=None):
+                calls.append((sql, parameters or {}))
+                if 'max(last_activity_at)' in sql: return [{'last_activity_at': STAMP, 'population': 1}]
+                if 'system.columns' in sql: return [{'present': 1 if has_city else 0}]
+                if 'AS located' in sql: return [
+                    {'located': 1, 'country': 'VN', 'city': 'Ha Noi', 'customers': 3, 'orders': 4, 'net_revenue_minor': 60},
+                    {'located': 1, 'country': 'VN', 'city': 'Da Nang', 'customers': 1, 'orders': 1, 'net_revenue_minor': 30},
+                    {'located': 0, 'country': '', 'city': '', 'customers': 5, 'orders': 2, 'net_revenue_minor': 10}]
+                if 'AS gold_net' in sql: return [{'gold_net': gold_net}]
+                return []
+        return InsightsService(Session()), calls
+
+    def test_geography_ranks_cities_and_keeps_unknown_location_separate(self):
+        service, calls = self.service()
+        result = service.geography()
+        self.assertEqual([c['city'] for c in result['cities']], ['Ha Noi', 'Da Nang'])
+        self.assertEqual((result['cities'][0]['customers'], result['cities'][0]['net_per_customer_minor']), ('3', '20'))
+        self.assertEqual(result['unknown'], {'profiles': '5', 'orders': '2', 'net_revenue_minor': '10'})
+        self.assertEqual(result['total_net_revenue_minor'], '100')
+        sql = next(sql for sql, _ in calls if 'AS located' in sql)
+        self.assertIn("p.profile_type='customer'", sql); self.assertIn('mp_release_a_1.customers', sql)
+
+    def test_geography_unavailable_without_city_and_fails_closed_on_mismatch(self):
+        service, _ = self.service(has_city=False)
+        self.assertEqual(service.geography()['status'], 'unavailable')
+        service, _ = self.service(gold_net=99)
+        with self.assertRaises(LifecycleError) as error: service.geography()
+        self.assertEqual(error.exception.code, 'reconciliation_failed')
+
+    def test_geography_route_is_viewer_level(self):
+        from marketpulse_app.security import policy
+        self.assertEqual(policy('GET', '/api/v1/insights/geography')[1], 'viewer')
