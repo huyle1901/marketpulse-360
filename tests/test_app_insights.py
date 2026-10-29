@@ -128,3 +128,55 @@ class LoyaltyPrecisionTests(InsightsTests):
         result = {t['tier']: t for t in service.loyalty()['tiers']}
         self.assertEqual(result['gold']['net_per_customer_minor'], '9007199254740993')
         self.assertEqual(result['none']['net_per_customer_minor'], '-2')
+
+
+class ProductsTests(unittest.TestCase):
+    def service(self, *, exists=True, commerce_gross=900, performance_gross=900):
+        calls = []
+
+        class Session:
+            release = SimpleNamespace(database='mp_release_a_1', identity='a' * 64, proof_digest='b' * 64, logical_day=date(2026, 8, 31))
+            client = SimpleNamespace(query=lambda *a, **kw: SimpleNamespace(result_rows=[('VND',)]))
+            def pin(self): return self
+            def provenance(self): return {'identity': self.release.identity, 'proof_digest': self.release.proof_digest, 'generation': '1'}
+            def _query(self, sql, parameters=None):
+                calls.append((sql, parameters or {}))
+                if 'max(last_activity_at)' in sql: return [{'last_activity_at': STAMP, 'population': 1}]
+                if 'system.tables' in sql: return [{'present': 1 if exists else 0}]
+                if 'AS performance_gross' in sql: return [{'performance_gross': performance_gross, 'commerce_gross': commerce_gross}]
+                if 'GROUP BY category, brand' in sql: return [
+                    {'category': 'electronics', 'brand': 'Nova', 'units': 5, 'gross_revenue_minor': 700, 'net_revenue_minor': 600},
+                    {'category': 'electronics', 'brand': 'Volt', 'units': 1, 'gross_revenue_minor': 100, 'net_revenue_minor': 100},
+                    {'category': 'home', 'brand': 'Lumen', 'units': 2, 'gross_revenue_minor': 100, 'net_revenue_minor': -20}]
+                if 'GROUP BY product_id' in sql: return [{'product_id': 'p-1', 'product_name': 'Phone', 'category': 'electronics', 'brand': 'Nova', 'units': 5, 'orders': 3, 'net_revenue_minor': 600}]
+                if 'GROUP BY device_type' in sql: return [
+                    {'device_type': 'mobile', 'units': 4, 'gross_revenue_minor': 600, 'net_revenue_minor': 500},
+                    {'device_type': 'unknown', 'units': 4, 'gross_revenue_minor': 300, 'net_revenue_minor': 180}]
+                return []
+        return InsightsService(Session()), calls
+
+    def test_products_groups_categories_brands_top_products_and_devices(self):
+        service, calls = self.service()
+        result = service.products()
+        self.assertEqual(result['status'], 'available'); self.assertEqual(result['currency'], 'VND')
+        electronics = result['categories'][0]
+        self.assertEqual((electronics['category'], electronics['net_revenue_minor'], electronics['units']), ('electronics', '700', '6'))
+        self.assertEqual([b['brand'] for b in electronics['brands']], ['Nova', 'Volt'])
+        self.assertEqual(result['categories'][1]['net_revenue_minor'], '-20')
+        self.assertEqual(result['top_products'][0]['orders'], '3')
+        mobile = result['devices'][0]
+        self.assertEqual((mobile['device_type'], mobile['gross_share'], mobile['avg_item_value_minor']), ('mobile', '0.666666', '150'))
+        self.assertNotIn('orders', mobile)
+        self.assertTrue(all('mp_release_a_1.commerce_daily' in sql for sql, _ in calls if 'GROUP BY' in sql))
+        self.assertIn('LIMIT 10', next(sql for sql, _ in calls if 'GROUP BY product_id' in sql))
+
+    def test_products_unavailable_on_older_release_and_fails_closed_on_mismatch(self):
+        service, _ = self.service(exists=False)
+        self.assertEqual(service.products()['status'], 'unavailable')
+        service, _ = self.service(commerce_gross=899)
+        with self.assertRaises(LifecycleError) as error: service.products()
+        self.assertEqual(error.exception.code, 'reconciliation_failed')
+
+    def test_products_route_is_viewer_level(self):
+        from marketpulse_app.security import policy
+        self.assertEqual(policy('GET', '/api/v1/insights/products')[1], 'viewer')
