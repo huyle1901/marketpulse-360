@@ -28,3 +28,38 @@ test('channel comparison is backed by certified campaign rows',async({page})=>{
  await expect(region).toContainText('VND');
  await expect(region).toContainText('300');await expect(region).toContainText('400');
 });
+
+const longRange=(series:object[])=>({...dashboard,filters:{from_date:'2025-01-01',to_date:'2026-09-01'},certified:{...dashboard.certified,daily_series:series}});
+const point=(event_date:string,net:string,spend:string,orders:string)=>({event_date,currency:'VND',net_revenue_minor:net,spend_minor:spend,orders});
+
+test('orders trend uses its own count unit',async({page})=>{
+ await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:{...dashboard,certified:{...dashboard.certified,daily_series:[point('2026-01-01','300','100','2'),point('2026-01-02','400','200','3')]}}}));
+ await page.goto('/');await page.getByRole('button',{name:'Show orders trend'}).click();
+ await expect(page.getByRole('img',{name:'Daily orders for VND campaigns'})).toBeVisible();
+ await page.getByText('Exact daily values · VND',{exact:true}).click();
+ await expect(page.getByRole('table',{name:'Daily certified values · VND'})).toContainText('Orders');
+});
+
+test('long ranges default to monthly buckets summed from observed days with gaps kept',async({page})=>{
+ await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:longRange([point('2025-01-02','9007199254740993','100','1'),point('2025-01-30','-3','200','2'),point('2025-03-05','10','5','1')])}));
+ await page.goto('/?from_date=2025-01-01&to_date=2026-09-01');
+ await expect(page.getByRole('button',{name:'Monthly',exact:true})).toHaveAttribute('aria-pressed','true');
+ const chart=page.getByRole('img',{name:'Monthly net revenue in VND'});await expect(chart).toBeVisible();
+ await expect(chart.locator('polyline')).toHaveCount(0);
+ await page.getByText('Exact monthly values · VND',{exact:true}).click();
+ const table=page.getByRole('table',{name:'Monthly certified values · VND'});
+ await expect(table.locator('tbody tr')).toHaveCount(2);
+ await expect(table.locator('tbody tr').first()).toContainText('2025-01');await expect(table.locator('tbody tr').first()).toContainText('9007199254740990 / 300');
+ await expect(table.locator('tbody tr').first()).toContainText('2 observed days');
+});
+
+test('weekly buckets start on UTC Monday and connect only adjacent weeks',async({page})=>{
+ await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:{...dashboard,filters:{from_date:'2026-01-01',to_date:'2026-02-01'},certified:{...dashboard.certified,daily_series:[point('2026-01-01','1','1','1'),point('2026-01-05','2','1','1'),point('2026-01-11','3','1','1'),point('2026-01-26','4','1','1')]}}}));
+ await page.goto('/');await page.getByRole('button',{name:'Weekly',exact:true}).click();
+ const chart=page.getByRole('img',{name:'Weekly net revenue in VND'});
+ await expect(chart.locator('polyline')).toHaveCount(1);
+ await page.getByText('Exact weekly values · VND',{exact:true}).click();
+ const table=page.getByRole('table',{name:'Weekly certified values · VND'});
+ await expect(table.locator('tbody tr')).toHaveCount(3);
+ await expect(table.locator('tbody tr').nth(1)).toContainText('Week of 2026-01-05');await expect(table.locator('tbody tr').nth(1)).toContainText('5 / 2');
+});

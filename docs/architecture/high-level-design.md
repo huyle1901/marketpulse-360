@@ -676,7 +676,9 @@ certified finance.
 The visual Command Center keeps authenticated FastAPI responses authoritative.
 `SessionGate` renders a compact dark sidebar around the existing pages; the
 overview places four currency-safe certified KPIs, a single-unit selectable
-daily revenue/spend trend, release-matched alert evidence and channel comparison
+revenue/spend/orders trend (daily, weekly from UTC Monday, or monthly; long
+ranges default to monthly; buckets sum only observed certified days and
+unobserved periods stay gaps), release-matched alert evidence and channel comparison
 ahead of the detailed campaign table. The channel bars aggregate certified
 campaign rows by platform and currency; they do not represent attribution
 credit or merge currencies. BigInt arithmetic formats net ROAS and money before

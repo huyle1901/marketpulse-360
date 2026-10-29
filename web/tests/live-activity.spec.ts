@@ -17,7 +17,7 @@ test('workspace navigation uses task names and marks the current workspace',asyn
 });
 
 test('overview no longer embeds the streaming table',async({page})=>{
- await page.goto('/');await expect(page.getByRole('heading',{name:'Daily certified trends'})).toBeVisible();
+ await page.goto('/');await expect(page.getByRole('heading',{name:'Certified trends'})).toBeVisible();
  await expect(page.getByRole('heading',{name:'Streaming activity'})).toHaveCount(0);
 });
 

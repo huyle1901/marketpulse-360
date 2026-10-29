@@ -21,7 +21,7 @@ test('configuration is discoverable without dominating the campaign overview',as
 test('daily trends expose exact values and missing prior history stays unavailable',async({page})=>{
  const daily_series=[{event_date:'2026-01-01',currency:'VND',spend_minor:'100',net_revenue_minor:'9007199254740993'}, {event_date:'2026-01-02',currency:'VND',spend_minor:'200',net_revenue_minor:'-3'}];
  await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:{...dashboard,certified:{...dashboard.certified,daily_series,comparison:{status:'unavailable',from_date:'2025-12-30',to_date:'2026-01-01',observed_days:'0',expected_days:'2',totals:[]}}}}));
- await page.goto('/');await expect(page.getByRole('heading',{name:'Daily certified trends'})).toBeVisible();
+ await page.goto('/');await expect(page.getByRole('heading',{name:'Certified trends'})).toBeVisible();
  await expect(page.getByText('Previous period unavailable',{exact:true})).toBeVisible();
  await page.getByText('Exact daily values · VND',{exact:true}).click();const table=page.getByRole('table',{name:'Daily certified values · VND'});
  await expect(table).toContainText('9007199254740993');await expect(table).toContainText('-3');
