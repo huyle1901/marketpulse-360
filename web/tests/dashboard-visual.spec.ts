@@ -63,3 +63,26 @@ test('weekly buckets start on UTC Monday and connect only adjacent weeks',async(
  await expect(table.locator('tbody tr')).toHaveCount(3);
  await expect(table.locator('tbody tr').nth(1)).toContainText('Week of 2026-01-05');await expect(table.locator('tbody tr').nth(1)).toContainText('5 / 2');
 });
+
+const counts={sessions:'100',page_view_sessions:'90',view_item_sessions:'40',add_to_cart_sessions:'20',checkout_sessions:'12',purchase_sessions:'7'};
+const funnel=(identity:string)=>({totals:counts,reach_ratios:{},unit:'campaign-day session incidences',definition:'Stage reach',channels:[],campaigns:[],campaign_options:[],filters:{from_date:'2026-01-01',to_date:'2026-01-03'},provenance:{...provenance,identity}});
+
+test('stage reach summarizes certified sessions on one linear scale with honest units',async({page})=>{
+ const requests:URL[]=[];page.on('request',r=>{if(r.url().includes('/analysis/funnel'))requests.push(new URL(r.url()));});
+ await page.route('**/api/v1/analysis/funnel*',r=>r.fulfill({json:funnel('a'.repeat(64))}));
+ await page.goto('/?platform=google');const region=page.getByRole('region',{name:'Stage reach'});
+ await expect(region).toContainText('Sessions');await expect(region).toContainText('100');
+ await expect(region).toContainText('Purchase');await expect(region).toContainText('7');
+ await expect(region).toContainText('campaign-day session incidences');await expect(region).toContainText('not a sequential funnel');
+ await expect(region.getByRole('link',{name:'Open journey analysis'})).toHaveAttribute('href',/platform=google/);
+ expect(requests.some(u=>u.searchParams.get('platform')==='google'&&u.searchParams.get('from_date')==='2026-01-01')).toBeTruthy();
+});
+
+test('stage reach from another release or a failed read is not drawn',async({page})=>{
+ await page.route('**/api/v1/analysis/funnel*',r=>r.fulfill({json:funnel('b'.repeat(64))}));
+ await page.goto('/');const region=page.getByRole('region',{name:'Stage reach'});
+ await expect(region).toContainText('different certified release');await expect(region).not.toContainText('100');
+ await page.route('**/api/v1/analysis/funnel*',r=>r.fulfill({status:503,json:{code:'dependency_unavailable'}}));
+ await page.reload();await expect(page.getByRole('region',{name:'Stage reach'})).toContainText('Stage reach unavailable');
+ await expect(page.getByRole('region',{name:'Channel comparison'})).toContainText('Google');
+});
