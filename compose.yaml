@@ -395,6 +395,7 @@ services:
         condition: service_healthy
     volumes:
       - ./data:/app/data:ro
+      - replay_state:/app/state
     entrypoint: ["marketpulse-mock"]
 
   flink-jobmanager:
@@ -624,6 +625,7 @@ services:
           memory: ${SPARK_CONTAINER_MEMORY_LIMIT:-2560M}
 
 volumes:
+  replay_state:
   prometheus_data:
   grafana_data:
   app_metadata:
