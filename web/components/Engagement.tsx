@@ -16,14 +16,16 @@ type Provenance={identity:string;generation:string;data_through?:string|null;pro
 export type EmailReport={status:string;message?:string;definition?:string;provenance:Provenance;months:{month:string;sent:string;delivered:string;opened:string;clicked:string;unsubscribed:string;recipients:string;open_rate:string|null;click_rate:string|null;unsubscribe_rate:string|null}[];totals?:{sent:string;delivered:string;opened:string;clicked:string;unsubscribed:string;open_rate:string|null;click_rate:string|null;unsubscribe_rate:string|null}};
 export type MixReport={status:string;message?:string;definition?:string;currency?:string;provenance:Provenance;months:{month:string;new_customers:string;returning_customers:string;new_orders:string;returning_orders:string;new_gross_minor:string;returning_gross_minor:string;returning_share:string|null}[]};
 
-export function useLifecycleRead<T>(path:string):{data:T|null;error:string}{
+/** One validated read: a non-OK status, an error body or an unexpected shape is "unavailable", never a crash. */
+export function useRead<T>(path:string,valid:(body:any)=>boolean):{data:T|null;error:string}{
  const [data,setData]=useState<T|null>(null);const [error,setError]=useState('');
  useEffect(()=>{const controller=new AbortController();
-  void fetch('/api/v1/lifecycle/'+path,{cache:'no-store',signal:controller.signal}).then(async r=>{const body=await r.json();if(!r.ok)throw new Error(body?.message||body?.code||'Unavailable');if(!body||typeof body.status!=='string'||!Array.isArray(body.months)||!body.provenance)throw new Error('Unexpected response');setData(body);setError('');})
+  void fetch('/api/v1/'+path,{cache:'no-store',signal:controller.signal}).then(async r=>{const body=await r.json();if(!r.ok)throw new Error(body?.message||body?.code||'Unavailable');if(!body||typeof body.status!=='string'||!body.provenance||(body.status==='available'&&!valid(body)))throw new Error('Unexpected response');setData(body);setError('');})
    .catch(e=>{if(!controller.signal.aborted)setError(e instanceof Error?e.message:'Unavailable');});
   return()=>controller.abort();},[path]);
  return {data,error};
 }
+export const useLifecycleRead=<T,>(path:string)=>useRead<T>('lifecycle/'+path,body=>Array.isArray(body.months));
 
 const emailConfig={sent:{label:'Sent',color:'var(--chart-4)'},opened:{label:'Opened',color:'var(--chart-1)'},clicked:{label:'Clicked',color:'var(--chart-2)'}} satisfies ChartConfig;
 export function EmailWorkspace(){
