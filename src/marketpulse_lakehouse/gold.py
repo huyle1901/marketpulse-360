@@ -442,8 +442,10 @@ def _commerce_frame(events: Any, products: Any) -> Any:
     from pyspark.sql import functions as F
     from pyspark.sql import types as T
 
-    item = T.ArrayType(T.StructType([T.StructField("product_id", T.StringType()), T.StructField("quantity", T.LongType()),
-                                     T.StructField("unit_price_minor", T.LongType())]))
+    # payload_json is the whole commerce payload object; items live under its "items" key.
+    payload = T.StructType([T.StructField("items", T.ArrayType(T.StructType([
+        T.StructField("product_id", T.StringType()), T.StructField("quantity", T.LongType()),
+        T.StructField("unit_price_minor", T.LongType())])))])
     first_purchase = Window.partitionBy("order_id").orderBy("event_time", "event_id")
     devices = (events.filter((F.col("event_name") == "purchase") & F.col("order_id").isNotNull())
                .withColumn("device", F.get_json_object("payload_json", "$.device_type"))
@@ -451,7 +453,7 @@ def _commerce_frame(events: Any, products: Any) -> Any:
                .select("order_id", F.when(F.col("device").isin("desktop", "mobile", "tablet"), F.col("device")).otherwise(F.lit("unknown")).alias("device_type")))
     financial = events.filter(F.col("event_name").isin("order_created", "order_refunded"))
     lines = (financial.select("event_id", "event_name", "event_date", "order_id", "currency", "gross_amount_minor", "refund_amount_minor",
-                              F.posexplode(F.from_json("payload_json", item)).alias("position", "item"))
+                              F.posexplode(F.from_json("payload_json", payload).getField("items")).alias("position", "item"))
              .select("*", F.col("item.product_id").alias("product_id"), F.col("item.quantity").alias("quantity"),
                      (F.col("item.quantity") * F.col("item.unit_price_minor")).alias("item_gross")).drop("item"))
     if lines.filter(F.col("product_id").isNull() | F.col("quantity").isNull() | F.col("item_gross").isNull()).limit(1).count():
