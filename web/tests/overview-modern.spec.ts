@@ -64,3 +64,12 @@ test('large amounts are compact on cards with the exact value available',async({
  await expect(page.getByRole('region',{name:'Key metrics · VND'}).getByRole('article',{name:'Ad spend'})).toContainText('₫668.63M');
  await expect(card.getByRole('img',{name:'Net revenue by month'})).toBeVisible();
 });
+
+test('the All range keeps the full readable history instead of snapping back to 90 days',async({page})=>{
+ await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:long}));
+ await page.goto('/');await expect(page).toHaveURL(/from_date=2026-06-03/);
+ await page.getByRole('group',{name:'Date range'}).getByRole('button',{name:'All'}).click();
+ await expect(page.getByLabel('From (UTC)',{exact:true})).toHaveValue('2024-08-31');
+ await page.waitForTimeout(600);await expect(page.getByLabel('From (UTC)',{exact:true})).toHaveValue('2024-08-31');
+ await expect(page.getByRole('group',{name:'Date range'}).getByRole('button',{name:'All'})).toHaveAttribute('aria-pressed','true');
+});
