@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -369,13 +371,119 @@ def build_campaign_performance_daily(
     return tuple(rows)
 
 
-_GOLD_TABLES = (
-    "funnel_daily",
-    "attribution_daily",
-    "customer_360",
-    "cohort_retention",
-    "campaign_performance_daily",
-)
+_GOLD_TABLES = tuple(name.split(".", 1)[1] for name in TABLE_CONTRACTS if name.startswith("gold."))
+
+
+COMMERCE_DEVICES = frozenset({"desktop", "mobile", "tablet", "unknown"})
+
+
+def _order_items(event: Mapping[str, object]) -> list[tuple[str, int, int]]:
+    payload = json.loads(str(event.get("payload_json") or "{}"))
+    items = payload.get("items")
+    if not isinstance(items, list) or not items:
+        raise ValueError(f"commerce event has no items: {event.get('event_id')}")
+    return [(str(item["product_id"]), int(item["quantity"]), int(item["quantity"]) * int(item["unit_price_minor"])) for item in items]
+
+
+def _allocate(amount: int, weights: Sequence[tuple[str, int]]) -> list[int]:
+    """Proportional integer split; remaining minor units go in ascending product_id order."""
+    total = sum(weight for _, weight in weights)
+    if total <= 0:
+        raise ValueError("refund allocation needs positive item gross")
+    shares = [amount * weight // total for _, weight in weights]
+    order = sorted(range(len(weights)), key=lambda index: (weights[index][0], index))
+    for index in order[:amount - sum(shares)]:
+        shares[index] += 1
+    return shares
+
+
+def build_commerce_daily(events: Iterable[Mapping[str, object]], products: Iterable[Mapping[str, object]]) -> tuple[dict[str, object], ...]:
+    """Product x device commerce on financial event dates; totals equal campaign-performance finance."""
+    catalog = {str(row["product_id"]): row for row in products}
+    events = list(events)
+    devices: dict[str, str] = {}
+    for event in sorted(events, key=lambda e: (e["event_time"], str(e["event_id"]))):
+        if event.get("event_name") == "purchase" and event.get("order_id") and str(event["order_id"]) not in devices:
+            device = json.loads(str(event.get("payload_json") or "{}")).get("device_type")
+            devices[str(event["order_id"])] = device if device in COMMERCE_DEVICES else "unknown"
+    groups: dict[tuple[object, ...], dict[str, Any]] = {}
+    for event in events:
+        name = event.get("event_name")
+        if name not in {"order_created", "order_refunded"}:
+            continue
+        order = str(event["order_id"])
+        items = _order_items(event)
+        if name == "order_created" and sum(gross for _, _, gross in items) != int(event.get("gross_amount_minor") or 0):
+            raise ValueError(f"item gross does not equal order gross: {order}")
+        refunds = _allocate(int(event.get("refund_amount_minor") or 0), [(p, g) for p, _, g in items]) if name == "order_refunded" else [0] * len(items)
+        for (product, quantity, gross), refund in zip(items, refunds):
+            if product not in catalog:
+                raise ValueError(f"unknown product in order {order}: {product}")
+            key = (event["event_date"], product, devices.get(order, "unknown"), str(event["currency"]))
+            group = groups.setdefault(key, {"orders": set(), "refunds": set(), "units": 0, "gross": 0, "refund": 0})
+            if name == "order_created":
+                group["orders"].add(order); group["units"] += quantity; group["gross"] += gross
+            else:
+                group["refunds"].add(order); group["refund"] += refund
+    output = []
+    for (day, product, device, currency), group in sorted(groups.items(), key=lambda item: tuple(map(str, item[0]))):
+        meta = catalog[product]
+        output.append({"event_date": day, "product_id": product, "device_type": device, "currency": currency,
+                       "product_name": meta["name"], "category": meta["category"], "brand": meta["brand"],
+                       "orders": len(group["orders"]), "units": group["units"], "refunds": len(group["refunds"]),
+                       "gross_revenue_minor": group["gross"], "refund_amount_minor": group["refund"],
+                       "net_revenue_minor": group["gross"] - group["refund"]})
+    return tuple(output)
+
+
+def _commerce_frame(events: Any, products: Any) -> Any:
+    """Spark mirror of build_commerce_daily; fails before write on gross mismatch or unknown products."""
+    from pyspark.sql import Window
+    from pyspark.sql import functions as F
+    from pyspark.sql import types as T
+
+    # payload_json is the whole commerce payload object; items live under its "items" key.
+    payload = T.StructType([T.StructField("items", T.ArrayType(T.StructType([
+        T.StructField("product_id", T.StringType()), T.StructField("quantity", T.LongType()),
+        T.StructField("unit_price_minor", T.LongType())])))])
+    first_purchase = Window.partitionBy("order_id").orderBy("event_time", "event_id")
+    devices = (events.filter((F.col("event_name") == "purchase") & F.col("order_id").isNotNull())
+               .withColumn("device", F.get_json_object("payload_json", "$.device_type"))
+               .withColumn("rank", F.row_number().over(first_purchase)).filter(F.col("rank") == 1)
+               .select("order_id", F.when(F.col("device").isin("desktop", "mobile", "tablet"), F.col("device")).otherwise(F.lit("unknown")).alias("device_type")))
+    financial = events.filter(F.col("event_name").isin("order_created", "order_refunded"))
+    lines = (financial.select("event_id", "event_name", "event_date", "order_id", "currency", "gross_amount_minor", "refund_amount_minor",
+                              F.posexplode(F.from_json("payload_json", payload).getField("items")).alias("position", "item"))
+             .select("*", F.col("item.product_id").alias("product_id"), F.col("item.quantity").alias("quantity"),
+                     (F.col("item.quantity") * F.col("item.unit_price_minor")).alias("item_gross")).drop("item"))
+    if lines.filter(F.col("product_id").isNull() | F.col("quantity").isNull() | F.col("item_gross").isNull()).limit(1).count():
+        raise ValueError("commerce event has malformed items")
+    totals = lines.groupBy("event_id").agg(F.sum("item_gross").alias("items_gross"))
+    mismatch = financial.filter(F.col("event_name") == "order_created").join(totals, "event_id", "left").filter(
+        F.coalesce(F.col("items_gross"), F.lit(0)) != F.coalesce(F.col("gross_amount_minor"), F.lit(0))).limit(1)
+    if mismatch.count():
+        raise ValueError("item gross does not equal order gross")
+    if lines.join(products.select("product_id"), "product_id", "left_anti").limit(1).count():
+        raise ValueError("unknown product in commerce order")
+    per_event = Window.partitionBy("event_id")
+    ranked = Window.partitionBy("event_id").orderBy("product_id", "position")
+    refund = F.coalesce(F.col("refund_amount_minor"), F.lit(0))
+    lines = (lines.withColumn("event_items_gross", F.sum("item_gross").over(per_event))
+             .withColumn("share", F.when(F.col("event_name") == "order_refunded", F.expr("(coalesce(refund_amount_minor, 0) * item_gross) div event_items_gross")).otherwise(F.lit(0)))
+             .withColumn("remaining", F.when(F.col("event_name") == "order_refunded", refund - F.sum("share").over(per_event)).otherwise(F.lit(0)))
+             .withColumn("refund_part", F.col("share") + F.when(F.row_number().over(ranked) <= F.col("remaining"), F.lit(1)).otherwise(F.lit(0))))
+    created = F.col("event_name") == "order_created"
+    grouped = (lines.join(devices, "order_id", "left").fillna({"device_type": "unknown"})
+               .groupBy("event_date", "product_id", "device_type", "currency")
+               .agg(F.countDistinct(F.when(created, F.col("order_id"))).cast("long").alias("orders"),
+                    F.sum(F.when(created, F.col("quantity")).otherwise(0)).cast("long").alias("units"),
+                    F.countDistinct(F.when(~created, F.col("order_id"))).cast("long").alias("refunds"),
+                    F.sum(F.when(created, F.col("item_gross")).otherwise(0)).cast("long").alias("gross_revenue_minor"),
+                    F.sum("refund_part").cast("long").alias("refund_amount_minor")))
+    catalog = products.select("product_id", F.col("name").alias("product_name"), "category", "brand")
+    return (grouped.join(catalog, "product_id", "inner")
+            .withColumn("net_revenue_minor", (F.col("gross_revenue_minor") - F.col("refund_amount_minor")).cast("long"))
+            .select(*[column.name for column in TABLE_CONTRACTS["gold.commerce_daily"].columns]))
 
 
 def _event_amount(event_name: str, source_column: str) -> Any:
@@ -826,24 +934,32 @@ def build_gold(
     run_id: str,
     source_namespace: str = "silver",
     target_namespace: str = "gold",
+    through_date: date | None = None,
 ) -> dict[str, object]:
-    """Build all five Gold models from explicit immutable Silver snapshots."""
-
-    from pyspark.storagelevel import StorageLevel
+    """Build every Gold model from explicit immutable Silver snapshots, optionally only through a certified day."""
 
     if not run_id:
         raise ValueError("run_id must not be empty")
     source_namespace = validate_namespace(source_namespace)
     target_namespace = validate_namespace(target_namespace)
-    expected = {f"silver.{name}" for name in (
-        "customer_events", "customers", "campaigns", "ad_spend_daily", "quality_summary"
-    )}
+    expected = {name for name in TABLE_CONTRACTS if name.startswith("silver.")}
     if set(silver_snapshots) != expected:
-        raise ValueError("Silver snapshots must contain exactly five table IDs")
+        raise ValueError("Silver snapshots must contain exactly: " + ", ".join(sorted(expected)))
+    if through_date is not None and (type(through_date) is not date):
+        raise ValueError("through_date must be a calendar date")
+
+    from pyspark.storagelevel import StorageLevel
+
     _ensure_gold_tables(spark, target_namespace)
     events = _read_silver(
         spark, source_namespace, "customer_events", silver_snapshots["silver.customer_events"]
-    ).persist(StorageLevel.MEMORY_AND_DISK)
+    )
+    if through_date is not None:
+        from pyspark.sql import functions as F
+
+        # Later business days stay in Silver lineage but are not part of this certified day's release.
+        events = events.filter(F.col("event_date") <= F.lit(through_date))
+    events = events.persist(StorageLevel.MEMORY_AND_DISK)
     customers = _read_silver(
         spark, source_namespace, "customers", silver_snapshots["silver.customers"]
     )
@@ -861,12 +977,17 @@ def build_gold(
     performance = _campaign_performance_frame(
         spend, funnel, events, attribution, campaigns
     )
+    products = _read_silver(
+        spark, source_namespace, "products", silver_snapshots["silver.products"]
+    )
+    commerce = _commerce_frame(events, products)
     frames = {
         "funnel_daily": funnel,
         "attribution_daily": attribution,
         "customer_360": profiles,
         "cohort_retention": retention,
         "campaign_performance_daily": performance,
+        "commerce_daily": commerce,
     }
     try:
         _validate_gold_frames(frames)

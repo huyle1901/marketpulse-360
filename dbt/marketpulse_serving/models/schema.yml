@@ -47,6 +47,14 @@ models:
       - required_fields:
           arguments:
             columns: [cohort_month, activity_month, profile_type, month_number, cohort_size, active_profiles, retained_rate]
+  - name: commerce_daily
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [event_date, product_id, device_type, currency]
+      - required_fields:
+          arguments:
+            columns: [event_date, product_id, device_type, currency, product_name, category, brand, orders, units, refunds, gross_revenue_minor, refund_amount_minor, net_revenue_minor]
   - name: campaign_performance_daily
     data_tests:
       - unique_combination:

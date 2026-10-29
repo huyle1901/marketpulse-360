@@ -27,14 +27,8 @@ from .silver import build_silver, validate_namespace
 from .source_files import ALLOWED_SOURCE_DATASETS
 
 
-SILVER_TABLES = (
-    "silver.customer_events", "silver.customers", "silver.campaigns",
-    "silver.ad_spend_daily", "silver.quality_summary",
-)
-GOLD_TABLES = (
-    "gold.funnel_daily", "gold.attribution_daily", "gold.customer_360",
-    "gold.cohort_retention", "gold.campaign_performance_daily",
-)
+SILVER_TABLES = tuple(name for name in TABLE_CONTRACTS if name.startswith("silver."))
+GOLD_TABLES = tuple(name for name in TABLE_CONTRACTS if name.startswith("gold."))
 EVIDENCE_TABLES = SILVER_TABLES + GOLD_TABLES
 BRONZE_TABLES = (
     "bronze.kafka_records",

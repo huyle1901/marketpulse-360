@@ -56,6 +56,26 @@ dc=(docker compose --profile '*')
 The oracle exposed a dropped `unknown` group (ClickHouse fills unmatched LEFT JOIN
 columns with `''`); it was fixed before release with a regression test.
 
+## Products evidence (Phase 2, release `14a6b9ad…`, refresh `c5a9b8d4`, 1,479 s)
+
+| Check | Result |
+| --- | --- |
+| Cut-off | campaign performance and commerce both end at 2026-08-31, although Sep 1–3 events were already in Kafka |
+| History unchanged | 11,124 orders, gross ₫25,122,680,000, 247,789 projection events (as before) |
+| Commerce vs campaign finance | gross ₫25,122,680,000 and refunds ₫1,927,084,000, equal |
+| Category gross vs generator files | beauty 5,602,931,000 · electronics 4,980,287,000 · fashion 4,271,169,000 · home 4,359,101,000 · sports 5,909,192,000 (equal) |
+| Device gross | desktop 7,770,316,000 · mobile 8,061,260,000 · tablet 7,976,495,000 · unknown 1,314,609,000 |
+
+Two earlier attempts failed closed and changed nothing:
+
+- **`ee4ba7f6`:** Silver did not create `products` (a literal table list).
+- **`59d10af8`:** Gold's malformed-items guard fired on a wrong Spark JSON schema.
+
+Both were fixed with regression tests, including the opt-in `MP_SPARK_TEST`, which
+compares the Spark commerce frame with the pure builder. Before re-certifying after
+a continuation replay, let Flink reach zero lag so Silver can reconcile every raw
+event.
+
 ## Continue September
 
 ```bash

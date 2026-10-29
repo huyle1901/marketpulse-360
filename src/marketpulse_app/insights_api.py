@@ -19,3 +19,6 @@ def register_insights_routes(app: FastAPI, analytics: Analytics) -> None:
 
     @app.get('/api/v1/insights/channels')
     def channels(): return service.channels()
+
+    @app.get('/api/v1/insights/products')
+    def products(): return service.products()

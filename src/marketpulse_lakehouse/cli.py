@@ -16,6 +16,7 @@ from marketpulse_lakehouse.bronze import (
     capture_offset_manifest,
     ingest_kafka_manifest,
 )
+from marketpulse_lakehouse.contracts import TABLE_CONTRACTS
 from marketpulse_lakehouse.gold import build_gold
 from marketpulse_lakehouse.session import create_spark_session, run_catalog_probe
 from marketpulse_lakehouse.silver import build_silver
@@ -196,18 +197,12 @@ def _run_build_gold(
     target_namespace: str,
 ) -> dict[str, object]:
     raw = json.loads(silver_snapshots.read_text(encoding="utf-8"))
-    required = {
-        "silver.customer_events",
-        "silver.customers",
-        "silver.campaigns",
-        "silver.ad_spend_daily",
-        "silver.quality_summary",
-    }
+    required = {name for name in TABLE_CONTRACTS if name.startswith("silver.")}
     if not isinstance(raw, dict) or set(raw) != required or any(
         not isinstance(raw[name], int) or isinstance(raw[name], bool) or raw[name] < 1
         for name in required
     ):
-        raise ValueError("Silver snapshots must contain five positive integer IDs")
+        raise ValueError("Silver snapshots must contain positive integer IDs for: " + ", ".join(sorted(required)))
 
     def operation(spark: object) -> dict[str, object]:
         return build_gold(
@@ -257,23 +252,11 @@ def _run_write_evidence(
     )
     silver = _read_snapshot_ids(
         silver_snapshots,
-        {
-            "silver.customer_events",
-            "silver.customers",
-            "silver.campaigns",
-            "silver.ad_spend_daily",
-            "silver.quality_summary",
-        },
+        {name for name in TABLE_CONTRACTS if name.startswith("silver.")},
     )
     gold = _read_snapshot_ids(
         gold_snapshots,
-        {
-            "gold.funnel_daily",
-            "gold.attribution_daily",
-            "gold.customer_360",
-            "gold.cohort_retention",
-            "gold.campaign_performance_daily",
-        },
+        {name for name in TABLE_CONTRACTS if name.startswith("gold.")},
     )
     later_silver = _read_snapshot_ids(later_silver_snapshots, set(silver))
     later_gold = _read_snapshot_ids(later_gold_snapshots, set(gold))

@@ -197,6 +197,21 @@ TABLE_CONTRACTS: dict[str, TableContract] = {
             ("campaign_id",),
         ),
         TableContract(
+            "silver.products",
+            (
+                _c("product_id", "string", False),
+                _c("sku", "string", False),
+                _c("name", "string", False),
+                _c("category", "string", False),
+                _c("brand", "string", False),
+                _c("unit_price_minor", "long", False),
+                _c("currency", "string", False),
+                _c("source_file", "string", False),
+                _c("source_row_number", "long", False),
+            ),
+            ("product_id",),
+        ),
+        TableContract(
             "silver.ad_spend_daily",
             (
                 _c("spend_key", "string", False),
@@ -333,6 +348,26 @@ TABLE_CONTRACTS: dict[str, TableContract] = {
                 _c("linear_roas", "decimal(18,6)"),
             ),
             ("event_date", "campaign_id"),
+            ("months(event_date)",),
+        ),
+        TableContract(
+            "gold.commerce_daily",
+            (
+                _c("event_date", "date", False),
+                _c("product_id", "string", False),
+                _c("device_type", "string", False),
+                _c("currency", "string", False),
+                _c("product_name", "string", False),
+                _c("category", "string", False),
+                _c("brand", "string", False),
+                _c("orders", "long", False),
+                _c("units", "long", False),
+                _c("refunds", "long", False),
+                _c("gross_revenue_minor", "long", False),
+                _c("refund_amount_minor", "long", False),
+                _c("net_revenue_minor", "long", False),
+            ),
+            ("event_date", "product_id", "device_type", "currency"),
             ("months(event_date)",),
         ),
     )
