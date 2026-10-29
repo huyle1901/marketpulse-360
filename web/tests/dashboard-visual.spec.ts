@@ -45,7 +45,7 @@ test('long ranges default to monthly buckets summed from observed days with gaps
  await page.goto('/?from_date=2025-01-01&to_date=2026-09-01');
  await expect(page.getByRole('button',{name:'Monthly',exact:true})).toHaveAttribute('aria-pressed','true');
  const chart=page.getByRole('img',{name:'Monthly net revenue in VND'});await expect(chart).toBeVisible();
- await expect(chart.locator('polyline')).toHaveCount(0);
+ await expect(page.locator('figure.trend')).toHaveAttribute('data-segments','2');
  await page.getByText('Exact monthly values · VND',{exact:true}).click();
  const table=page.getByRole('table',{name:'Monthly certified values · VND'});
  await expect(table.locator('tbody tr')).toHaveCount(2);
@@ -57,7 +57,7 @@ test('weekly buckets start on UTC Monday and connect only adjacent weeks',async(
  await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:{...dashboard,filters:{from_date:'2026-01-01',to_date:'2026-02-01'},certified:{...dashboard.certified,daily_series:[point('2026-01-01','1','1','1'),point('2026-01-05','2','1','1'),point('2026-01-11','3','1','1'),point('2026-01-26','4','1','1')]}}}));
  await page.goto('/');await page.getByRole('button',{name:'Weekly',exact:true}).click();
  const chart=page.getByRole('img',{name:'Weekly net revenue in VND'});
- await expect(chart.locator('polyline')).toHaveCount(1);
+ await expect(page.locator('figure.trend')).toHaveAttribute('data-segments','2');
  await page.getByText('Exact weekly values · VND',{exact:true}).click();
  const table=page.getByRole('table',{name:'Weekly certified values · VND'});
  await expect(table.locator('tbody tr')).toHaveCount(3);
