@@ -567,3 +567,21 @@ class SilverDimensionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SilverTableCreationTests(unittest.TestCase):
+    def test_every_silver_contract_is_created_in_a_preparation_namespace(self) -> None:
+        from marketpulse_lakehouse.silver import _ensure_silver_tables
+
+        class FakeSpark:
+            def __init__(self) -> None:
+                self.statements: list[str] = []
+
+            def sql(self, statement: str) -> None:
+                self.statements.append(statement)
+
+        spark = FakeSpark()
+        _ensure_silver_tables(spark, "mp_batch_x_1")
+        for name in (name for name in TABLE_CONTRACTS if name.startswith("silver.")):
+            table = name.split(".", 1)[1]
+            self.assertTrue(any(f"`mp_batch_x_1`.`{table}`" in s for s in spark.statements), table)

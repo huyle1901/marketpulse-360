@@ -256,13 +256,7 @@ def _run_write_evidence(
     )
     gold = _read_snapshot_ids(
         gold_snapshots,
-        {
-            "gold.funnel_daily",
-            "gold.attribution_daily",
-            "gold.customer_360",
-            "gold.cohort_retention",
-            "gold.campaign_performance_daily",
-        },
+        {name for name in TABLE_CONTRACTS if name.startswith("gold.")},
     )
     later_silver = _read_snapshot_ids(later_silver_snapshots, set(silver))
     later_gold = _read_snapshot_ids(later_gold_snapshots, set(gold))
