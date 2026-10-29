@@ -700,6 +700,18 @@ after the latest certified release stay visible. Snapshot replacement is shown
 as a change marker; it is never labeled a raw event or a throughput rate. Replay
 state is reported unknown until the demo controller exposes a status contract.
 
+Campaign configuration moved from inline overview forms into a per-campaign
+modal side panel opened from the campaign table or an alert's Investigate
+action. It shows the campaign's certified daily rows (a `/dashboard` read for
+that campaign, accepted only for the displayed release identity), pacing,
+budget/market settings, alert rules and that campaign's alert evidence, with
+focus trapping, Escape and focus return. Open and save actions are disabled while
+a new filter selection is not yet displayed, and the server role checks still
+govern writes. Needs attention shows one card per campaign with an occurrence
+count, and the full alert history is a collapsed disclosure. With 12 campaigns the
+overview is at most 2,000 px tall at 1440×1000. The cross-campaign simulator
+stays a page-level disclosure that the panel links to.
+
 The history preparation/replay controller and isolated Compose deployment are
 specified in [the redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
 and remain separate implementation tasks.

@@ -13,7 +13,7 @@ test('one workspace navigation exposes current page and a keyboard skip link',as
 });
 test('configuration is discoverable without dominating the campaign overview',async({page})=>{
  await page.goto('/');await expect(page.getByRole('heading',{name:'Marketing Command Center'})).toBeVisible();await expect(page.getByLabel('Period budget (minor units)')).not.toBeVisible();
- await page.getByText('Budgets & alert rules',{exact:true}).click();await expect(page.getByLabel('Period budget (minor units)')).toBeVisible();
+ await page.getByRole('button',{name:'Open details for Campaign A',exact:true}).click();await expect(page.getByRole('dialog',{name:'Campaign A'}).getByLabel('Period budget (minor units)')).toBeVisible();await page.keyboard.press('Escape');
  await page.getByText('Budget allocation simulator',{exact:true}).click();await expect(page.getByLabel('Scenario total (minor units)')).toBeVisible();
  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
