@@ -180,6 +180,7 @@ class DockerAssetTests(unittest.TestCase):
         compose = (ROOT / "compose.yaml").read_text()
         replay = compose[compose.index("\n  replay:"):compose.index("\n  flink-jobmanager:")]
         self.assertIn("replay_state:/app/state", replay)
+        self.assertIn("memory: ${CLICKHOUSE_MEMORY_LIMIT:-2048M}", compose)
         self.assertIn("\n  replay_state:", compose[compose.index("\nvolumes:"):])
         self.assertIn("apt-get install -y --no-install-recommends jq", dockerfile)
 

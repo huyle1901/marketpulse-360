@@ -238,7 +238,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2048M
+          memory: ${CLICKHOUSE_MEMORY_LIMIT:-2048M}
 
   batch-postgres:
     image: postgres:17.6-alpine
