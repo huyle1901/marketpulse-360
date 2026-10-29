@@ -791,6 +791,28 @@ single-currency guard and the projection consistency gate.
 The UI theme uses a blue-violet brand accent, deep-navy ink, a dark navy
 sidebar and a CVD-validated channel palette.
 
+Products (Phase 2) adds two contracts.
+
+- **`silver.products`:** parsed from the archived `master/products` Bronze rows, so
+  Gold still reads only pinned Silver.
+- **`gold.commerce_daily`:** event date × product × purchase device × currency,
+  carrying units, orders, refunds and gross/refund/net, with category and brand
+  denormalized. Items come from `order_created` payloads, which must equal the order
+  gross or the build fails before writing. Refunds are allocated to the original
+  items on the refund date by integer proportion, with remainders in product order.
+  The device is that of the order's governed purchase event, otherwise `unknown`.
+
+Export, dbt and certification carry the new relation. A `commerce_conservation`
+semantic gate requires its per-currency gross, refund and net to equal campaign
+performance, with known device and category domains. Silver and Gold table sets
+are now derived from the contracts in every builder, CLI and verifier.
+
+A certified preparation for logical day D builds Gold, and the journey projection
+publishes events, on or before D only. Later continuation events stay in Silver
+lineage but never enter that release. `/insights/products` serves the categories,
+top products and device gross shares. AOV by device is not served, because
+product-grain rows cannot count multi-item orders once per device.
+
 The remaining controller automation (daily certification of continuation days) is specified in [the redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
 and remain separate implementation tasks.
 
