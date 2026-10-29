@@ -3,6 +3,7 @@ import {useEffect,useRef,useState} from 'react';
 import {useUrlState,choice} from '../../lib/useUrlState';
 import FilterActions from '../../components/FilterActions';
 import CohortHeatmap from '../../components/CohortHeatmap';
+import CustomerSummary from '../../components/CustomerSummary';
 import ProfileDetail from '../../components/ProfileDetail';
 import Segments from './segments';
 import type {Cohorts,Profiles,Timeline,Provenance} from './types';
@@ -36,7 +37,7 @@ export default function Customers(){
  const c=reports?.cohorts,p=reports?.profiles,t=timeline?.profile.profile_ref===selected&&timeline.provenance.identity===identity?timeline:null;
  const profiles=(p?.rows||[]).filter(r=>(r.profile_ref+' '+r.profile_type).toLowerCase().includes(filters.q.trim().toLowerCase())).sort((a,b)=>{if(filters.sort==='default')return 0;const left=BigInt(a.net_revenue_minor),right=BigInt(b.net_revenue_minor);return left===right?0:(left<right?-1:1)*(filters.sort==='net_asc'?1:-1);});
  return <main>
- <header className="masthead"><div><div className="brand">MARKETPULSE <span>360</span></div><h1>Customer 360 &amp; Lifecycle</h1><p>Understand historical retention, inspect governed profiles, build consent-aware segments</p></div><div className="status"><span className="dot"/>Certified release · 5-second refresh<br/>Last success {success||'Pending'}<br/><button className="secondary" onClick={()=>setRetry(v=>v+1)}>Refresh customers</button></div></header>
+ <header className="masthead"><div><div className="brand">MARKETPULSE <span>360</span></div><h1>Customers</h1><p>Understand historical retention, inspect governed profiles, build consent-aware segments</p></div><div className="status"><span className="dot"/>Certified release · 5-second refresh<br/>Last success {success||'Pending'}<br/><button className="secondary" onClick={()=>setRetry(v=>v+1)}>Refresh customers</button></div></header>
  <nav className="section-links" aria-label="Page sections"><a href="#cohorts">Retention</a><a href="#profiles">Profiles</a><a href="#segments">Segments</a></nav>
  <section className="filters" aria-label="Customer discovery filters">
  <label>Cohort month<input aria-label="Cohort month" type="month" value={filters.cohort_month.slice(0,7)} onChange={e=>update('cohort_month',e.target.value?e.target.value+'-01':'')}/></label><label>Activity month<input aria-label="Activity month" type="month" value={filters.activity_month.slice(0,7)} onChange={e=>update('activity_month',e.target.value?e.target.value+'-01':'')}/></label>
@@ -51,6 +52,7 @@ export default function Customers(){
  {c&&p&&<>
  <p className="scope-note">{c.population}</p><p>As of {c.provenance.as_of} · {c.provenance.historical?'Historical data':'Certified data'} · {c.provenance.currency||p.provenance.currency||'Declared currency'} · Lifetime observed metrics, not predictions</p>
  <div className="customer-kpis kpi-group"><article><span>Historical profiles</span><strong>{exact(c.totals.profiles_total)}</strong></article><article><span>Eligible for activation in release</span><strong>{exact(c.totals.activation_eligible_total)}</strong></article><article><span>Matching discovery purpose: {p.purpose}</span><strong>{exact(p.total)}</strong></article></div>
+ <CustomerSummary identity={c.provenance.identity} profilesTotal={c.totals.profiles_total} onOpportunity={value=>update('opportunity',value)}/>
  <section id="cohorts" className="panel"><div className="section-heading"><div><h2>Cohort retention</h2><p>Each cell retains its original cohort denominator. Missing/future cells are not invented zeros.</p></div><span className="badge neutral">Click an activity cell to drill</span></div>
  <CohortHeatmap rows={c.rows} onDrill={row=>setFilters(current=>({...current,cohort_month:row.cohort_month,activity_month:row.activity_month,profile_type:row.profile_type,opportunity:'',offset:'0'}))}/>
  <Source value={c.provenance} label="Cohort"/></section>

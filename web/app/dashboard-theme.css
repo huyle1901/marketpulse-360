@@ -48,3 +48,5 @@ body{background:var(--mp-bg);color:var(--mp-ink);font-family:Inter,-apple-system
 .swatch.first_touch,.credit-bar.first_touch{background:#4386c7}.swatch.last_touch,.credit-bar.last_touch{background:#2f9e7d}.swatch.linear,.credit-bar.linear{background:#9067d5}.credit-bar.negative{background-image:repeating-linear-gradient(45deg,transparent 0 3px,#ffffff88 3px 5px)}
 @media(max-width:1100px){.credit-charts{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:760px){.credit-group{grid-template-columns:minmax(0,1fr)}.credit-line{grid-template-columns:minmax(0,1fr) 80px}}
+.opportunity-row span small{display:block;color:var(--mp-muted);font-size:10px}.opportunity-row{grid-template-columns:150px minmax(0,1fr) 90px}.channel-row strong small{color:var(--mp-muted);font-weight:400}
+@media(max-width:760px){.opportunity-row{grid-template-columns:110px minmax(0,1fr) 60px}}
