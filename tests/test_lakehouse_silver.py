@@ -336,6 +336,17 @@ class SilverEventTests(unittest.TestCase):
 
 
 class SilverDimensionTests(unittest.TestCase):
+    def test_customers_carry_master_country_and_city(self) -> None:
+        import csv, gzip
+        plan = build_source_archive_plan(ROOT / "data/mock/fixtures/seed-360")
+        rows = [row for source in plan.source_files for row in normalize_source_file(source, run_id="silver-fixture", ingested_at=datetime(2026, 1, 3, tzinfo=UTC))]
+        master = {row["customer_id"]: (row["country"], row["city"]) for row in csv.DictReader(gzip.open(ROOT / "data/mock/fixtures/seed-360/master/customers.csv.gz", "rt"))}
+        customers = build_customers(rows)
+        self.assertTrue(customers)
+        for customer in customers:
+            self.assertEqual((customer["country"], customer["city"]), master[customer["customer_id"]])
+        self.assertEqual(tuple(customers[0]), tuple(column.name for column in TABLE_CONTRACTS["silver.customers"].columns))
+
     def test_build_products_parses_master_rows_and_rejects_duplicates(self) -> None:
         plan = build_source_archive_plan(ROOT / "data/mock/fixtures/seed-360")
         rows = [row for source in plan.source_files if source.source_dataset == "master/products"
