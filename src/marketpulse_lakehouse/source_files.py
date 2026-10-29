@@ -469,15 +469,23 @@ def ingest_source_files(
     ingested_at: datetime,
     client: S3Client | None = None,
     selection: BatchSelection | None = None,
+    from_date: date | None = None,
+    to_date: date | None = None,
     datasets: tuple[str, ...] | None = None,
 ) -> dict[str, object]:
     if not run_id:
         raise ValueError("run_id must not be empty")
+    if (from_date is None) != (to_date is None) or (selection is not None and from_date is not None):
+        raise ValueError("choose one complete source window or one daily selection")
     plan = build_source_archive_plan(root)
     if selection is not None:
         from marketpulse_batch.selection import select_daily_sources
 
         plan = select_daily_sources(plan, selection)
+    if from_date is not None and to_date is not None:
+        from marketpulse_batch.selection import select_range_sources
+
+        plan = select_range_sources(plan, from_date, to_date)
     if datasets is not None:
         from marketpulse_batch.selection import select_source_datasets
 

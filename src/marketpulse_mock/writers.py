@@ -8,7 +8,7 @@ import hashlib
 import io
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import BinaryIO, TextIO
 
@@ -136,6 +136,7 @@ class DatasetWriter:
         self._next_part: dict[tuple[str, str | None], int] = {}
         self._last_event_time: dict[tuple[str, str | None], datetime] = {}
         self._stats: list[FileStat] = []
+        self._sealed_days: set[str] = set()
         self._closed = False
 
     def write(self, record: SourceRecord) -> None:
@@ -147,6 +148,8 @@ class DatasetWriter:
         partition_date = (
             None if record.dataset.startswith("master/") else event_time.date().isoformat()
         )
+        if partition_date in self._sealed_days:
+            raise ValueError(f"cannot write to sealed day {partition_date}")
         key = (record.dataset, partition_date)
         previous = self._last_event_time.get(key)
         if previous is not None and event_time < previous:
@@ -183,6 +186,23 @@ class DatasetWriter:
         state.row_count += 1
         state.min_event_time = state.min_event_time or event_time
         state.max_event_time = event_time
+
+    def seal_day(self, day: date) -> None:
+        """Finalize one completed UTC day so long runs keep only current files open."""
+        if self._closed:
+            raise RuntimeError("writer is closed")
+        if type(day) is not date:
+            raise ValueError("day must be a UTC calendar date")
+        key_date = day.isoformat()
+        if key_date in self._sealed_days:
+            raise ValueError(f"day is already sealed: {key_date}")
+        for key, state in list(self._parts.items()):
+            if key[1] == key_date:
+                self._stats.append(self._close_part(state))
+                del self._parts[key]
+                self._last_event_time.pop(key, None)
+                self._next_part.pop(key, None)
+        self._sealed_days.add(key_date)
 
     def close(self) -> tuple[FileStat, ...]:
         if self._closed:

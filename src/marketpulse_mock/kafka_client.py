@@ -92,6 +92,14 @@ class ConfluentKafkaPublisher:
     def flush(self, timeout: float) -> int:
         return int(self._producer.flush(timeout))
 
+    def cluster_id(self) -> str:
+        """Bind a durable replay cursor to the actual broker cluster identity."""
+        metadata = self._producer.list_topics(timeout=10.0)
+        value = getattr(metadata, "cluster_id", None)
+        if not isinstance(value, str) or not value:
+            raise RuntimeError("Kafka broker did not provide a cluster id")
+        return value
+
 
 def create_topics(
     bootstrap_servers: str,

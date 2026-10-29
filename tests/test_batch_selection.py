@@ -10,7 +10,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 from marketpulse_batch.contracts import BatchSelection
-from marketpulse_batch.selection import select_daily_sources, select_source_datasets
+from marketpulse_batch.selection import select_daily_sources, select_range_sources, select_source_datasets
 from marketpulse_lakehouse.source_files import (
     SourceArchivePlan, build_source_archive_plan, normalize_source_file,
 )
@@ -38,6 +38,16 @@ class BatchSelectionTests(unittest.TestCase):
         rows = normalize_source_file(source, run_id="original", ingested_at=datetime(2026, 1, 3, tzinfo=UTC))
         self.assertEqual(rows[0]["row_number"], 1)
         self.assertEqual(rows[0]["source_file"], "crm/date=2026-01-01/part-00000.csv.gz")
+
+    def test_range_selection_includes_only_complete_dates_and_same_lineage(self) -> None:
+        selected = select_range_sources(self.plan, DAY, date(2026, 1, 3))
+        self.assertEqual(12, len(selected.source_files))
+        self.assertEqual(self.plan.manifest_sha256, selected.manifest_sha256)
+        first = select_range_sources(self.plan, DAY, date(2026, 1, 2))
+        self.assertEqual(8, len(first.source_files))
+        self.assertTrue(all(source.source_date in (None, DAY) for source in first.source_files))
+        with self.assertRaisesRegex(ValueError, "missing"):
+            select_range_sources(self.plan, DAY, date(2026, 1, 4))
 
     def test_missing_required_platform_rejected(self) -> None:
         files = tuple(f for f in self.plan.source_files if f.source_dataset != "tiktok_ads")

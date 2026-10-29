@@ -4,6 +4,7 @@ import json
 import gzip
 import tempfile
 import unittest
+from datetime import date, timedelta
 from collections import Counter
 from pathlib import Path
 from unittest.mock import patch
@@ -16,6 +17,53 @@ FIXTURE = Path("data/mock/fixtures/seed-360")
 
 
 class ReplayReaderTests(unittest.TestCase):
+    def test_reader_closes_each_day_before_opening_the_next(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            files = []
+            start = date(2025, 1, 1)
+            for ordinal in range(20):
+                day = start + timedelta(days=ordinal)
+                relative = f"web_events/date={day}/part-00000.jsonl.gz"
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with gzip.open(path, "wt", encoding="utf-8") as stream:
+                    stream.write(json.dumps({"event_id": str(ordinal), "event_time": f"{day}T00:00:00Z", "session_id": str(ordinal)}) + "\n")
+                files.append({"dataset": "web_events", "relative_path": relative})
+            (root / "manifest.json").write_text(json.dumps({"files": files}))
+
+            active = peak = 0
+            original_open = gzip.open
+
+            class TrackedStream:
+                def __init__(self, stream):
+                    self.stream = stream
+
+                def __enter__(self):
+                    nonlocal active, peak
+                    active += 1
+                    peak = max(peak, active)
+                    return self.stream.__enter__()
+
+                def __exit__(self, *args):
+                    nonlocal active
+                    try:
+                        return self.stream.__exit__(*args)
+                    finally:
+                        active -= 1
+
+            with patch("marketpulse_mock.replay_reader.validate_dataset", return_value=ValidationReport((), 20, 20)), patch("marketpulse_mock.replay_reader.gzip.open", side_effect=lambda *args, **kwargs: TrackedStream(original_open(*args, **kwargs))):
+                self.assertEqual(20, len(list(iter_replay_records(root))))
+            self.assertEqual(0, active)
+            self.assertLessEqual(peak, 4)
+
+    def test_date_windows_partition_one_world_without_rewriting_events(self) -> None:
+        whole = list(iter_replay_records(FIXTURE))
+        first = list(iter_replay_records(FIXTURE, from_date=date(2026, 1, 1), to_date=date(2026, 1, 2)))
+        second = list(iter_replay_records(FIXTURE, from_date=date(2026, 1, 2), to_date=date(2026, 1, 3)))
+        self.assertEqual([r.event_id for r in whole], [r.event_id for r in sorted(first+second, key=lambda r:r.event_time)])
+        self.assertTrue(all(r.event_time.date()==date(2026, 1, 2) for r in second))
+
     def test_fixture_records_are_merged_in_event_time_order(self) -> None:
         records = list(iter_replay_records(FIXTURE))
 
