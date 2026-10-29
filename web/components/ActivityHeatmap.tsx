@@ -11,9 +11,10 @@ const slot=(hour:number)=>`${String(hour).padStart(2,'0')}:00–${String((hour+1
 export default function ActivityHeatmap({data}:{data:Activity}){
  const [measure,setMeasure]=useState<'sessions'|'orders'>('sessions');
  const value=(c:Activity['cells'][number])=>BigInt(c[measure]);
- const max=data.cells.reduce((m,c)=>value(c)>m?value(c):m,0n);
+ const max=data.cells.reduce((m,c)=>value(c)>m?value(c):m,0n),min=data.cells.reduce((m,c)=>value(c)<m?value(c):m,max);
  const grid=new Map(data.cells.map(c=>[c.weekday+'|'+c.hour,c]));
- const tone=(v:bigint)=>v===0n||max===0n?'var(--muted)':ramp[Math.min(ramp.length-1,Number((v*BigInt(ramp.length))/(max+1n)))];
+ // Steps span the observed min..max (stated in the legend) so near-uniform activity still reveals its pattern; a true zero stays muted.
+ const tone=(v:bigint)=>v===0n||max===0n?'var(--muted)':ramp[Math.min(ramp.length-1,Number(((v-min)*BigInt(ramp.length))/(max-min+1n)))];
  const unit=measure==='sessions'?'sessions':'orders';
  const busiest=data.busiest?`${days[Number(data.busiest.weekday)-1]} ${slot(Number(data.busiest.hour))} UTC`:null;
  return <div className="space-y-3">
@@ -29,7 +30,8 @@ export default function ActivityHeatmap({data}:{data:Activity}){
       return <td key={h} aria-label={label} title={label} className="h-7 rounded-[4px] p-0 transition-transform hover:scale-110" style={{background:tone(v)}}/>;})}</tr>)}</tbody>
    </table>
   </div>
-  <div className="flex items-center gap-2 text-xs text-muted-foreground" aria-hidden="true"><span>Fewer</span>{['var(--muted)',...ramp].map(c=><span key={c} className="h-3 w-5 rounded-sm" style={{background:c}}/>)}<span>More {unit} (max {exact(max.toString())})</span></div>
+  <div className="flex items-center gap-2 text-xs text-muted-foreground" aria-hidden="true"><span>Fewer</span>{['var(--muted)',...ramp].map(c=><span key={c} className="h-3 w-5 rounded-sm" style={{background:c}}/>)}<span>More</span></div>
+  <p className="text-xs text-muted-foreground">Color scale: {exact(min.toString())} to {exact(max.toString())} {unit} per hour</p>
   <details className="provenance"><summary>Exact values</summary><div className="table-scroll"><table aria-label={`Exact ${unit} by weekday and hour`}><thead><tr><th>Weekday</th>{Array.from({length:24},(_,h)=><th key={h}>{String(h).padStart(2,'0')}</th>)}</tr></thead><tbody>{days.map((day,d)=><tr key={day}><td>{day}</td>{Array.from({length:24},(_,h)=>{const c=grid.get(`${d+1}|${h}`);return <td key={h}>{c?exact(c[measure]):'0'}</td>;})}</tr>)}</tbody></table></div></details>
  </div>;
 }
