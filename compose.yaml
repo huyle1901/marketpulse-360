@@ -448,7 +448,7 @@ services:
     environment:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
-        taskmanager.memory.process.size: 1024m
+        taskmanager.memory.process.size: ${FLINK_TASKMANAGER_PROCESS_SIZE:-1024m}
         taskmanager.numberOfTaskSlots: 2
         parallelism.default: 2
         state.checkpoints.dir: file:///opt/flink/checkpoints
@@ -463,7 +463,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1280M
+          memory: ${FLINK_TASKMANAGER_MEMORY_LIMIT:-1280M}
 
   flink-job-submit:
     image: marketpulse-360/flink-job:2.2.1
@@ -484,6 +484,7 @@ services:
     environment:
       FLINK_JOBMANAGER_URL: http://flink-jobmanager:8081
       FLINK_JOB_NAME: marketpulse-stream-v1
+      FLINK_RESTORE_PATH: ${FLINK_RESTORE_PATH:-}
     entrypoint: ["/opt/flink/bin/submit-marketpulse-job"]
     command:
       - --bootstrap-servers=kafka:29092
