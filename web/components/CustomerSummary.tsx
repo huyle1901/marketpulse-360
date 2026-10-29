@@ -15,7 +15,7 @@ export default function CustomerSummary({identity,profilesTotal,onOpportunity}:{
  useEffect(()=>{
   const controller=new AbortController();setError('');
   const keys=[...types.map(([key])=>['profile_type',key]),...opportunities.map(([key])=>['opportunity',key])];
-  void Promise.all(keys.map(([field,key])=>api<Profiles>(`profiles?purpose=analytics&limit=1&${field}=${key}`,controller.signal).then(r=>[key,{total:r.status==='available'?r.total:null,identity:r.provenance.identity}] as const)))
+  void Promise.all(keys.map(([field,key])=>api<Profiles>(`profiles?purpose=analytics&limit=1&${field}=${key}`,controller.signal).then(r=>[key,{total:r.status==='unavailable'?null:r.total,identity:r.provenance.identity}] as const)))
    .then(rows=>setCounts({identity,values:Object.fromEntries(rows)})).catch(e=>{if(!controller.signal.aborted)setError(e instanceof Error?e.message:'Summary unavailable');});
   return()=>controller.abort();
  },[identity]);
