@@ -748,7 +748,32 @@ project, its non-conflicting ports and a 3 GiB Flink TaskManager. The
 TaskManager size and an explicit checkpoint restore path are Compose variables,
 with unchanged defaults.
 
-The remaining controller automation and isolated deployment are specified in [the redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
+The isolated story demo is operated and measured in
+[story-demo.md](../runbooks/story-demo.md). Its release certifies 608 days, and
+impressions, clicks and spend exactly equal generator ground truth. Batch Spark
+driver memory and timeout (`BATCH_SPARK_DRIVER_MEMORY`,
+`BATCH_SPARK_TIMEOUT_SECONDS`), ClickHouse and batch-code container limits, the
+Flink TaskManager size, and a checkpoint restore path are Compose variables
+whose defaults keep the fixture budgets. The continuation replay persists its
+cursor in a `replay_state` volume and accepts `--batch-size`.
+
+The application now uses Tailwind CSS v4 with copied-in shadcn/ui components
+(Radix primitives) and Recharts. All are exact-pinned and locally bundled; the
+`cn` helper is local. The sidebar adds Ad performance (`/ads`: CTR, CPC, cost per
+order, ROAS and spend-vs-revenue share per channel and campaign, computed with
+BigInt from certified `/dashboard` rows) and Email (`/email`). Two viewer-level
+reads, `/lifecycle/email-engagement` (monthly sent/delivered/opened/clicked/
+unsubscribed with delivered-based rates) and `/lifecycle/customer-mix` (new
+versus returning ordering profiles per month), query the release-pinned journey
+projection after its existing consistency check. An unpublished projection is
+unavailable, never zero. Email is not credited with revenue because the certified
+attribution policy credits paid clicks only. Overview KPI cards show compact
+money (exact on hover), change against the equal prior period when coverage is
+complete, and interval-matched sparklines. A history longer than 180 days opens
+on the latest 90 days. Partially published periods are marked partial rather
+than drawn as unqualified drops.
+
+The remaining controller automation (daily certification of continuation days) is specified in [the redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
 and remain separate implementation tasks.
 
 ## 5. Kafka design

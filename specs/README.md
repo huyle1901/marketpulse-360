@@ -299,6 +299,19 @@ API p95=44.829ms (default dashboard,20 warmups / 100 samples), not a capacity cl
 [Design](../docs/superpowers/specs/2026-10-20-command-center-usability-design.md) ·
 [Plan](../docs/superpowers/plans/2026-10-20-command-center-usability.md).
 
+## Modern command center and story demo
+
+**Status:** Implemented on `feat/visual-command-center-story-demo`. The user rejected the
+first visual pass and authorized research-led redesign plus populated history.
+[Design](../docs/superpowers/specs/2026-10-29-modern-marketing-command-center-design.md) ·
+[Plan](../docs/superpowers/plans/2026-10-29-modern-marketing-command-center.md) ·
+[Runbook](../docs/runbooks/story-demo.md).
+
+shadcn/ui + Recharts workspaces (Overview, Ad performance, Live activity, Journey
+analysis, Customers, Email, Data health) over a certified January 2025 – August
+2026 history with September 2026 streaming. Daily certification of continuation
+days remains pending.
+
 ## Traceability to the course brief
 
 | Course requirement | Stories |
