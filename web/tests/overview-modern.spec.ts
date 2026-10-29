@@ -45,3 +45,22 @@ test('the area chart offers exact values and keeps engineering detail out of the
  await expect(overview.locator('.recharts-area')).toHaveCount(1);
  await expect(overview.locator('h2,figcaption')).not.toContainText(['exclusive UTC']);
 });
+
+const long={...dashboard,filters:{from_date:'2025-01-01',to_date:'2026-09-01'},certified:{...dashboard.certified,provenance:{...provenance,data_through:'2026-09-01T00:00:00Z'},
+ totals:[{...totals,net_revenue_minor:'23195596000000',spend_minor:'668639347'}],
+ daily_series:Array.from({length:120},(_,i)=>day(new Date(Date.UTC(2026,4,4+i)).toISOString().slice(0,10),String(1000+i)))}};
+
+test('a long certified history opens on the latest 90 days so comparisons are meaningful',async({page})=>{
+ await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:long}));
+ await page.goto('/');await expect(page).toHaveURL(/from_date=2026-06-03/);await expect(page).toHaveURL(/to_date=2026-09-01/);
+ await expect(page.getByRole('group',{name:'Date range'}).getByRole('button',{name:'90D'})).toHaveAttribute('aria-pressed','true');
+});
+
+test('large amounts are compact on cards with the exact value available',async({page})=>{
+ await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:long}));
+ await page.goto('/?from_date=2025-01-01&to_date=2026-09-01');
+ const card=page.getByRole('region',{name:'Key metrics · VND'}).getByRole('article',{name:'Net revenue'});
+ await expect(card).toContainText('₫23.19T');await expect(card.locator('[title]').filter({hasText:'₫23.19T'})).toHaveAttribute('title','₫23,195,596,000,000');
+ await expect(page.getByRole('region',{name:'Key metrics · VND'}).getByRole('article',{name:'Ad spend'})).toContainText('₫668.63M');
+ await expect(card.getByRole('img',{name:'Net revenue by month'})).toBeVisible();
+});

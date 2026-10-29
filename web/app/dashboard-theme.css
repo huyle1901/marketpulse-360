@@ -57,7 +57,7 @@ body{background:var(--mp-bg);color:var(--mp-ink);font-family:var(--font-sans);fo
 .panel,.tool-group,.kpi-group article,.filters,.table-scroll{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:0 1px 2px oklch(0 0 0/.04)}
 .badge{background:var(--secondary);color:var(--secondary-foreground);border:1px solid var(--border);border-radius:6px}.badge.neutral{background:var(--muted)}
 button.secondary,.secondary{background:var(--card);color:var(--foreground);border:1px solid var(--border)}button.secondary:hover{background:var(--accent)}
-button:not(.secondary):not(.link-button):not([data-slot]){background:var(--primary);color:var(--primary-foreground);border-radius:var(--radius-md)}
+button:where(:not(.secondary):not(.link-button):not([data-slot]):not(.drill):not(.heatmap-value)){background:var(--primary);color:var(--primary-foreground);border-radius:var(--radius-md)}
 .metric-switch{border-color:var(--border);background:var(--muted)}.metric-switch button{background:transparent!important;color:var(--muted-foreground)!important}.metric-switch button[aria-pressed=true]{background:var(--card)!important;color:var(--foreground)!important;box-shadow:0 1px 2px oklch(0 0 0/.08)}
 th{background:var(--muted);color:var(--muted-foreground)}.empty{border-color:var(--border);background:var(--muted);color:var(--muted-foreground)}
 .channel-track span{background:var(--chart-1)}.channel-row:has(.meta) .channel-track span{background:var(--chart-2)}.channel-row:has(.tiktok) .channel-track span{background:var(--chart-3)}.channel-row:has(.unattributed) .channel-track span{background:var(--chart-4)}.channel-track span.stage{background:var(--chart-3)}
@@ -65,3 +65,4 @@ th{background:var(--muted);color:var(--muted-foreground)}.empty{border-color:var
 button[data-slot],a[data-slot]{background:revert-layer;color:revert-layer;border:revert-layer;padding:revert-layer;border-radius:revert-layer;font:revert-layer;box-shadow:revert-layer}
 .overview-title .metric-switch button{padding:4px 7px;font-size:11px}.overview-title{gap:8px}
 .overview-grid .panel{padding:16px 18px}.period-comparison{padding-top:6px}
+.heatmap-scroll{max-height:560px;overflow:auto}.heatmap th,.heatmap td{padding:3px 4px}.heatmap thead th{position:sticky;top:0;z-index:1}.heatmap .heatmap-value{padding:4px 6px;line-height:1.15;background:transparent;color:inherit;border:0;width:100%;text-align:left}.heatmap .heatmap-value small{font-size:10px}

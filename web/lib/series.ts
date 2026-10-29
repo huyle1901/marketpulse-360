@@ -1,7 +1,7 @@
 import type {DailyMetric} from '../app/types';
 
 export type Granularity='daily'|'weekly'|'monthly';
-export type Bucket={start:string;label:string;days:number;spend_minor:string;net_revenue_minor:string;orders:string|null};
+export type Bucket={start:string;label:string;days:number;expected:number;spend_minor:string;net_revenue_minor:string;orders:string|null};
 const DAY=86400000;
 const stamp=(value:string)=>Date.parse(value+'T00:00:00Z');
 const iso=(value:number)=>new Date(value).toISOString().slice(0,10);
@@ -27,6 +27,6 @@ export function aggregate(rows:DailyMetric[],granularity:Granularity):Bucket[]{
   const key=bucketStart(row.event_date,granularity),bucket=buckets.get(key)||{days:0,spend:0n,net:0n,orders:0n};
   bucket.days++;bucket.spend+=BigInt(row.spend_minor);bucket.net+=BigInt(row.net_revenue_minor);bucket.orders=row.orders==null||bucket.orders==null?null:bucket.orders+BigInt(row.orders);buckets.set(key,bucket);
  }
- return [...buckets.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([start,b])=>({start,days:b.days,spend_minor:b.spend.toString(),net_revenue_minor:b.net.toString(),orders:b.orders==null?null:b.orders.toString(),
+ return [...buckets.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([start,b])=>({start,days:b.days,spend_minor:b.spend.toString(),net_revenue_minor:b.net.toString(),orders:b.orders==null?null:b.orders.toString(),expected:(Date.parse(nextBucket(start,granularity)+'T00:00:00Z')-Date.parse(start+'T00:00:00Z'))/DAY,
   label:granularity==='monthly'?start.slice(0,7):granularity==='weekly'?'Week of '+start:start}));
 }
