@@ -24,7 +24,6 @@ test('sources, historical status and exact integers stay visible',async({page})=
   await expect(page.getByRole('heading',{name:'Marketing Command Center'})).toBeVisible();
   await expect(page.getByText('Historical data',{exact:true})).toBeVisible();
   await expect(page.getByText('9,007,199,254,740,993').first()).toBeVisible();
-  await expect(page.getByRole('heading',{name:'Streaming activity'})).toBeVisible();
   await expect(page.getByText('refund_share: triggered')).toBeVisible();
 });
 
@@ -110,8 +109,6 @@ test('release change invalidates a pending scenario',async({page})=>{
 
 test('source identity and versioned alert evidence are inspectable',async({page})=>{
   await page.goto('/');await page.getByText('Budgets & alert rules',{exact:true}).click();await page.getByText('Budget allocation simulator',{exact:true}).click();
-  await page.getByText('Streaming source provenance',{exact:true}).click();
-  await expect(page.getByText('cluster/topic',{exact:false})).toBeVisible();
   await page.getByText('Full alert provenance',{exact:true}).click();
   await expect(page.getByText('Rule version 2 · Setting version 3',{exact:false})).toBeVisible();
 });

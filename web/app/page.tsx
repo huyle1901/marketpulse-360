@@ -122,7 +122,7 @@ export default function CommandCenter() {
   return <main>
 
     <header className="masthead"><div><div className="brand">MARKETPULSE <span>360</span></div><h1>Marketing Command Center</h1><p>Campaign performance, decisions and budget scenarios</p></div><div className="status"><span className="dot"/> Updates every 5 seconds<br/><small>Last successful read: {lastSuccess||'Waiting'}</small></div></header>
-    <nav className="section-links" aria-label="Page sections"><a href="#performance">Performance</a><a href="#streaming">Streaming</a><a href="#campaign-tools">Budgets &amp; rules</a><a href="#alert-evidence">Alert evidence</a><a href="#simulation">Simulator</a></nav>
+    <nav className="section-links" aria-label="Page sections"><a href="#performance">Performance</a><a href="/live">Live activity</a><a href="#campaign-tools">Budgets &amp; rules</a><a href="#alert-evidence">Alert evidence</a><a href="#simulation">Simulator</a></nav>
     <section className="filters" aria-label="Campaign filters">
       <label>From (UTC)<input type="date" value={filters.from_date} onChange={e=>setFilters({...filters,from_date:e.target.value})}/></label>
       <label>To (exclusive UTC)<input type="date" value={filters.to_date} onChange={e=>setFilters({...filters,to_date:e.target.value})}/></label>
@@ -142,10 +142,6 @@ export default function CommandCenter() {
       <ChannelBreakdown rows={report.certified.rows}/>
       <CampaignTable interactive={displayedQuery===query} rows={report.certified.rows} filters={filters} search={filters.q} sort={filters.sort} onSearch={q=>setFilters(current=>({...current,q}))} onSort={sort=>setFilters(current=>({...current,sort}))}/>
       <details className="provenance"><summary>Metric source &amp; freshness · {report.certified.provenance.model}</summary><p>Generation {report.certified.provenance.generation} · Data through {report.certified.provenance.data_through||'No data'} (day resolution)</p><p>Release {report.certified.provenance.identity}</p><p>Read at {report.certified.provenance.observed_at}; polling does not change data freshness.</p></details>
-      <section id="streaming" className="panel"><div className="section-heading"><div><h2>Streaming activity</h2><p>Provisional Flink aggregates · Separate from certified finance</p></div><span className="badge neutral">{report.streaming.status}</span></div><p className="source">{report.streaming.source}</p>
-        <details className="provenance"><summary>Streaming source provenance</summary><p>{report.streaming.source_identity||'Unavailable'}</p><p>Latest selected offset bounds (gaps may exist): {JSON.stringify(report.streaming.offset_bounds||[])}</p></details>
-        {report.streaming.rows.length===0?<p className="empty">No committed streaming snapshot is available for this selection.</p>:<div className="table-scroll"><table><thead><tr><th>Campaign</th><th>Sessions</th><th>Orders</th><th>Provisional net</th><th>Business event / processing / arrival</th></tr></thead><tbody>{report.streaming.rows.map(row=><tr key={row.metric_key}><td>{campaigns.find(item=>item.campaign_id===row.campaign_id)?.name||row.campaign_id}<small>{row.mapped?'Mapped':'Unmapped'} · {row.stale?'Historical / stale':'Recent activity'}</small></td><td>{money(row.sessions)}</td><td>{money(row.order_count)}</td><td>{money(row.net_revenue_minor)} {row.currency||''}</td><td><small>{row.max_event_time}<br/>{row.processed_at}<br/>{row.received_at}</small></td></tr>)}</tbody></table></div>}
-      </section>
     </>}
     <details id="campaign-tools" className="tool-group"><summary>Budgets &amp; alert rules</summary><div className="operations">
       <section className="panel"><h2>Campaign settings &amp; pacing</h2><p>Set an app budget for a UTC period. Source budgets are reference data.</p>

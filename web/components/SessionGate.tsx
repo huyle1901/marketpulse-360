@@ -44,7 +44,7 @@ export default function SessionGate({children}:{children:React.ReactNode}){
  if(loading)return <main><p role="status">Checking session…</p></main>;
  if(!principal)return <Login error={error} onLogin={()=>{authEpoch.current++;setLoading(true);setRetry(v=>v+1);}}/>;
  if(path==='/login')return <main><h1>Signed in</h1><Link href="/">Open Command Center</Link></main>;
- const links=[['/','Campaign Operations'],['/analysis','Funnel & Attribution'],['/customers','Customer 360'],...(canAdmin?[['/operations','Operations']]:[])];
+ const links=[['/','Overview'],['/live','Live activity'],['/analysis','Journey analysis'],['/customers','Customers'],...(canAdmin?[['/operations','Data health']]:[])];
  return <Context.Provider value={{principal,canOperate,canAdmin}}>
  <a className="skip-link" href="#main-content">Skip to content</a>
  <div className="app-frame"><header className="app-shell"><Link href="/" className="shell-brand" aria-label="MarketPulse 360 home"><span className="brand-mark" aria-hidden="true">ϟ</span> MarketPulse <span>360</span></Link><p className="shell-caption">Marketing workspace</p>

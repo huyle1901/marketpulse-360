@@ -686,6 +686,15 @@ local CSS tokens inspired by the shadcn dashboard composition, without a new
 analytics service or runtime CDN. Next.js 16.4.3 is the patched application
 runtime.
 
+The sidebar names the task workspaces Overview, Live activity, Journey analysis,
+Customers and (admin) Data health; routes and role checks are unchanged. Live
+activity (`/live`) moves the committed MP-03 snapshot view off the overview. It
+reads the same authenticated dashboard response with its own window, from seven
+days before certified data-through to real UTC tomorrow, so provisional days
+after the latest certified release stay visible. Snapshot replacement is shown
+as a change marker; it is never labeled a raw event or a throughput rate. Replay
+state is reported unknown until the demo controller exposes a status contract.
+
 The history preparation/replay controller and isolated Compose deployment are
 specified in [the redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
 and remain separate implementation tasks.
