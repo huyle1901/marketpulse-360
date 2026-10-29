@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import timezone
+from datetime import date,timezone
 from dataclasses import asdict
 
 from marketpulse_batch.ledger import BatchLedger
@@ -14,6 +14,14 @@ from marketpulse_lakehouse.session import create_spark_session
 from marketpulse_lakehouse.verify import validate_physical_schema
 from marketpulse_app.journey_projection import JourneyJournal, copy_journeys, project_event, verify_projection
 
+
+
+def release_events_query(namespace:str,snapshot:int,through:date)->str:
+    """Governed Silver events of the certified release: its pinned snapshot, on or before the release day."""
+    from marketpulse_lakehouse.silver import validate_namespace
+    namespace=validate_namespace(namespace)
+    if type(snapshot) is not int or snapshot<1 or type(through) is not date:raise ValueError('invalid release event selection')
+    return f"SELECT * FROM lakehouse.`{namespace}`.customer_events VERSION AS OF {snapshot} WHERE event_date <= DATE '{through.isoformat()}'"
 
 def main() -> int:
     import psycopg
@@ -37,7 +45,7 @@ def main() -> int:
                 verify_projection(client,existing)
                 print(json.dumps({'reused':True,**asdict(existing)},sort_keys=True));return 0
             spark=create_spark_session('marketpulse-mp07-journeys')
-            frame=spark.sql(f'SELECT * FROM lakehouse.`{receipt.namespace}`.customer_events VERSION AS OF {snapshot}')
+            frame=spark.sql(release_events_query(receipt.namespace,snapshot,receipt.logical_day))
             validate_physical_schema(frame.schema,'silver.customer_events')
             def rows():
                 for item in frame.toLocalIterator():
