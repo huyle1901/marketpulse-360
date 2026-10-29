@@ -1,7 +1,7 @@
 import type {Metric} from '../app/types';
 import {formatMoney} from '../lib/format';
 
-const labels:Record<string,string>={google:'Google',meta:'Meta',tiktok:'TikTok'};
+const labels:Record<string,string>={google:'Google',meta:'Meta',tiktok:'TikTok',unattributed:'Unattributed'};
 
 export default function ChannelBreakdown({rows}:{rows:Metric[]}){
   const currencies=[...new Set(rows.map(row=>row.currency))];
@@ -10,7 +10,7 @@ export default function ChannelBreakdown({rows}:{rows:Metric[]}){
     {!rows.length&&<p className="empty">No published campaigns for this selection.</p>}
     {currencies.map(currency=>{
       const byChannel=new Map<string,bigint>();
-      for(const row of rows.filter(item=>item.currency===currency)) byChannel.set(row.platform,(byChannel.get(row.platform)||0n)+BigInt(row.net_revenue_minor));
+      for(const row of rows.filter(item=>item.currency===currency)) {const channel=row.platform||'unattributed';byChannel.set(channel,(byChannel.get(channel)||0n)+BigInt(row.net_revenue_minor));}
       const values=[...byChannel.values()];
       const max=values.reduce((current,value)=>value<0n?(-value>current?-value:current):(value>current?value:current),1n);
       return <div key={currency} className="channel-currency"><h3>{currency}</h3>{[...byChannel.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([platform,value])=>

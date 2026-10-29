@@ -86,3 +86,11 @@ test('stage reach from another release or a failed read is not drawn',async({pag
  await page.reload();await expect(page.getByRole('region',{name:'Stage reach'})).toContainText('Stage reach unavailable');
  await expect(page.getByRole('region',{name:'Channel comparison'})).toContainText('Google');
 });
+
+test('an unattributed campaign row with no platform renders as its own channel',async({page})=>{
+ const unattributed={campaign_id:'__unattributed__',campaign_name:'Unattributed',currency:'VND',platform:null,objective:null,spend_minor:'0',net_revenue_minor:'-7',orders:'1',source_roas:null};
+ await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:{...dashboard,certified:{...dashboard.certified,rows:[...rows,unattributed]}}}));
+ await page.goto('/');const region=page.getByRole('region',{name:'Channel comparison'});
+ await expect(region).toContainText('Unattributed');await expect(region).toContainText('-₫7');
+ await expect(page.getByRole('table',{name:'Campaign performance'})).toContainText('Unattributed');
+});
