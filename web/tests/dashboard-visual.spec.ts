@@ -50,7 +50,7 @@ test('long ranges default to monthly buckets summed from observed days with gaps
  const table=page.getByRole('table',{name:'Monthly certified values · VND'});
  await expect(table.locator('tbody tr')).toHaveCount(2);
  await expect(table.locator('tbody tr').first()).toContainText('2025-01');await expect(table.locator('tbody tr').first()).toContainText('9007199254740990 / 300');
- await expect(table.locator('tbody tr').first()).toContainText('2 observed days');
+ await expect(table.locator('tbody tr').first()).toContainText('2 of 31 days');
 });
 
 test('weekly buckets start on UTC Monday and connect only adjacent weeks',async({page})=>{
@@ -62,6 +62,7 @@ test('weekly buckets start on UTC Monday and connect only adjacent weeks',async(
  const table=page.getByRole('table',{name:'Weekly certified values · VND'});
  await expect(table.locator('tbody tr')).toHaveCount(3);
  await expect(table.locator('tbody tr').nth(1)).toContainText('Week of 2026-01-05');await expect(table.locator('tbody tr').nth(1)).toContainText('5 / 2');
+ await expect(table.locator('tbody tr').nth(0)).toContainText('1 of 7 days · partial');await expect(table.locator('tbody tr').nth(1)).toContainText('2 of 7 days · partial');
 });
 
 const counts={sessions:'100',page_view_sessions:'90',view_item_sessions:'40',add_to_cart_sessions:'20',checkout_sessions:'12',purchase_sessions:'7'};

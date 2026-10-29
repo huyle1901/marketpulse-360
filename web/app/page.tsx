@@ -20,6 +20,10 @@ async function api<T>(path:string,body?:unknown,method='GET',signal?:AbortSignal
   return response.json();
 }
 
+/** A long certified history opens on its latest 90 days so prior-period comparisons exist; short histories show everything. */
+const openingWindow=(data:Dashboard)=>{const through=data.certified.provenance.data_through?.slice(0,10),day=86400000,span=(Date.parse(data.filters.to_date)-Date.parse(data.filters.from_date))/day;
+  return through&&span>180?{from_date:new Date(Date.parse(through)-90*day).toISOString().slice(0,10),to_date:through}:{from_date:data.filters.from_date,to_date:data.filters.to_date};};
+
 /** Stage reach must cover the exact window the overview displays, including server-resolved default dates. */
 const reachQuery=(query:string,report:Dashboard)=>{const params=new URLSearchParams(query);params.set('from_date',report.filters.from_date);params.set('to_date',report.filters.to_date);return params.toString();};
 
@@ -71,7 +75,7 @@ export default function CommandCenter() {
         const data=await api<Dashboard>('dashboard?'+query,undefined,'GET',controller.signal);
         if(active) {
           setReport(data);setDisplayedQuery(query);setRefreshError('');setLastSuccess(new Date().toLocaleTimeString());
-          replaceFilters(current=>current.from_date&&current.to_date?current:{...current,from_date:data.filters.from_date,to_date:data.filters.to_date});
+          replaceFilters(current=>current.from_date&&current.to_date?current:{...current,...openingWindow(data)});
           setCampaignId(current=>current||data.campaigns[0]?.campaign_id||'');
           setCurrency(current=>current||data.campaigns[0]?.currency||'');
         }

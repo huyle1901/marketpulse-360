@@ -20,7 +20,9 @@ test('channels and campaigns compare efficiency, excluding rows with no ad deliv
  await page.goto('/ads');const channels=page.getByRole('table',{name:'Efficiency by channel · VND'});
  await expect(channels.locator('tbody tr')).toHaveCount(2);
  await expect(channels.locator('tbody tr').first()).toContainText('Google');await expect(channels.locator('tbody tr').first()).toContainText('25.00%');
- await expect(page.getByRole('img',{name:'Ad spend and net revenue by channel · VND'})).toBeVisible();
+ const share=page.getByRole('region',{name:'Spend share vs revenue share · VND'});
+ await expect(share.getByRole('img',{name:'Google: 66.6% of ad spend, 71.4% of net revenue'})).toBeVisible();
+ await expect(share.getByRole('img',{name:'Meta: 33.3% of ad spend, 28.5% of net revenue'})).toBeVisible();
  const campaigns=page.getByRole('table',{name:'Efficiency by campaign · VND'});
  await expect(campaigns.locator('tbody tr').first()).toContainText('Google Traffic 1');
  await expect(campaigns).not.toContainText('Unattributed');
