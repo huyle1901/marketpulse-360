@@ -24,6 +24,7 @@ class LakehouseContractTests(unittest.TestCase):
                 "gold.customer_360",
                 "gold.cohort_retention",
                 "gold.campaign_performance_daily",
+                "gold.commerce_daily",
             ),
         )
 
@@ -97,6 +98,11 @@ class LakehouseContractTests(unittest.TestCase):
             "gold.campaign_performance_daily": (
                 ("event_date", "campaign_id", "platform", "currency", "impressions", "clicks", "vendor_conversions", "spend_minor", "sessions", "page_view_sessions", "view_item_sessions", "add_to_cart_sessions", "checkout_sessions", "purchase_sessions", "orders", "refunds", "gross_revenue_minor", "refund_amount_minor", "net_revenue_minor", "first_touch_gross_minor", "first_touch_refund_minor", "first_touch_net_minor", "last_touch_gross_minor", "last_touch_refund_minor", "last_touch_net_minor", "linear_gross_minor", "linear_refund_minor", "linear_net_minor", "source_roas", "first_touch_roas", "last_touch_roas", "linear_roas"),
                 ("event_date", "campaign_id"),
+                ("months(event_date)",),
+            ),
+            "gold.commerce_daily": (
+                ("event_date", "product_id", "device_type", "currency", "product_name", "category", "brand", "orders", "units", "refunds", "gross_revenue_minor", "refund_amount_minor", "net_revenue_minor"),
+                ("event_date", "product_id", "device_type", "currency"),
                 ("months(event_date)",),
             ),
         }

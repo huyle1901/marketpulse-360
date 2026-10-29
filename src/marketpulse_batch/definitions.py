@@ -290,7 +290,7 @@ def marketing_dbt(context: AssetExecutionContext):
 @asset(partitions_def=DAILY, backfill_policy=DAILY_BACKFILL,
        ins={"candidate_uri": AssetIn(key=AssetKey(["pinned_gold", "raw_campaign_performance_daily"]))},
        deps=[AssetKey(name) for name in
-       ("funnel_daily", "attribution_daily", "customer_360", "cohort_retention", "campaign_performance_daily", "campaigns", "customers", "campaign_dashboard")],
+       ("funnel_daily", "attribution_daily", "customer_360", "cohort_retention", "campaign_performance_daily", "commerce_daily", "campaigns", "customers", "campaign_dashboard")],
        required_resource_keys={"batch_settings"})
 def certified_release(context, candidate_uri):
     # Partition IO can point to a later materialization. Retry ancestry pins this execution.

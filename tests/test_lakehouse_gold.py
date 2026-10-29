@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 import unittest
+
+from marketpulse_lakehouse.contracts import TABLE_CONTRACTS
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -353,3 +356,57 @@ class GoldSilverInputTests(unittest.TestCase):
         five = {f"silver.{name}": 1 for name in ("customer_events", "customers", "campaigns", "ad_spend_daily", "quality_summary")}
         with self.assertRaisesRegex(ValueError, "silver.products"):
             build_gold(None, silver_snapshots=five, run_id="r")
+
+
+def _commerce(event_id: str, name: str, when: str, order: str, items: list[tuple[str, int, int]], *, gross: int | None = None, refund: int | None = None) -> dict[str, object]:
+    total = sum(quantity * price for _, quantity, price in items)
+    event = _event(event_id, name, when, order=order, gross=total if gross is None and name == "order_created" else gross,
+                   refund=refund if name == "order_refunded" else 0)
+    event["payload_json"] = json.dumps({"order_id": order, "items": [{"product_id": p, "quantity": q, "unit_price_minor": u} for p, q, u in items]})
+    return event
+
+
+def _purchase(event_id: str, when: str, order: str, device: str) -> dict[str, object]:
+    event = _event(event_id, "purchase", when)
+    event["order_id"] = order
+    event["payload_json"] = json.dumps({"order_id": order, "device_type": device, "is_bot": False})
+    return event
+
+
+PRODUCTS = [{"product_id": "p-1", "name": "Phone", "category": "electronics", "brand": "Nova"},
+            {"product_id": "p-2", "name": "Lamp", "category": "home", "brand": "Lumen"}]
+
+
+class CommerceDailyTests(unittest.TestCase):
+    def test_commerce_daily_allocates_refunds_to_items_on_refund_date(self) -> None:
+        from marketpulse_lakehouse.gold import build_commerce_daily
+        events = [_purchase("w", "2026-01-02T01:00:00Z", "o-1", "mobile"),
+                  _commerce("c", "order_created", "2026-01-02T01:00:01Z", "o-1", [("p-1", 2, 300), ("p-2", 1, 400)]),
+                  _commerce("r", "order_refunded", "2026-01-05T09:00:00Z", "o-1", [("p-1", 2, 300), ("p-2", 1, 400)], refund=501)]
+        rows = {(r["event_date"].isoformat(), r["product_id"]): r for r in build_commerce_daily(events, PRODUCTS)}
+        phone, lamp = rows[("2026-01-02", "p-1")], rows[("2026-01-02", "p-2")]
+        self.assertEqual((phone["device_type"], phone["units"], phone["orders"], phone["gross_revenue_minor"], phone["category"]), ("mobile", 2, 1, 600, "electronics"))
+        self.assertEqual((lamp["gross_revenue_minor"], lamp["refund_amount_minor"]), (400, 0))
+        refund_phone, refund_lamp = rows[("2026-01-05", "p-1")], rows[("2026-01-05", "p-2")]
+        # 501 * 600/1000 = 300 r6, 501 * 400/1000 = 200 r4: one remaining minor unit goes to the lowest product_id.
+        self.assertEqual((refund_phone["refund_amount_minor"], refund_lamp["refund_amount_minor"]), (301, 200))
+        self.assertEqual((refund_phone["refunds"], refund_phone["gross_revenue_minor"], refund_phone["net_revenue_minor"], refund_phone["device_type"]), (1, 0, -301, "mobile"))
+        self.assertEqual(tuple(phone), tuple(c.name for c in TABLE_CONTRACTS["gold.commerce_daily"].columns))
+
+    def test_commerce_daily_rejects_item_gross_mismatch_and_unknown_product(self) -> None:
+        from marketpulse_lakehouse.gold import build_commerce_daily
+        with self.assertRaisesRegex(ValueError, "item gross"):
+            build_commerce_daily([_commerce("c", "order_created", "2026-01-02T01:00:00Z", "o-1", [("p-1", 1, 300)], gross=999)], PRODUCTS)
+        with self.assertRaisesRegex(ValueError, "unknown product"):
+            build_commerce_daily([_commerce("c", "order_created", "2026-01-02T01:00:00Z", "o-1", [("p-9", 1, 300)])], PRODUCTS)
+
+    def test_commerce_daily_totals_equal_campaign_performance_and_missing_device_is_unknown(self) -> None:
+        from marketpulse_lakehouse.gold import build_campaign_performance_daily, build_commerce_daily, build_funnel_daily
+        events = [_commerce("c1", "order_created", "2026-01-02T01:00:00Z", "o-1", [("p-1", 3, 333), ("p-2", 1, 7)]),
+                  _commerce("c2", "order_created", "2026-01-03T01:00:00Z", "o-2", [("p-2", 5, 100)]),
+                  _commerce("r1", "order_refunded", "2026-01-04T01:00:00Z", "o-1", [("p-1", 3, 333), ("p-2", 1, 7)], refund=999)]
+        rows = build_commerce_daily(events, PRODUCTS)
+        self.assertTrue(all(r["device_type"] == "unknown" for r in rows))
+        performance = build_campaign_performance_daily([], build_funnel_daily([]), events, [], [{"campaign_id": "campaign-a", "platform": "google", "currency": "VND"}])
+        for field in ("gross_revenue_minor", "refund_amount_minor", "net_revenue_minor"):
+            self.assertEqual(sum(r[field] for r in rows), sum(r[field] for r in performance), field)

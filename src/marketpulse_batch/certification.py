@@ -19,7 +19,8 @@ from .export import EXPORTED_RELATIONS, ExportManifest, business_schema
 
 SERVING_MODELS = tuple(name.split(".")[1] for name in EXPORTED_RELATIONS) + ("campaign_dashboard",)
 SEMANTIC_GATES = {"financial_equations", "attribution_conservation", "cohort_invariants", "funnel_invariants",
-                  "consent_eligibility", "campaign_relationships", "customer_relationships", "accepted_domains"}
+                  "consent_eligibility", "campaign_relationships", "customer_relationships", "accepted_domains",
+                  "commerce_conservation"}
 
 
 def validate_dbt_artifacts(path: Path, database: str) -> str:
