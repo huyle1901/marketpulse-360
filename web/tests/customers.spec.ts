@@ -80,3 +80,28 @@ test('missing detail leaves certified cohorts available and negative net stays e
 });
 
 test.beforeEach(async({page})=>{await page.route('**/api/v1/auth/session',r=>r.fulfill({json:{user_id:'fixture-admin',username:'fixture-admin',role:'admin'}}));});
+
+test('customer URL restores purpose, paging and local search while invalid offsets normalize',async({page})=>{
+ await page.goto('/customers?purpose=activation&profile_type=customer&offset=20&q=dddd&sort=net_desc');
+ await expect(page.getByLabel('Discovery purpose')).toHaveValue('activation');await expect(page.getByLabel('Profile type',{exact:true})).toHaveValue('customer');await expect(page.getByLabel('Search loaded profiles')).toHaveValue('dddd');
+ await page.reload();await expect(page.getByLabel('Discovery purpose')).toHaveValue('activation');await expect(page.getByText('Search and sort apply to this loaded page only.',{exact:true})).toBeVisible();
+ await page.goto('/customers?purpose=invalid&profile_type=invalid&offset=9007199254740993');await expect(page.getByLabel('Discovery purpose')).toHaveValue('analytics');await expect(page.getByLabel('Profile type',{exact:true})).toHaveValue('');await expect(page).not.toHaveURL(/9007199254740993/);
+});
+
+test('retention heatmap distinguishes observed zero from missing cells and keeps denominators',async({page})=>{
+ const rows=[...cohorts.rows,{cohort_month:'2026-01-01',activity_month:'2026-01-01',profile_type:'customer',month_number:'0',cohort_size:'3',active_profiles:'0',retained_rate:'0.000000'}];
+ await page.route('**/api/v1/lifecycle/cohorts',r=>r.fulfill({json:{...cohorts,rows}}));
+ await page.goto('/customers');const table=page.getByRole('table',{name:'Retention heatmap'});
+ await expect(table).toContainText('50%');await expect(table).toContainText('1 / 2 active');await expect(table).toContainText('0%');await expect(table).toContainText('0 / 3 active');await expect(table.getByText('Unavailable',{exact:true})).toHaveCount(2);
+ await table.getByRole('button',{name:'Explore cohort 2025-12-01 customer active 2026-01-01',exact:true}).click();await expect(page.getByLabel('Activity month',{exact:true})).toHaveValue('2026-01');
+});
+test('profile panel receives focus, closes with Escape and returns to its trigger',async({page})=>{
+ await page.goto('/customers');const trigger=page.getByRole('button',{name:'Inspect profile '+id.slice(0,12)});await trigger.click();
+ const panel=page.getByRole('region',{name:'Governed profile timeline',exact:true});await expect(panel).toBeFocused();await expect(panel.getByText('order_refunded',{exact:true})).toBeVisible();
+ await page.keyboard.press('Escape');await expect(panel).toHaveCount(0);await expect(trigger).toBeFocused();
+});
+test('segment summary explains the current draft and consent boundary',async({page})=>{
+ await page.goto('/customers');const summary=page.getByRole('region',{name:'Segment rule summary'});await expect(summary).toContainText('Activation preview');await expect(summary).toContainText('Both certified consent flags required');
+ await page.getByRole('button',{name:'Add condition',exact:true}).click();await page.getByLabel('Condition 1 whole value').fill('30');await expect(summary).toContainText('recency days at least 30');
+ await page.getByLabel('Segment purpose').selectOption('analytics');await expect(summary).toContainText('Historical analytics');await expect(summary).toContainText('Membership is evaluated in preview');
+});
