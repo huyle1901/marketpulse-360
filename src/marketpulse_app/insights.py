@@ -110,3 +110,44 @@ class InsightsService(LifecycleService):
                    if source != 'unknown' or orders]
         return wire({'status': 'available', 'sources': sources,
                      'definition': 'Orders are matched to the source of their purchase session; unmatched orders stay unknown.', 'provenance': provenance})
+
+    def products(self) -> dict[str, object]:
+        """Certified product, brand and device commerce for the pinned release (older releases lack the relation)."""
+        session, _, _, provenance = self._context(detail=False)
+        database = session.release.database
+        provenance = provenance | {'model': 'gold.commerce_daily', 'serving_relation': 'commerce_daily'}
+        present = session._query("SELECT count() AS present FROM system.tables WHERE database={database:String} AND name='commerce_daily'",
+                                 {'database': database})[0]['present']
+        if not int(present):
+            return wire({'status': 'unavailable', 'message': 'This certified release predates product commerce; publish a newer release.', 'provenance': provenance})
+        check = session._query(f"""SELECT (SELECT sum(toInt128(gross_revenue_minor)) FROM {database}.campaign_performance_daily) AS performance_gross,
+            (SELECT sum(toInt128(gross_revenue_minor)) FROM {database}.commerce_daily) AS commerce_gross""")[0]
+        if int(check['performance_gross'] or 0) != int(check['commerce_gross'] or 0):
+            raise LifecycleError('reconciliation_failed')
+        brands = session._query(f"""SELECT category, brand, sum(toInt128(units)) AS units, sum(toInt128(gross_revenue_minor)) AS gross_revenue_minor,
+            sum(toInt128(net_revenue_minor)) AS net_revenue_minor FROM {database}.commerce_daily GROUP BY category, brand""")
+        categories: dict[str, dict[str, object]] = {}
+        for row in brands:
+            entry = categories.setdefault(row['category'], {'category': row['category'], 'units': 0, 'gross_revenue_minor': 0, 'net_revenue_minor': 0, 'brands': []})
+            for field in ('units', 'gross_revenue_minor', 'net_revenue_minor'):
+                entry[field] += int(row[field])
+            entry['brands'].append({'brand': row['brand'], 'units': int(row['units']), 'gross_revenue_minor': int(row['gross_revenue_minor']),
+                                    'net_revenue_minor': int(row['net_revenue_minor'])})
+        ordered = sorted(categories.values(), key=lambda c: (-c['net_revenue_minor'], c['category']))
+        for entry in ordered:
+            entry['brands'].sort(key=lambda b: (-b['net_revenue_minor'], b['brand']))
+        top = session._query(f"""SELECT product_id, any(product_name) AS product_name, any(category) AS category, any(brand) AS brand,
+            sum(toInt128(units)) AS units, sum(toInt128(orders)) AS orders, sum(toInt128(net_revenue_minor)) AS net_revenue_minor
+            FROM {database}.commerce_daily GROUP BY product_id ORDER BY net_revenue_minor DESC, product_id LIMIT 10""")
+        devices = session._query(f"""SELECT device_type, sum(toInt128(units)) AS units, sum(toInt128(gross_revenue_minor)) AS gross_revenue_minor,
+            sum(toInt128(net_revenue_minor)) AS net_revenue_minor FROM {database}.commerce_daily GROUP BY device_type""")
+        total_gross = sum(int(d['gross_revenue_minor']) for d in devices)
+        device_rows = [{'device_type': d['device_type'], 'units': int(d['units']), 'gross_revenue_minor': int(d['gross_revenue_minor']),
+                        'net_revenue_minor': int(d['net_revenue_minor']), 'gross_share': ratio(int(d['gross_revenue_minor']), total_gross),
+                        'avg_item_value_minor': int(d['gross_revenue_minor']) // int(d['units']) if int(d['units']) else None}
+                       for d in sorted(devices, key=lambda d: ('desktop', 'mobile', 'tablet', 'unknown').index(d['device_type']) if d['device_type'] in ('desktop', 'mobile', 'tablet', 'unknown') else 9)]
+        return wire({'status': 'available', 'currency': provenance.get('currency'), 'categories': ordered,
+                     'top_products': [{k: (int(v) if k in ('units', 'orders', 'net_revenue_minor') else v) for k, v in row.items()} for row in top],
+                     'devices': device_rows,
+                     'definition': 'Certified order lines by product and purchase device; refunds are allocated to the original items on the refund date.',
+                     'provenance': provenance})
