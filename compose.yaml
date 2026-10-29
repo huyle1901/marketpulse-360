@@ -26,6 +26,8 @@ x-batch-runtime: &batch-runtime
     SPARK_MASTER: local[2]
     SPARK_DRIVER_MEMORY: 2g
     SPARK_SQL_SHUFFLE_PARTITIONS: "2"
+    BATCH_SPARK_DRIVER_MEMORY: ${BATCH_SPARK_DRIVER_MEMORY:-2g}
+    BATCH_SPARK_TIMEOUT_SECONDS: ${BATCH_SPARK_TIMEOUT_SECONDS:-1800}
     BATCH_SOURCE_ROOT: ${BATCH_SOURCE_ROOT:-/opt/marketpulse/data/mock/fixtures/seed-360}
   volumes:
     - ./data:/opt/marketpulse/data:ro
@@ -267,7 +269,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4096M
+          memory: ${BATCH_CODE_MEMORY_LIMIT:-4096M}
 
   dagster-webserver:
     <<: *batch-runtime

@@ -4,12 +4,24 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import uuid
 from pathlib import Path
 from typing import Any
 
 from .settings import BatchSettings
+
+
+def _spark_resources() -> tuple[str, int]:
+    """Fixture defaults; a long local history may raise them explicitly."""
+    memory = os.environ.get("BATCH_SPARK_DRIVER_MEMORY", "2g")
+    timeout = os.environ.get("BATCH_SPARK_TIMEOUT_SECONDS", "1800")
+    if re.fullmatch(r"[1-9][0-9]{0,2}[gm]", memory) is None:
+        raise ValueError("BATCH_SPARK_DRIVER_MEMORY must look like 2g or 2048m")
+    if re.fullmatch(r"[1-9][0-9]{0,5}", timeout) is None:
+        raise ValueError("BATCH_SPARK_TIMEOUT_SECONDS must be a positive integer")
+    return memory, int(timeout)
 
 
 def run_spark_operation(settings: BatchSettings, operation: str, payload: dict[str, object]) -> dict[str, Any]:
@@ -22,10 +34,11 @@ def run_spark_operation(settings: BatchSettings, operation: str, payload: dict[s
     env = os.environ | {"MINIO_ENDPOINT": settings.minio_endpoint, "MINIO_ROOT_USER": settings.minio_user,
                         "MINIO_ROOT_PASSWORD": settings.minio_password, "NESSIE_URI": settings.nessie_uri,
                         "AWS_REGION": "us-east-1", "SPARK_MASTER": "local[2]", "SPARK_SQL_SHUFFLE_PARTITIONS": "2"}
-    result = subprocess.run(["/opt/spark/bin/spark-submit", "--driver-memory", "2g",
+    memory, timeout = _spark_resources()
+    result = subprocess.run(["/opt/spark/bin/spark-submit", "--driver-memory", memory,
                              "/opt/marketpulse/src/marketpulse_batch/engine.py", "--operation", operation,
                              "--input", str(input_path), "--output", str(output_path)],
-                            env=env, capture_output=True, text=True, timeout=1800)
+                            env=env, capture_output=True, text=True, timeout=timeout)
     log = result.stdout + result.stderr
     for secret in (settings.minio_password, settings.clickhouse_password, settings.ledger_password):
         log = log.replace(secret, "[REDACTED]")
