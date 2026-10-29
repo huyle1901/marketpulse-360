@@ -658,6 +658,26 @@ release-bound preview; no members or new identity merges are persisted.
 Design: [Command Center usability](../superpowers/specs/2026-10-20-command-center-usability-design.md).
 Plan: [implementation](../superpowers/plans/2026-10-20-command-center-usability.md).
 
+### 4.10 Long-range story-demo input and read boundary
+
+The opt-in `story-demo` generator profile spans 638 UTC days beginning
+2025-01-01: 608 history days through 2026-08-31 and 30 continuation days in
+September 2026. It keeps one seed and master-data identity across the boundary;
+the profile rejects an alternate start date. The generator still writes ignored
+synthetic files and does not publish them automatically when Compose starts.
+
+Read-only campaign dashboard selections allow up to 731 UTC days so the full
+history can be requested. Application budget and alert write periods retain their
+366-day contract. The dashboard's default window follows the latest certified
+date but cannot exceed the read limit. This extends an analytical query boundary;
+it does not move analytics into PostgreSQL or blend provisional live values with
+certified finance.
+
+The full preparation/replay controller, isolated Compose deployment and visual
+redesign are specified in [the approved redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
+and are tracked as separate implementation tasks. This section records only the
+input/read contract currently implemented.
+
 ## 5. Kafka design
 
 Suggested topic naming:
