@@ -122,7 +122,7 @@ def create_app(analytics: Any, store: Any, access: Any = None, operations: Any =
         if from_date is None or to_date is None:
             rows = session.all_daily()
             end = max((row["event_date"] for row in rows), default=date.today()) + timedelta(days=1)
-            start = max(min((row["event_date"] for row in rows), default=end-timedelta(days=1)), end-timedelta(days=366))
+            start = max(min((row["event_date"] for row in rows), default=end-timedelta(days=1)), end-timedelta(days=731))
             from_date, to_date = from_date or start, to_date or end
         return session.dashboard(DashboardFilter(from_date, to_date, platform, campaign_id, objective, market, currency), store.settings())
 

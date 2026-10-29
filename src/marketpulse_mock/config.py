@@ -68,6 +68,7 @@ PROFILES: Mapping[str, ScaleProfile] = MappingProxyType(
         "benchmark": ScaleProfile(
             "benchmark", 30, 250_000, 60, 5_000, 1_000_000, 250_000
         ),
+        "story-demo": ScaleProfile("story-demo", 638, 1_000, 12, 100, 2_000, 50_000),
     }
 )
 
@@ -105,11 +106,14 @@ def resolve_config(
             f"unknown profile {profile_name!r}; choose one of: {choices}"
         ) from error
 
+    if profile_name == "story-demo" and start_date not in (None, date(2025, 1, 1)):
+        raise ValueError("story-demo uses one fixed UTC world starting 2025-01-01")
+
     return GenerationConfig(
         profile=profile,
         seed=seed,
         output_dir=Path(output_dir),
-        start_date=start_date or date(2026, 1, 1),
+        start_date=start_date or (date(2025, 1, 1) if profile_name == "story-demo" else date(2026, 1, 1)),
         rows_per_file=(
             profile.rows_per_file if rows_per_file is None else rows_per_file
         ),

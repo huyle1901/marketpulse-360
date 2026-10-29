@@ -26,6 +26,14 @@ def interval(start: date, end: date) -> None:
         raise ValueError("requires UTC [from,to) interval of 1..366 days")
 
 
+def read_interval(start: date, end: date) -> None:
+    """Validate a historical analytical selection without expanding write periods."""
+    if (type(start) is not date or type(end) is not date or
+            not date(1900, 1, 1) <= start < end <= date(2299, 12, 31) or
+            not 1 <= (end - start).days <= 731):
+        raise ValueError("requires UTC [from,to) interval of 1..731 days")
+
+
 def code(value: str | None, length: int) -> None:
     if value is not None and (not isinstance(value, str) or re.fullmatch(rf"[A-Z]{{{length}}}", value) is None):
         raise ValueError("invalid currency/market code")
@@ -42,7 +50,7 @@ class DashboardFilter:
     currency: str | None = None
 
     def __post_init__(self) -> None:
-        interval(self.from_date, self.to_date)
+        read_interval(self.from_date, self.to_date)
         if self.platform is not None and self.platform not in {"google", "meta", "tiktok"}:
             raise ValueError("unsupported platform")
         if self.objective is not None and self.objective not in {"awareness", "traffic", "conversions"}:
