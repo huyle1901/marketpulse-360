@@ -98,3 +98,21 @@ class InsightsTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class InsightsRouteTests(unittest.TestCase):
+    def test_insights_routes_are_viewer_aggregates(self):
+        from app_auth_support import TrustedTestAccess
+        from fastapi.testclient import TestClient
+        from marketpulse_app.api import create_app
+        from marketpulse_app.security import policy
+        names = {'activity': 'activity_heatmap', 'order-values': 'order_values', 'loyalty': 'loyalty', 'channels': 'channels'}
+        client = TestClient(create_app(SimpleNamespace(), SimpleNamespace(), access=TrustedTestAccess()))
+        for path, method in names.items():
+            self.assertEqual(policy('GET', '/api/v1/insights/' + path)[1], 'viewer')
+            with patch('marketpulse_app.insights_api.InsightsService.' + method, return_value={'status': 'available'}):
+                response = client.get('/api/v1/insights/' + path)
+            self.assertEqual(response.status_code, 200); self.assertEqual(response.headers['cache-control'], 'no-store')
+        with patch('marketpulse_app.insights_api.InsightsService.order_values', side_effect=LifecycleError('unsupported_currency')):
+            response = client.get('/api/v1/insights/order-values')
+        self.assertEqual(response.status_code, 409); self.assertEqual(response.json()['code'], 'unsupported_currency')
