@@ -712,6 +712,13 @@ count, and the full alert history is a collapsed disclosure. With 12 campaigns t
 overview is at most 2,000 px tall at 1440×1000. The cross-campaign simulator
 stays a page-level disclosure that the panel links to.
 
+Journey analysis (`/analysis`) leads attribution with signed grouped bars:
+net credit by channel for all three models on one zero baseline, and campaign
+credit for an explicit first/last/linear selector that shares the journey
+sampling model URL state. Charts are labeled as attribution credit, distinct
+from source campaign finance. Exact comparison tables sit in a disclosure, and
+the global reconciliation stays visible. No new endpoint or computation is added.
+
 The history preparation/replay controller and isolated Compose deployment are
 specified in [the redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
 and remain separate implementation tasks.
