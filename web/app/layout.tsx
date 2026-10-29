@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import './globals.css';
 import './styles.css';
 import './dashboard-theme.css';
 import SessionGate from '../components/SessionGate';

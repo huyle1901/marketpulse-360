@@ -2,6 +2,8 @@
 import {createContext,useContext,useEffect,useRef,useState} from 'react';
 import {usePathname,useRouter} from 'next/navigation';
 import Link from 'next/link';
+import {Activity,LayoutDashboard,LogOut,Radio,Route,ShieldCheck,Users} from 'lucide-react';
+import {Button} from '@/components/ui/button';
 import CohortHeatmap from './CohortHeatmap';
 import type {Cohort} from '../app/customers/types';
 type Principal={user_id:string;username:string;role:'viewer'|'operator'|'admin'};
@@ -44,13 +46,16 @@ export default function SessionGate({children}:{children:React.ReactNode}){
  if(loading)return <main><p role="status">Checking session…</p></main>;
  if(!principal)return <Login error={error} onLogin={()=>{authEpoch.current++;setLoading(true);setRetry(v=>v+1);}}/>;
  if(path==='/login')return <main><h1>Signed in</h1><Link href="/">Open Command Center</Link></main>;
- const links=[['/','Overview'],['/live','Live activity'],['/analysis','Journey analysis'],['/customers','Customers'],...(canAdmin?[['/operations','Data health']]:[])];
+ const links:[string,string,typeof LayoutDashboard][]=[['/','Overview',LayoutDashboard],['/live','Live activity',Radio],['/analysis','Journey analysis',Route],['/customers','Customers',Users],...(canAdmin?[['/operations','Data health',ShieldCheck] as [string,string,typeof LayoutDashboard]]:[])];
  return <Context.Provider value={{principal,canOperate,canAdmin}}>
  <a className="skip-link" href="#main-content">Skip to content</a>
- <div className="app-frame"><header className="app-shell"><Link href="/" className="shell-brand" aria-label="MarketPulse 360 home"><span className="brand-mark" aria-hidden="true">ϟ</span> MarketPulse <span>360</span></Link><p className="shell-caption">Marketing workspace</p>
- <nav aria-label="Workspaces">{links.map(([href,label])=><Link key={href} href={href} aria-current={path===href?'page':undefined}>{label}</Link>)}</nav>
- <div className="account"><span>{principal.username} · {principal.role}</span><button className="secondary" onClick={async()=>{authEpoch.current++;try{const r=await fetch('/api/v1/auth/logout',{method:'POST'});if(!r.ok&&r.status!==401)throw new Error();authEpoch.current++;setPrincipal(null);router.replace('/login');}catch{setError('Sign out failed; retry');}}}>Sign out</button></div>{error&&<p role="alert">{error}</p>}</header>
- <div id="main-content" tabIndex={-1}>{path==='/operations'&&!canAdmin?<main><h1>Administrator access required</h1></main>:path==='/customers'&&!canOperate?<ViewerCohorts/>:children}</div></div></Context.Provider>;
+ <div className="min-h-screen md:grid md:grid-cols-[232px_minmax(0,1fr)]">
+ <header className="flex flex-col gap-3 border-b bg-sidebar px-3 py-3 md:sticky md:top-0 md:h-screen md:gap-1 md:border-r md:border-b-0 md:py-5">
+  <Link href="/" className="flex items-center gap-2 px-2 text-[15px] font-semibold tracking-tight" aria-label="MarketPulse 360 home"><span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground" aria-hidden="true"><Activity className="size-4"/></span>MarketPulse <span className="font-normal text-muted-foreground">360</span></Link>
+  <p className="mt-5 mb-1 hidden px-2 text-xs font-medium text-muted-foreground md:block">Workspaces</p>
+  <nav aria-label="Workspaces" className="flex gap-1 overflow-x-auto md:flex-col">{links.map(([href,label,Icon])=><Link key={href} href={href} aria-current={path===href?'page':undefined} className="flex shrink-0 items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium aria-[current=page]:text-foreground"><Icon className="size-4" aria-hidden="true"/>{label}</Link>)}</nav>
+  <div className="flex items-center gap-2 md:mt-auto md:border-t md:px-1 md:pt-3"><span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-xs font-semibold uppercase" aria-hidden="true">{principal.username.slice(0,2)}</span><span className="min-w-0 flex-1 truncate text-sm">{principal.username} · {principal.role}</span><Button variant="ghost" size="sm" onClick={async()=>{authEpoch.current++;try{const r=await fetch('/api/v1/auth/logout',{method:'POST'});if(!r.ok&&r.status!==401)throw new Error();authEpoch.current++;setPrincipal(null);router.replace('/login');}catch{setError('Sign out failed; retry');}}}><LogOut className="size-4" aria-hidden="true"/>Sign out</Button></div>{error&&<p role="alert" className="text-sm text-destructive">{error}</p>}</header>
+ <div id="main-content" tabIndex={-1} className="min-w-0 outline-none">{path==='/operations'&&!canAdmin?<main><h1>Administrator access required</h1></main>:path==='/customers'&&!canOperate?<ViewerCohorts/>:children}</div></div></Context.Provider>;
 
 }
 function Login({error,onLogin}:{error:string;onLogin:()=>void}){

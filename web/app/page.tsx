@@ -4,6 +4,7 @@ import {useEffect,useRef,useState} from 'react';
 import CampaignOverview from '../components/CampaignOverview';
 import ChannelBreakdown from '../components/ChannelBreakdown';
 import StageReach from '../components/StageReach';
+import KpiCards from '../components/KpiCards';
 import CampaignDrawer from '../components/CampaignDrawer';
 import {formatMoney} from '../lib/format';
 import {useUrlState,choice} from '../lib/useUrlState';
@@ -13,7 +14,6 @@ import {useSession} from '../components/SessionGate';
 import type {Alert,Campaign,Dashboard,Pace,Rule,Scenario,Setting} from './types';
 
 const money=(value:string|null|undefined)=>value==null?'Unavailable':BigInt(value).toLocaleString('en-US');
-const roas=(net:string,spend:string)=>{const denominator=BigInt(spend);if(denominator<=0n)return 'Unavailable';const scaled=BigInt(net)*100n/denominator;const absolute=scaled<0n?-scaled:scaled;return (scaled<0n?'-':'')+(absolute/100n).toString()+'.'+(absolute%100n).toString().padStart(2,'0')+'×';};
 async function api<T>(path:string,body?:unknown,method='GET',signal?:AbortSignal):Promise<T> {
   const response=await fetch('/api/v1/'+path,{method,body:body===undefined?undefined:JSON.stringify(body),headers:{'Content-Type':'application/json'},cache:'no-store',signal});
   if(!response.ok) {const error=await response.json();throw new Error(error.message||error.detail||error.code||'Request failed');}
@@ -147,8 +147,8 @@ export default function CommandCenter() {
     {refreshError&&<div className="error" role="alert"><strong>{report?'Refresh failed; showing last successful data':'Data unavailable'}</strong><p>{refreshError}</p><button onClick={()=>setRetry(value=>value+1)}>Retry</button></div>}
     {!report&&!refreshError&&<p className="empty">Loading published campaign data…</p>}
     {report&&<>
-      <div className="kpis">{report.certified.totals.map(row=><div className="kpi-group" key={row.currency}><article><span>Certified net revenue · {row.currency}</span><strong>{formatMoney(row.net_revenue_minor,row.currency)}</strong></article><article><span>Ad spend · {row.currency}</span><strong>{formatMoney(row.spend_minor,row.currency)}</strong></article><article><span>Orders</span><strong>{money(row.orders)}</strong></article><article><span>Net ROAS · {row.currency}</span><strong>{roas(row.net_revenue_minor,row.spend_minor)}</strong><small>Net revenue / ad spend</small></article></div>)}</div>
-      <CampaignOverview report={report} alerts={alerts} interactive={displayedQuery===query} onInvestigate={id=>{setFilters(current=>({...current,campaign_id:id}));openPanel(id);}}/>
+      <KpiCards report={report}/>
+      <CampaignOverview report={report} alerts={alerts} interactive={displayedQuery===query} onInvestigate={id=>{setFilters(current=>({...current,campaign_id:id}));openPanel(id);}} onDates={(from_date,to_date)=>setFilters(current=>({...current,from_date,to_date}))} requested={filters}/>
       <div className="insight-grid"><ChannelBreakdown rows={report.certified.rows}/><StageReach identity={releaseIdentity} query={reachQuery(displayedQuery,report)}/></div>
       <CampaignTable onOpen={openPanel} interactive={displayedQuery===query} rows={report.certified.rows} filters={filters} search={filters.q} sort={filters.sort} onSearch={q=>setFilters(current=>({...current,q}))} onSort={sort=>setFilters(current=>({...current,sort}))}/>
       <details className="provenance"><summary>Metric source &amp; freshness · {report.certified.provenance.model}</summary><p>Generation {report.certified.provenance.generation} · Data through {report.certified.provenance.data_through||'No data'} (day resolution)</p><p>Release {report.certified.provenance.identity}</p><p>Read at {report.certified.provenance.observed_at}; polling does not change data freshness.</p></details>
