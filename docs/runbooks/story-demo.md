@@ -43,6 +43,19 @@ dc=(docker compose --profile '*')
 | Orders, gross, net | 11,124 / ₫25,122,680,000 / ₫23,195,596,000 (governed: consent/bot exclusions; source ground truth has 11,530 orders) |
 | Journey projection | 247,789 events; 11,124 `order_created`, equal to Gold; 6,539 email events |
 
+## Insights evidence (Phase 1, release `5fae6827…`)
+
+| Check | API | Independent query |
+| --- | --- | --- |
+| Heatmap orders / sessions | 11,124 / 87,592 | Gold orders 11,124; non-bot projection sessions 87,592 |
+| Order-value bands | 11,124 orders, ₫25,122,680,000 | Gold orders and gross |
+| Median / P90 order | ₫1,829,000 / ₫4,587,000 | exact `quantilesExact` |
+| Loyalty tiers net | ₫23,195,596,000 | `customer_360` total |
+| Web + app + unknown orders | 6,978 + 3,560 + 586 = 11,124 | projection `order_created` |
+
+The oracle exposed a dropped `unknown` group (ClickHouse fills unmatched LEFT JOIN
+columns with `''`); it was fixed before release with a regression test.
+
 ## Continue September
 
 ```bash

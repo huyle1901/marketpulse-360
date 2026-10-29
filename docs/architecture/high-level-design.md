@@ -773,6 +773,24 @@ complete, and interval-matched sparklines. A history longer than 180 days opens
 on the latest 90 days. Partially published periods are marked partial rather
 than drawn as unqualified drops.
 
+Insights (`/insights`, Phase 1 of
+[richer marketing insights](../superpowers/specs/2026-10-30-richer-marketing-insights-design.md))
+adds four viewer-level reads, `/insights/{activity,order-values,loyalty,channels}`,
+with no pipeline change. `InsightsService` reuses lifecycle release pinning, the
+single-currency guard and the projection consistency gate.
+
+- **Activity:** a weekday × hour UTC heatmap of non-bot session starts and original
+  orders, colored over the stated observed range.
+- **Order values:** exact median and P90 (`quantilesExact`) plus eight 1/2/5-width
+  bands.
+- **Loyalty:** `customer_360` joined to the latest CRM tier. It fails closed with
+  `reconciliation_failed` unless tier net equals the Gold total.
+- **Web vs app:** each order is matched to its purchase-session source with
+  `join_use_nulls=1`, so unmatched orders stay `unknown`.
+
+The UI theme uses a blue-violet brand accent, deep-navy ink, a dark navy
+sidebar and a CVD-validated channel palette.
+
 The remaining controller automation (daily certification of continuation days) is specified in [the redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
 and remain separate implementation tasks.
 
