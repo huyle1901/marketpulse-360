@@ -932,8 +932,9 @@ def build_gold(
     run_id: str,
     source_namespace: str = "silver",
     target_namespace: str = "gold",
+    through_date: date | None = None,
 ) -> dict[str, object]:
-    """Build every Gold model from explicit immutable Silver snapshots."""
+    """Build every Gold model from explicit immutable Silver snapshots, optionally only through a certified day."""
 
     if not run_id:
         raise ValueError("run_id must not be empty")
@@ -942,13 +943,21 @@ def build_gold(
     expected = {name for name in TABLE_CONTRACTS if name.startswith("silver.")}
     if set(silver_snapshots) != expected:
         raise ValueError("Silver snapshots must contain exactly: " + ", ".join(sorted(expected)))
+    if through_date is not None and (type(through_date) is not date):
+        raise ValueError("through_date must be a calendar date")
 
     from pyspark.storagelevel import StorageLevel
 
     _ensure_gold_tables(spark, target_namespace)
     events = _read_silver(
         spark, source_namespace, "customer_events", silver_snapshots["silver.customer_events"]
-    ).persist(StorageLevel.MEMORY_AND_DISK)
+    )
+    if through_date is not None:
+        from pyspark.sql import functions as F
+
+        # Later business days stay in Silver lineage but are not part of this certified day's release.
+        events = events.filter(F.col("event_date") <= F.lit(through_date))
+    events = events.persist(StorageLevel.MEMORY_AND_DISK)
     customers = _read_silver(
         spark, source_namespace, "customers", silver_snapshots["silver.customers"]
     )

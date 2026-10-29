@@ -21,6 +21,12 @@ from marketpulse_lakehouse.contracts import TABLE_CONTRACTS
 from marketpulse_lakehouse.verify import validate_physical_schema
 
 
+def gold_cutoff(payload: dict[str, object]) -> date | None:
+    """A certified preparation for logical day D builds Gold from events on or before D only."""
+    value = payload.get("logical_day")
+    return None if value is None else date.fromisoformat(str(value))
+
+
 def execute(spark, operation: str, payload: dict[str, object]) -> dict[str, object]:
     run_id = payload.get("run_id", "batch")
     if operation == "ingest_files":
@@ -60,7 +66,7 @@ def execute(spark, operation: str, payload: dict[str, object]) -> dict[str, obje
     if operation == "gold":
         namespace = payload["namespace"]
         result = build_gold(spark, silver_snapshots=payload["silver_snapshots"], run_id=run_id,
-                            source_namespace=namespace, target_namespace=namespace)
+                            source_namespace=namespace, target_namespace=namespace, through_date=gold_cutoff(payload))
         outputs = payload["silver_snapshots"] | {f"gold.{name}": value for name, value in result["snapshots"].items()}
         proof_tables = {}
         for name, snapshot in sorted(outputs.items()):
