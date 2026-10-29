@@ -6,7 +6,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Sequence
 
@@ -55,6 +55,8 @@ def build_parser() -> argparse.ArgumentParser:
     files = subparsers.add_parser("ingest-files")
     files.add_argument("--run-id", required=True)
     files.add_argument("--input", type=Path, required=True)
+    files.add_argument("--from-date", type=date.fromisoformat)
+    files.add_argument("--to-date", type=date.fromisoformat)
 
     silver = subparsers.add_parser("build-silver")
     silver.add_argument("--run-id", required=True)
@@ -143,13 +145,15 @@ def _run_ingest_kafka(
     return _with_session("marketpulse-ingest-kafka", operation)
 
 
-def _run_ingest_files(*, run_id: str, input_path: Path) -> dict[str, object]:
+def _run_ingest_files(*, run_id: str, input_path: Path, from_date: date | None = None, to_date: date | None = None) -> dict[str, object]:
     def operation(spark: object) -> dict[str, object]:
         return ingest_source_files(
             spark,
             input_path,
             run_id=run_id,
             ingested_at=datetime.now(UTC),
+            from_date=from_date,
+            to_date=to_date,
         )
 
     return _with_session("marketpulse-ingest-files", operation)
@@ -362,7 +366,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 offset_manifest=args.offset_manifest,
             )
         elif args.command == "ingest-files":
-            result = _run_ingest_files(run_id=args.run_id, input_path=args.input)
+            if (args.from_date is None) != (args.to_date is None):
+                raise ValueError("ingest-files requires both --from-date and --to-date")
+            result = _run_ingest_files(run_id=args.run_id, input_path=args.input, from_date=args.from_date, to_date=args.to_date)
         elif args.command == "build-silver":
             result = _run_build_silver(
                 run_id=args.run_id,

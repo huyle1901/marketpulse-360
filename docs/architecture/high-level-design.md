@@ -734,8 +734,21 @@ collector source counts with failing stages named; and Kafka input with replay
 state unknown. The certified read runs independently, so a slow or missing
 dashboard cannot block the operations reads.
 
-The history preparation/replay controller and isolated Compose deployment are
-specified in [the redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
+History preparation primitives are implemented. `ingest-files --from-date
+--to-date` pins complete daily ad/CRM inputs for one half-open window. It
+requires every date to have CRM and all three platform reports, and keeps
+shared master files and manifest lineage. Replay accepts the same UTC window,
+merges one day at a time in event-time order, and with `--resume-state` keeps a
+fail-closed cursor. The cursor is bound to manifest digest, window, Kafka cluster
+ID and DLQ choice. It records a pending batch before sending, and refuses to
+resume after an ambiguous acknowledgement. Day sealing in the generator closes
+completed partitions so a 638-day run keeps only current files open.
+`scripts/story-demo-env.sh` selects the isolated `marketpulse-story-demo`
+project, its non-conflicting ports and a 3 GiB Flink TaskManager. The
+TaskManager size and an explicit checkpoint restore path are Compose variables,
+with unchanged defaults.
+
+The remaining controller automation and isolated deployment are specified in [the redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
 and remain separate implementation tasks.
 
 ## 5. Kafka design

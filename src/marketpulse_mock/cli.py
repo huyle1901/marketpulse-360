@@ -16,6 +16,7 @@ from .generator import generate_dataset
 from .kafka_client import ConfluentKafkaPublisher, create_topics
 from .registry import register_contracts
 from .replay import replay
+from .replay_cursor import replay_window
 from .replay_pacing import PacingConfig, ReplayController, ReplayPacer
 from .replay_reader import iter_replay_records
 from .validator import validate_dataset
@@ -56,6 +57,10 @@ def build_parser() -> argparse.ArgumentParser:
     kafka_replay.add_argument("--input", type=Path, required=True)
     kafka_replay.add_argument("--bootstrap-servers", default="localhost:9092")
     kafka_replay.add_argument("--include-dlq", action="store_true")
+    kafka_replay.add_argument("--from-date", type=date.fromisoformat, help="inclusive UTC event date")
+    kafka_replay.add_argument("--to-date", type=date.fromisoformat, help="exclusive UTC event date")
+    kafka_replay.add_argument("--resume-state", type=Path, help="durable acknowledged replay cursor")
+    kafka_replay.add_argument("--init-state", action="store_true", help="initialize a new cursor after history preparation")
     pacing = kafka_replay.add_mutually_exclusive_group()
     pacing.add_argument("--speed", type=float)
     pacing.add_argument("--events-per-second", type=float)
@@ -127,6 +132,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"error: {error}", file=sys.stderr)
             return 0 if summary.success else 2
         if args.command == "kafka" and args.kafka_command == "replay":
+            if args.init_state and args.resume_state is None:
+                raise ValueError("--init-state requires --resume-state")
+            if args.resume_state is not None and (args.from_date is None or args.to_date is None):
+                raise ValueError("resumable replay requires --from-date and --to-date")
             config = PacingConfig(
                 speed=(
                     args.speed
@@ -152,8 +161,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 file=sys.stderr,
             )
             publisher = ConfluentKafkaPublisher(args.bootstrap_servers)
+            if args.resume_state is not None:
+                summary = replay_window(
+                    args.input, args.resume_state, args.from_date, args.to_date,
+                    publisher, ReplayPacer(config, controller), controller,
+                    target_id=publisher.cluster_id(), initialize=args.init_state,
+                    include_dlq=args.include_dlq,
+                )
+                print(json.dumps(summary.to_dict(), sort_keys=True))
+                return 0
             summary = replay(
-                iter_replay_records(args.input, include_dlq=args.include_dlq),
+                iter_replay_records(args.input, include_dlq=args.include_dlq, from_date=args.from_date, to_date=args.to_date),
                 publisher,
                 ReplayPacer(config, controller),
                 controller,

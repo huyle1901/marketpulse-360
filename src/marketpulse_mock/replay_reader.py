@@ -7,7 +7,7 @@ import heapq
 import json
 from contextlib import ExitStack
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Iterator, TextIO
 
@@ -49,8 +49,14 @@ class _Cursor:
 def iter_replay_records(
     root: Path,
     include_dlq: bool = False,
+    *,
+    from_date: date | None = None,
+    to_date: date | None = None,
 ) -> Iterator[ReplayRecord]:
     """Validate and merge replayable parts in deterministic event-time order."""
+
+    if (from_date is not None and type(from_date) is not date) or (to_date is not None and type(to_date) is not date) or (from_date is not None and to_date is not None and from_date >= to_date):
+        raise ValueError("invalid UTC replay [from_date,to_date) window")
 
     root = Path(root)
     report = validate_dataset(root)
@@ -60,15 +66,31 @@ def iter_replay_records(
     allowed = {"web_events", "orders", "email_events"}
     if include_dlq:
         allowed.add("quality_cases")
-    files = sorted(
-        (
-            item
-            for item in manifest["files"]
-            if item.get("dataset") in allowed
-        ),
-        key=lambda item: str(item["relative_path"]),
-    )
+    files_by_date: dict[date, list[dict[str, object]]] = {}
+    for item in manifest["files"]:
+        if item.get("dataset") not in allowed:
+            continue
+        relative_path = str(item["relative_path"])
+        partition = _partition_date(relative_path)
+        if (from_date is not None and partition < from_date) or (to_date is not None and partition >= to_date):
+            continue
+        files_by_date.setdefault(partition, []).append(item)
 
+    for partition in sorted(files_by_date):
+        yield from _merge_day(root, sorted(files_by_date[partition], key=lambda item: str(item["relative_path"])), partition)
+
+
+def _partition_date(relative_path: str) -> date:
+    matches = [part[5:] for part in Path(relative_path).parts if part.startswith("date=")]
+    if len(matches) != 1:
+        raise ValueError(f"replay file needs one date partition: {relative_path}")
+    try:
+        return date.fromisoformat(matches[0])
+    except ValueError as error:
+        raise ValueError(f"invalid replay date partition: {relative_path}") from error
+
+
+def _merge_day(root: Path, files: list[dict[str, object]], partition: date) -> Iterator[ReplayRecord]:
     with ExitStack() as stack:
         cursors: list[_Cursor] = []
         heap: list[tuple[datetime, str, str, int, int, dict[str, object]]] = []
@@ -86,7 +108,10 @@ def iter_replay_records(
         while heap:
             _, _, _, _, cursor_index, row = heapq.heappop(heap)
             cursor = cursors[cursor_index]
-            yield _to_replay_record(cursor.dataset, cursor.relative_path, row)
+            candidate = _to_replay_record(cursor.dataset, cursor.relative_path, row)
+            if candidate.event_time.date() != partition:
+                raise ValueError(f"event time differs from replay partition: {cursor.relative_path}")
+            yield candidate
             next_row = cursor.next_row()
             if next_row is not None:
                 _push(heap, cursor_index, cursor, next_row)
