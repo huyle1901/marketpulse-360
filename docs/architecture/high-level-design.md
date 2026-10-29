@@ -813,6 +813,17 @@ lineage but never enter that release. `/insights/products` serves the categories
 top products and device gross shares. AOV by device is not served, because
 product-grain rows cannot count multi-item orders once per device.
 
+Geography (Phase 3) adds non-null `country` and `city` from `master/customers` to
+`silver.customers`, which is already exported as the `customers` serving
+relation; Gold is unchanged. `/insights/geography` joins `customer_360` to
+`customers` (with `join_use_nulls=0` explicit). Non-customer and unmatched
+profiles stay "location unknown". It fails closed unless the cities plus unknown
+equal the `customer_360` net, and reports `unavailable` for releases whose
+`customers` relation lacks `city`. The UI plots bubbles at bundled approximate
+city coordinates; no basemap or geodata is downloaded. A test now requires every
+exported relation's dbt `required_fields` to equal its contract's non-null
+columns.
+
 The remaining controller automation (daily certification of continuation days) is specified in [the redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
 and remain separate implementation tasks.
 

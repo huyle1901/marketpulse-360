@@ -51,7 +51,7 @@ class LakehouseContractTests(unittest.TestCase):
                 ("months(event_date)",),
             ),
             "silver.customers": (
-                ("customer_id", "created_at", "snapshot_date", "loyalty_tier", "lifetime_value_minor", "last_order_at", "consent_analytics", "consent_marketing", "source_file", "source_row_number"),
+                ("customer_id", "created_at", "snapshot_date", "loyalty_tier", "lifetime_value_minor", "last_order_at", "consent_analytics", "consent_marketing", "country", "city", "source_file", "source_row_number"),
                 ("customer_id",),
                 (),
             ),

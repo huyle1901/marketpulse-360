@@ -151,3 +151,32 @@ class InsightsService(LifecycleService):
                      'devices': device_rows,
                      'definition': 'Certified order lines by product and purchase device; refunds are allocated to the original items on the refund date.',
                      'provenance': provenance})
+
+    def geography(self) -> dict[str, object]:
+        """Certified customer net revenue by latest master city; non-customer or unmatched profiles stay location unknown."""
+        session, _, _, provenance = self._context(detail=False)
+        database = session.release.database
+        provenance = provenance | {'model': 'gold.customer_360 + customers', 'serving_relation': 'customer_360'}
+        present = session._query("SELECT count() AS present FROM system.columns WHERE database={database:String} AND table='customers' AND name='city'",
+                                 {'database': database})[0]['present']
+        if not int(present):
+            return wire({'status': 'unavailable', 'message': 'This certified release predates customer location; publish a newer release.', 'provenance': provenance})
+        rows = session._query(f"""SELECT p.profile_type='customer' AND c.customer_id!='' AS located, if(located, c.country, '') AS country, if(located, c.city, '') AS city,
+            count() AS customers, sum(toInt128(p.order_count)) AS orders, sum(toInt128(p.net_revenue_minor)) AS net_revenue_minor
+            FROM {database}.customer_360 p LEFT JOIN (SELECT customer_id, country, city FROM {database}.customers) c ON c.customer_id=p.customer_id
+            GROUP BY located, country, city SETTINGS join_use_nulls=0""")
+        gold_net = int(session._query(f'SELECT sum(toInt128(net_revenue_minor)) AS gold_net FROM {database}.customer_360')[0]['gold_net'])
+        cities, unknown = [], {'profiles': 0, 'orders': 0, 'net_revenue_minor': 0}
+        for row in rows:
+            customers, orders, net = int(row['customers']), int(row['orders']), int(row['net_revenue_minor'])
+            if int(row['located']):
+                cities.append({'country': row['country'], 'city': row['city'], 'customers': customers, 'orders': orders, 'net_revenue_minor': net,
+                               'net_per_customer_minor': (abs(net) // customers) * (-1 if net < 0 else 1) if customers else None})
+            else:
+                unknown = {'profiles': unknown['profiles'] + customers, 'orders': unknown['orders'] + orders, 'net_revenue_minor': unknown['net_revenue_minor'] + net}
+        if sum(c['net_revenue_minor'] for c in cities) + unknown['net_revenue_minor'] != gold_net:
+            raise LifecycleError('reconciliation_failed')
+        cities.sort(key=lambda c: (-c['net_revenue_minor'], c['city']))
+        return wire({'status': 'available', 'currency': provenance.get('currency'), 'cities': cities, 'unknown': unknown, 'total_net_revenue_minor': gold_net,
+                     'definition': 'Identified customers by their master-record city as of the certified release; anonymous and unmatched profiles are location unknown.',
+                     'provenance': provenance})

@@ -611,6 +611,7 @@ def _integer_text(value: object, field: str) -> int:
 
 def build_customers(source_rows: Iterable[Mapping[str, object]]) -> tuple[dict[str, object], ...]:
     created_at: dict[str, datetime] = {}
+    location: dict[str, tuple[str, str]] = {}
     crm: dict[str, tuple[tuple[date, str, int], Mapping[str, object], dict[str, Any]]] = {}
     for row in source_rows:
         dataset = row.get("source_dataset")
@@ -621,6 +622,7 @@ def build_customers(source_rows: Iterable[Mapping[str, object]]) -> tuple[dict[s
             if customer_id in created_at:
                 raise ValueError(f"duplicate master customer: {customer_id}")
             created_at[customer_id] = _instant(payload.get("created_at"), "created_at")
+            location[customer_id] = (_required_string(payload.get("country"), "country"), _required_string(payload.get("city"), "city"))
         elif dataset == "crm":
             customer_id = _required_string(payload.get("customer_id"), "customer_id")
             try:
@@ -653,6 +655,8 @@ def build_customers(source_rows: Iterable[Mapping[str, object]]) -> tuple[dict[s
                 "consent_marketing": _boolean_text(
                     payload.get("consent_marketing"), "consent_marketing"
                 ),
+                "country": location[customer_id][0],
+                "city": location[customer_id][1],
                 "source_file": source_file,
                 "source_row_number": row_number,
             }
@@ -1264,6 +1268,8 @@ def _build_dimension_frames(spark: Any, source: Any) -> dict[str, Any]:
         return (
             _required_string(payload.get("customer_id"), "customer_id"),
             _instant(payload.get("created_at"), "created_at"),
+            _required_string(payload.get("country"), "country"),
+            _required_string(payload.get("city"), "city"),
         )
 
     def parse_crm(row: Any) -> tuple[object, ...]:
@@ -1293,7 +1299,7 @@ def _build_dimension_frames(spark: Any, source: Any) -> dict[str, Any]:
         source.filter(F.col("source_dataset") == "master/customers").rdd.map(
             parse_customer_master
         ),
-        "customer_id string, created_at timestamp",
+        "customer_id string, created_at timestamp, country string, city string",
     )
     duplicate_customer = customer_master.groupBy("customer_id").count().filter(
         F.col("count") != 1
