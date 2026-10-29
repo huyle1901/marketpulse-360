@@ -4,6 +4,7 @@ import {useUrlState,choice} from '../../lib/useUrlState';
 import FilterActions from '../../components/FilterActions';
 import CohortHeatmap from '../../components/CohortHeatmap';
 import CustomerSummary from '../../components/CustomerSummary';
+import {CustomerMix} from '../../components/Engagement';
 import ProfileDetail from '../../components/ProfileDetail';
 import Segments from './segments';
 import type {Cohorts,Profiles,Timeline,Provenance} from './types';
@@ -52,6 +53,7 @@ export default function Customers(){
  {c&&p&&<>
  <p className="scope-note">{c.population}</p><p>As of {c.provenance.as_of} · {c.provenance.historical?'Historical data':'Certified data'} · {c.provenance.currency||p.provenance.currency||'Declared currency'} · Lifetime observed metrics, not predictions</p>
  <div className="customer-kpis kpi-group"><article><span>Historical profiles</span><strong>{exact(c.totals.profiles_total)}</strong></article><article><span>Eligible for activation in release</span><strong>{exact(c.totals.activation_eligible_total)}</strong></article><article><span>Matching discovery purpose: {p.purpose}</span><strong>{exact(p.total)}</strong></article></div>
+ <CustomerMix/>
  <CustomerSummary identity={c.provenance.identity} profilesTotal={c.totals.profiles_total} onOpportunity={value=>update('opportunity',value)}/>
  <section id="cohorts" className="panel"><div className="section-heading"><div><h2>Cohort retention</h2><p>Each cell retains its original cohort denominator. Missing/future cells are not invented zeros.</p></div><span className="badge neutral">Click an activity cell to drill</span></div>
  <CohortHeatmap rows={c.rows} onDrill={row=>setFilters(current=>({...current,cohort_month:row.cohort_month,activity_month:row.activity_month,profile_type:row.profile_type,opportunity:'',offset:'0'}))}/>

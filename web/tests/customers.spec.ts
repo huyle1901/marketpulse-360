@@ -16,6 +16,7 @@ test.beforeEach(async({page})=>{saved=[];await page.route('**/api/v1/lifecycle/*
  if(path.includes('/timeline'))return route.fulfill({json:timeline});
  if(path.endsWith('/profiles'))return route.fulfill({json:{...profiles,purpose:url.searchParams.get('purpose')||'analytics'}});
  if(path.endsWith('/preview')){const rule=route.request().postDataJSON().rule;return route.fulfill({json:{rows:[profile],matched_total:'1',excluded_from_activation_total:'1',purpose:rule.purpose,rule_digest:digest(rule),evaluation_key:'e'.repeat(64),provenance:prov,sample_truncated:false,sample_limit:'20'}});}
+ if(path.endsWith('/customer-mix')||path.endsWith('/email-engagement'))return route.fulfill({json:{status:'unavailable',months:[],message:'Projection unavailable in this fixture',provenance:prov}});
  if(path.endsWith('/segments')&&method==='GET')return route.fulfill({json:saved.slice(-1)});
  if(path.includes('/versions/'))return route.fulfill({json:saved[Number(path.split('/').pop())-1]});
  const body=route.request().postDataJSON();const result={segment_id:segmentId,version:String(saved.length+1),name:body.name,rule:body.rule,rule_digest:digest(body.rule)};saved.push(result);return route.fulfill({json:result});

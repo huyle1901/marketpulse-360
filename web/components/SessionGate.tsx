@@ -2,7 +2,7 @@
 import {createContext,useContext,useEffect,useRef,useState} from 'react';
 import {usePathname,useRouter} from 'next/navigation';
 import Link from 'next/link';
-import {Activity,LayoutDashboard,Megaphone,LogOut,Radio,Route,ShieldCheck,Users} from 'lucide-react';
+import {Activity,LayoutDashboard,Mail,Megaphone,LogOut,Radio,Route,ShieldCheck,Users} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import CohortHeatmap from './CohortHeatmap';
 import type {Cohort} from '../app/customers/types';
@@ -46,7 +46,7 @@ export default function SessionGate({children}:{children:React.ReactNode}){
  if(loading)return <main><p role="status">Checking session…</p></main>;
  if(!principal)return <Login error={error} onLogin={()=>{authEpoch.current++;setLoading(true);setRetry(v=>v+1);}}/>;
  if(path==='/login')return <main><h1>Signed in</h1><Link href="/">Open Command Center</Link></main>;
- const links:[string,string,typeof LayoutDashboard][]=[['/','Overview',LayoutDashboard],['/ads','Ad performance',Megaphone],['/live','Live activity',Radio],['/analysis','Journey analysis',Route],['/customers','Customers',Users],...(canAdmin?[['/operations','Data health',ShieldCheck] as [string,string,typeof LayoutDashboard]]:[])];
+ const links:[string,string,typeof LayoutDashboard][]=[['/','Overview',LayoutDashboard],['/ads','Ad performance',Megaphone],['/live','Live activity',Radio],['/analysis','Journey analysis',Route],['/customers','Customers',Users],['/email','Email',Mail],...(canAdmin?[['/operations','Data health',ShieldCheck] as [string,string,typeof LayoutDashboard]]:[])];
  return <Context.Provider value={{principal,canOperate,canAdmin}}>
  <a className="skip-link" href="#main-content">Skip to content</a>
  <div className="min-h-screen md:grid md:grid-cols-[232px_minmax(0,1fr)]">
