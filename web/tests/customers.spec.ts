@@ -22,7 +22,7 @@ test.beforeEach(async({page})=>{saved=[];await page.route('**/api/v1/lifecycle/*
 });});
 
 test('cohort drill, exact RFM, consent and timeline are inspectable',async({page})=>{
- await page.goto('/customers');await expect(page.getByRole('heading',{name:'Customer 360 & Lifecycle'})).toBeVisible();
+ await page.goto('/customers');await expect(page.getByRole('heading',{name:'Customers',level:1})).toBeVisible();
  await expect(page.getByText(cohorts.population,{exact:true})).toBeVisible();
  await expect(page.getByText('9,007,199,254,740,990',{exact:true}).first()).toBeVisible();
  await page.getByRole('button',{name:'Explore cohort 2025-12-01 customer active 2026-01-01'}).click();

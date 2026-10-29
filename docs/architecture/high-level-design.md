@@ -719,6 +719,14 @@ sampling model URL state. Charts are labeled as attribution credit, distinct
 from source campaign finance. Exact comparison tables sit in a disclosure, and
 the global reconciliation stays visible. No new endpoint or computation is added.
 
+Customers (`/customers`) leads with exact profile-mix and opportunity counts. These
+are the filtered `total` values of one-row `/lifecycle/profiles` reads per
+identity type and heuristic, accepted only for the displayed release, so they
+are population counts rather than statistics of the loaded 20-row page.
+Heuristics remain labeled rule-based. Unavailable event detail stays unavailable,
+and each count drills into the existing profile filter. The retention heatmap and
+consent-gated segment workflow are unchanged.
+
 The history preparation/replay controller and isolated Compose deployment are
 specified in [the redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
 and remain separate implementation tasks.
