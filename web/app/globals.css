@@ -40,36 +40,39 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(0.985 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.52 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --positive: oklch(0.55 0.14 155);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  /* Stable channel/series colors: Google, Meta, TikTok, unattributed, highlight. */
-  --chart-1: oklch(0.6 0.17 255);
-  --chart-2: oklch(0.58 0.2 295);
-  --chart-3: oklch(0.65 0.13 185);
-  --chart-4: oklch(0.7 0.02 260);
-  --chart-5: oklch(0.72 0.16 65);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-accent: oklch(0.95 0 0);
-  --sidebar-border: oklch(0.922 0 0);
+  --radius: 0.75rem;
+  /* Brand: Stripe-style blue-violet accent used sparingly; deep-navy ink instead of pure black. */
+  --background: #f6f8fb;
+  --foreground: #0d253d;
+  --card: #ffffff;
+  --card-foreground: #0d253d;
+  --popover: #ffffff;
+  --popover-foreground: #0d253d;
+  --primary: #533afd;
+  --primary-foreground: #ffffff;
+  --secondary: #eef1f6;
+  --secondary-foreground: #0d253d;
+  --muted: #eef2f7;
+  --muted-foreground: #5b6b7f;
+  --accent: #efedff;
+  --accent-foreground: #2e1fb0;
+  --destructive: #d92d4b;
+  --positive: #0f8a5f;
+  --border: #e3e8ef;
+  --input: #dbe2ea;
+  --ring: #533afd;
+  --shadow-card: 0 1px 2px rgb(13 37 61 / 0.05), 0 4px 12px -4px rgb(50 50 93 / 0.14);
+  /* Validated categorical order (CVD-checked): Google, Meta, TikTok, unattributed, brand. */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #94a3b8;
+  --chart-5: #533afd;
+  /* Dark "ocean" sidebar. */
+  --sidebar: #0d1b2e;
+  --sidebar-foreground: #c9d4e3;
+  --sidebar-accent: #1b2c45;
+  --sidebar-border: #1e3049;
 }
 
 @layer base {

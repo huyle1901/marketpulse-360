@@ -66,3 +66,6 @@ button[data-slot],a[data-slot]{background:revert-layer;color:revert-layer;border
 .overview-title .metric-switch button{padding:4px 7px;font-size:11px}.overview-title{gap:8px}
 .overview-grid .panel{padding:16px 18px}.period-comparison{padding-top:6px}
 .heatmap-scroll{max-height:560px;overflow:auto}.heatmap th,.heatmap td{padding:3px 4px}.heatmap thead th{position:sticky;top:0;z-index:1}.heatmap .heatmap-value{padding:4px 6px;line-height:1.15;background:transparent;color:inherit;border:0;width:100%;text-align:left}.heatmap .heatmap-value small{font-size:10px}
+.panel,.tool-group,.filters,.table-scroll{box-shadow:var(--shadow-card)}[data-slot=card]{box-shadow:var(--shadow-card)}
+.masthead h1{color:var(--foreground)}#main-content a:not([data-slot]){color:var(--primary)}.link-button:hover{color:var(--primary)}
+.activity-grid th{background:transparent;text-transform:none;letter-spacing:0}

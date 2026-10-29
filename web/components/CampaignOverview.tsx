@@ -8,7 +8,7 @@ import type {DailyMetric} from '../app/types';
 type TrendMetric='net_revenue_minor'|'spend_minor'|'orders';
 const metricLabel:Record<TrendMetric,string>={net_revenue_minor:'net revenue',spend_minor:'ad spend',orders:'orders'};
 const intervalLabel:Record<Granularity,string>={daily:'Daily',weekly:'Weekly',monthly:'Monthly'};
-const tones:Record<TrendMetric,string>={net_revenue_minor:'var(--chart-1)',spend_minor:'var(--chart-5)',orders:'var(--chart-3)'};
+const tones:Record<TrendMetric,string>={net_revenue_minor:'var(--primary)',spend_minor:'var(--chart-2)',orders:'var(--chart-3)'};
 function Trend({rows,currency,metric,granularity}:{rows:DailyMetric[];currency:string;metric:TrendMetric;granularity:Granularity}){
  const buckets=aggregate(rows,granularity),interval=intervalLabel[granularity],plotted=buckets.filter(b=>b[metric]!=null);
  const show=(value:string|null)=>metric==='orders'?exact(value):formatMoney(value,currency);
