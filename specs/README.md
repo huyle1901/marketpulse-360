@@ -314,6 +314,14 @@ days remains pending.
 
 Richer insights Phase 1 (Insights workspace: activity heatmap, order values, loyalty tiers, web vs app) is implemented on `feat/insights-phase-1`; Phase 2 (certified `gold.commerce_daily` and the Products workspace) is implemented on `feat/commerce-phase-2`; Phase 3 (certified customer city and the Geography workspace) is implemented on `feat/geography-phase-3`; Phase 4 (new generator fields) needs separate approval and is specified in [the phased design](../docs/superpowers/specs/2026-10-30-richer-marketing-insights-design.md).
 
+## Live View
+
+**Status:** Implemented on `feat/live-view`. Shopify-style Live View (visitors right now, shopper
+behaviour, today's provisional sales, top products, recent activity) over a ClickHouse projection
+of Flink's clean events, plus a shared visual system across workspaces.
+[Design](../docs/superpowers/specs/2026-10-31-live-view-design.md) ·
+[Plan](../docs/superpowers/plans/2026-10-31-live-view.md).
+
 ## Traceability to the course brief
 
 | Course requirement | Stories |

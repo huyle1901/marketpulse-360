@@ -827,6 +827,28 @@ columns.
 The remaining controller automation (daily certification of continuation days) is specified in [the redesign design](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md)
 and remain separate implementation tasks.
 
+### 4.11 Live View projection
+
+`live-events-worker` (Compose profile `app`, consumer group
+`marketpulse-live-events-v1`, `read_committed`) projects Flink's clean topic
+`marketing.clean.customer-events.v1` into ClickHouse
+`marketpulse_live.events`, a `ReplacingMergeTree` keyed by Kafka partition and
+offset. It writes each polled batch, then commits the next offset per partition;
+a crash replays records that collapse under `FINAL`. The source cluster/topic
+identity is pinned in `marketpulse_live.event_source_identity`. Flink's
+deduplication and lateness verdicts are reused, not reimplemented.
+
+`GET /api/v1/live/view` (viewer) computes a Shopify-style Live View with SQL at
+read time, anchored at the latest admitted event time so replayed history has a
+meaningful "now": visitors in the last 30 minutes by source and device, sessions
+by the furthest journey step reached, today's provisional visitors, sessions,
+conversion and per-currency orders/gross/refunds/net, a 30-minute per-minute
+series, top products today (labels from the pinned release's `commerce_daily`)
+and the latest events without identifiers. Admission matches Silver:
+Flink-eligible and consented events; bot sessions drop web/app events but never
+orders. Every value is provisional and is never added to certified totals; the
+overview links to it only through a separate "shoppers on the store now" chip.
+
 ## 5. Kafka design
 
 Suggested topic naming:

@@ -107,6 +107,23 @@ ambiguous acknowledgement or a changed world. September streams to Live activity
 provisional data. Daily certification of September days and the automated
 pause-at-day-boundary controller are not implemented yet; certified views remain at 2026-08-31.
 
+## Live View (measured 2026-10-31)
+
+Start the projection with the app: `"${dc[@]}" up -d --no-deps --wait app-postgres api web campaign-worker live-events-worker`.
+On first start it reads the clean topic from the earliest offset (261,358 events in about 20 s), then follows the replay.
+After a Flink restart, resubmit from the latest retained checkpoint (`FLINK_RESTORE_PATH=…/chk-<n>`); never reset offsets.
+
+Independent check at replay time 2026-09-03 21:54:30 UTC against the generator files (dedup by event id,
+consented, bot sessions excluded for web/app only):
+
+| Measure | Live View | Source files |
+| --- | --- | --- |
+| Visitors, last 30 minutes | 3 | 3 |
+| Visitors / sessions today | 139 / 146 | 139 / 146 |
+| Orders, gross, refunds, net (VND) | 14, 18,043,000, 807,000, 17,236,000 | 14, 18,043,000, 807,000, 17,236,000 |
+
+The first draft dropped an order placed from a bot-flagged session; Silver keeps such orders, so the rule was aligned.
+
 ## Known limits
 
 - Journey sampling canonicalizes paid touches over the whole projection (~165 MB per
