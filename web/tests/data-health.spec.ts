@@ -29,3 +29,9 @@ test('viewers cannot open data health',async({page})=>{
  await expect(page.getByRole('link',{name:'Data health',exact:true})).toHaveCount(0);
  await expect(page.getByRole('region',{name:'Data health summary'})).toHaveCount(0);
 });
+test('platform status shows source availability as a labelled meter with a marked legend',async({page})=>{
+ await page.goto('/operations');
+ await expect(page.getByRole('img',{name:'Source availability: 1 available, 1 unavailable or stale, 7 unknown of 9 sources'})).toBeVisible();
+ const legend=page.getByRole('list',{name:'Source availability legend'});
+ await expect(legend.getByRole('listitem')).toHaveCount(3);await expect(legend).toContainText('Unavailable / stale');
+});

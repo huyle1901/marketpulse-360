@@ -44,3 +44,11 @@ test('journey analysis fits a phone viewport',async({page})=>{
  await expect(page.getByRole('region',{name:'Attribution credit by channel'})).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
+test('stage reach by channel is a ranked chart with the exact table one step away',async({page})=>{
+ await page.goto('/analysis');const bars=page.getByRole('list',{name:'Sessions by channel'});
+ await expect(bars.getByRole('listitem').first()).toBeVisible();
+ await expect(bars).toContainText('of sessions purchase');
+ await expect(page.getByRole('table',{name:/Stage reach by channel/})).not.toBeVisible();
+ await page.getByText('Exact stage reach by channel',{exact:true}).click();
+ await expect(page.getByRole('table',{name:/Stage reach by channel/})).toBeVisible();
+});

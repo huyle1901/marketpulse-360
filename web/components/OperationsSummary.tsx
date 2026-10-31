@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useState} from 'react';
 import {exact} from '../lib/format';
+import {Legend} from './charts';
 type RecordValue=Record<string,unknown>;
 const record=(value:unknown):RecordValue=>value&&typeof value==='object'&&!Array.isArray(value)?value as RecordValue:{};
 const label=(value:unknown)=>value==null?'Unavailable':String(value).replaceAll('_',' ');
@@ -22,7 +23,13 @@ export function sourceStates(value:RecordValue|undefined,now:number):SourceState
 const tone=(state:string)=>state==='Available'||state==='Passed'?'good':state==='Unknown'||state==='Unavailable'?'unknown':'bad';
 export function PlatformSummary({value}:{value?:RecordValue}){
  const now=useObservationClock();
- return <><p>Operations read: {label(value?.status)}. Source availability reflects the latest collector probe.</p><div className="service-grid">{sourceStates(value,now).map(({key,name,state,observed})=>
+ const states=sourceStates(value,now);
+ const parts=([['Available','Available','var(--positive)'],['Unavailable / stale','Unavailable / stale','var(--destructive)'],['Unknown','Unknown','var(--chart-4)']] as const).map(([state,name,color])=>({key:state,label:name,color,count:states.filter(s=>s.state===state).length}));
+ return <><p>Operations read: {label(value?.status)}. Source availability reflects the latest collector probe.</p>
+ <div className="mt-4 space-y-2"><div role="img" aria-label={`Source availability: ${parts[0].count} available, ${parts[1].count} unavailable or stale, ${parts[2].count} unknown of ${states.length} sources`} className="flex h-3 gap-[2px] overflow-hidden rounded-full">
+  {parts.filter(p=>p.count>0).map(p=><span key={p.key} style={{flexGrow:p.count,background:p.color}}/>)}</div>
+  <Legend label="Source availability legend" items={parts.map(p=>({key:p.key,label:p.label,color:p.color,value:String(p.count)}))}/></div>
+ <div className="service-grid">{states.map(({key,name,state,observed})=>
  <article key={key} aria-label={name+' status'}><h3>{name}</h3><strong className={'health '+tone(state)}>{state}</strong><small>{observed?'Observed '+new Date(observed*1000).toISOString():'No observation available'}</small></article>)}</div></>;
 }
 /** Current only for the matching validated release and a report at most three minutes old. */

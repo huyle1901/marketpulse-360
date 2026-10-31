@@ -22,7 +22,8 @@ test('email workspace summarizes the delivery funnel with honest rates',async({p
  await expect(card('Emails sent')).toContainText('15');await expect(card('Open rate')).toContainText('50.0%');
  await expect(card('Click rate')).toContainText('12.5%');await expect(card('Unsubscribe rate')).toContainText('0.0%');
  await expect(page.getByRole('img',{name:'Monthly emails sent, opened and clicked'})).toBeVisible();
- const table=page.getByRole('table',{name:'Email engagement by month'});
+ await expect(page.getByRole('list',{name:'Email funnel'})).toContainText('Opened');
+ await page.getByText('Exact monthly email values').click();const table=page.getByRole('table',{name:'Email engagement by month'});
  await expect(table.locator('tbody tr').nth(0)).toContainText('Unavailable');
  await expect(page.getByText('not credited with revenue',{exact:false})).toBeVisible();
 });

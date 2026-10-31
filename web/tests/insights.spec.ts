@@ -41,7 +41,8 @@ test('loyalty tiers stay separate from customers without a tier',async({page})=>
 });
 
 test('web vs app compares sessions, orders and conversion',async({page})=>{
- await page.goto('/insights');const table=page.getByRole('table',{name:'Web vs app'});
+ await page.goto('/insights');await expect(page.getByRole('list',{name:'Conversion by source'})).toContainText('8.0%');
+ await page.getByText('Exact web vs app values').click();const table=page.getByRole('table',{name:'Web vs app'});
  await expect(table.getByRole('row',{name:/Web/})).toContainText('5.0%');await expect(table.getByRole('row',{name:/App/})).toContainText('8.0%');
  await expect(table.getByRole('row',{name:/Unknown/})).toContainText('1');
 });

@@ -19,9 +19,9 @@ export type LiveViewReport={status:string;message?:string;anchor:string;window_m
 // The shop floor: each station is a step of the buying journey, in order.
 const STATIONS:Record<string,string>={browsing:'Browsing',viewing_product:'Viewing a product',cart:'Holding a cart',checkout:'Checking out',purchased:'Purchased'};
 // Marker colour carries the kind of event: grey looks, amber intent, green money in, coral money out.
-const KINDS:Record<string,{label:string;tone:string}>={browsing:{label:'Browsing',tone:'bg-slate-400'},viewed_product:{label:'Viewed a product',tone:'bg-slate-500'},
- added_to_cart:{label:'Added to cart',tone:'bg-amber-500'},started_checkout:{label:'Started checkout',tone:'bg-amber-600'},purchased:{label:'Purchased',tone:'bg-emerald-500'},
- order_placed:{label:'Order placed',tone:'bg-emerald-600'},order_refunded:{label:'Order refunded',tone:'bg-rose-500'}};
+const KINDS:Record<string,{label:string;tone:string}>={browsing:{label:'Browsing',tone:'bg-muted-foreground/50'},viewed_product:{label:'Viewed a product',tone:'bg-muted-foreground'},
+ added_to_cart:{label:'Added to cart',tone:'bg-intent'},started_checkout:{label:'Started checkout',tone:'bg-intent'},purchased:{label:'Purchased',tone:'bg-live'},
+ order_placed:{label:'Order placed',tone:'bg-live'},order_refunded:{label:'Order refunded',tone:'bg-refund'}};
 const plural=(value:string,one:string,many:string)=>`${exact(value)} ${value==='1'?one:many}`;
 const SOURCES:Record<string,string>={web:'Web',mobile:'App',commerce:'Store',email:'Email'};
 const MAX_DOTS=24;
@@ -51,35 +51,35 @@ function useLiveView(){
 function ShopFloor({data}:{data:LiveViewReport}){
  const sources=new Map(data.active.by_source.map(row=>[row.source,Number(row.visitors)]));
  const web=sources.get('web')||0,app=sources.get('mobile')||0,split=web+app;
- return <section aria-label="Shop floor" className="live-floor relative overflow-hidden rounded-[22px] text-[#c9d4e3]">
+ return <section aria-label="Shop floor" className="live-floor relative overflow-hidden rounded-[22px] text-muted-foreground">
   <div className="grid gap-8 p-6 md:p-8 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
    <article aria-label="Visitors right now" className="min-w-0">
     <div className="flex items-center gap-2 text-sm"><span className={'live-beacon '+(data.freshness.receiving?'is-on':'')} aria-hidden/>
      <span>{data.freshness.receiving?'Live':'Waiting for events'}</span></div>
-    <div className="live-figure mt-4 text-white">{exact(data.active.visitors)}</div>
-    <p className="mt-1 text-sm text-[#c9d4e3]">people on the store in the last {data.window_minutes} minutes</p>
-    <div className="mt-5 flex h-1.5 overflow-hidden rounded-full bg-white/10" aria-hidden>
-     {split>0&&<><span className="bg-[#34d399]" style={{width:web/split*100+'%'}}/><span className="bg-[#60a5fa]" style={{width:app/split*100+'%'}}/></>}</div>
-    <p className="mt-2 flex gap-4 text-xs text-[#c9d4e3]"><span><i className="mr-1.5 inline-block size-2 rounded-full bg-[#34d399]"/>Web {exact(String(web))}</span><span><i className="mr-1.5 inline-block size-2 rounded-full bg-[#60a5fa]"/>App {exact(String(app))}</span></p>
+    <div className="live-figure mt-4 text-[var(--hero-figure)]">{exact(data.active.visitors)}</div>
+    <p className="mt-1 text-sm text-muted-foreground">people on the store in the last {data.window_minutes} minutes</p>
+    <div className="mt-5 flex h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+     {split>0&&<><span className="bg-live" style={{width:web/split*100+'%'}}/><span className="bg-order" style={{width:app/split*100+'%'}}/></>}</div>
+    <p className="mt-2 flex gap-4 text-xs text-muted-foreground"><span><i className="mr-1.5 inline-block size-2 rounded-full bg-live"/>Web {exact(String(web))}</span><span><i className="mr-1.5 inline-block size-2 rounded-full bg-order"/>App {exact(String(app))}</span></p>
    </article>
    <div className="min-w-0">
     <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-     <h2 className="text-base font-medium text-white">Where shoppers are now</h2>
-     <p className="text-xs text-[#c9d4e3]">Replay time <span className="live-mono text-white">{clock(data.anchor)}</span> UTC · {day(data.anchor)}</p></div>
+     <h2 className="text-base font-medium text-foreground">Where shoppers are now</h2>
+     <p className="text-xs text-muted-foreground">Replay time <span className="live-mono text-foreground">{clock(data.anchor)}</span> UTC · {day(data.anchor)}</p></div>
     <ol aria-label="Shopper behaviour" className="live-aisle mt-6 grid grid-cols-5">
      {data.behaviour.map((row,index)=>{const count=Number(row.sessions),shown=Math.min(count,MAX_DOTS);
       return <li key={row.stage} className="relative flex min-w-0 flex-col items-center text-center">
        <div className="flex h-16 w-full flex-wrap-reverse content-start items-end justify-center gap-1.5 px-1" aria-hidden>
         {Array.from({length:shown},(_,dot)=><span key={dot} className={'live-dot '+(row.stage==='purchased'?'is-bought':'')}/>)}
-        {count>MAX_DOTS&&<span className="text-[10px] text-white/70">+{count-MAX_DOTS}</span>}</div>
+        {count>MAX_DOTS&&<span className="text-[10px] text-foreground/70">+{count-MAX_DOTS}</span>}</div>
        <span className={'live-station '+(count?'is-busy':'')} aria-hidden>{index+1}</span>
        <span className="mt-3 text-[11px] leading-tight sm:text-xs">{STATIONS[row.stage]||row.stage}</span>
-       <span className="live-mono mt-1 text-lg text-white">{exact(row.sessions)}</span>
+       <span className="live-mono mt-1 text-lg text-foreground">{exact(row.sessions)}</span>
       </li>;})}
     </ol>
    </div>
   </div>
-  <p className="border-t border-white/10 px-6 py-3 text-[11px] text-[#8fa3bd] md:px-8">Each dot is one active session at the furthest step it reached · Provisional · not certified · last event received {exact(data.freshness.seconds_since_receipt)}s ago</p>
+  <p className="border-t border-border px-6 py-3 text-[11px] text-muted-foreground md:px-8">Each dot is one active session at the furthest step it reached · Provisional · not certified · last event received {exact(data.freshness.seconds_since_receipt)}s ago</p>
  </section>;
 }
 
@@ -105,8 +105,8 @@ function Minutes({data}:{data:LiveViewReport}){
   <div role="img" aria-label="Visitors and orders per minute, last 30 minutes" className="mt-4">
    <div className="flex h-28 items-end gap-[3px] border-b">{data.series.map(point=>{const v=Number(point.visitors),o=Number(point.orders);
     return <div key={point.minute} className="relative flex h-full flex-1 flex-col justify-end" title={`${clock(point.minute)} UTC · ${v} visitors · ${o} orders`}>
-     {o>0&&<span className="mx-auto mb-1 size-2 rounded-full bg-[#2a78d6]"/>}
-     <span className={'block rounded-t-[3px] '+(v?'bg-[#1baf7a]':'bg-muted')} style={{height:v?Math.max(8,v/peak*100)+'%':'3px'}}/></div>;})}</div>
+     {o>0&&<span className="mx-auto mb-1 size-2 rounded-full bg-order"/>}
+     <span className={'block rounded-t-[3px] '+(v?'bg-live':'bg-muted')} style={{height:v?Math.max(8,v/peak*100)+'%':'3px'}}/></div>;})}</div>
    <div className="mt-1 flex justify-between text-[11px] text-muted-foreground"><span>{clock(data.series[0]?.minute||data.anchor)}</span><span>{clock(data.series[data.series.length-1]?.minute||data.anchor)} UTC</span></div>
   </div>
   <p className="sr-only">{visitors} visitor-minutes and {orders} orders in the last {data.window_minutes} minutes.</p>
@@ -116,12 +116,12 @@ function Minutes({data}:{data:LiveViewReport}){
 function Feed({data}:{data:LiveViewReport}){
  return <section aria-labelledby="feed-heading" className="min-w-0">
   <h2 id="feed-heading" className="text-base font-medium">Happening now</h2>
-  <ol aria-label="Recent activity" className="mt-3">{data.activity.map((row,index)=>{const kind=KINDS[row.kind]||{label:row.kind,tone:'bg-slate-400'};
+  <ol aria-label="Recent activity" className="mt-3">{data.activity.map((row,index)=>{const kind=KINDS[row.kind]||{label:row.kind,tone:'bg-muted-foreground/50'};
    return <li key={index} className="live-step relative flex gap-3 pb-3 pl-1 text-sm">
     <span className={'relative z-10 mt-1.5 size-2.5 shrink-0 rounded-full ring-4 ring-background '+kind.tone} aria-hidden/>
     <div className="min-w-0 flex-1"><p><span className="font-medium">{kind.label}</span>{row.label&&<span className="text-muted-foreground"> · {row.label}</span>}</p>
      <p className="text-xs text-muted-foreground">{ago(row.event_time,data.anchor)} · {SOURCES[row.source]||row.source}{row.device!=='unknown'?' · '+row.device:''}</p></div>
-    {row.amount_minor&&row.currency&&<span className={'live-mono shrink-0 '+(row.kind==='order_refunded'?'text-rose-600':'text-emerald-700')}>{row.kind==='order_refunded'?'−':'+'}{formatMoney(row.amount_minor,row.currency)}</span>}
+    {row.amount_minor&&row.currency&&<span className={'live-mono shrink-0 '+(row.kind==='order_refunded'?'text-refund':'text-live')}>{row.kind==='order_refunded'?'−':'+'}{formatMoney(row.amount_minor,row.currency)}</span>}
    </li>;})}</ol>
  </section>;
 }

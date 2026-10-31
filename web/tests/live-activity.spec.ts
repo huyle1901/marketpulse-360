@@ -29,6 +29,8 @@ test('live activity separates provisional snapshots from certified finance and k
  await expect(summary).toContainText('campaign-day session incidences');
  await expect(page.getByText('Not certified finance',{exact:false}).first()).toBeVisible();
  await expect(page.getByText(/events\/second/i)).toHaveCount(0);
+ await expect(page.getByRole('list',{name:'Provisional net by campaign'})).toContainText('Campaign A');
+ await page.getByText('Exact campaign-day snapshots',{exact:true}).click();
  const table=page.getByRole('table',{name:'Latest campaign-day snapshots'});
  await expect(table).toContainText('Campaign A');await expect(table).toContainText('2026-01-04');
  await page.getByText('Streaming source provenance',{exact:true}).click();
@@ -47,19 +49,33 @@ test('live window starts a week before certified data and runs through the prese
 test('a replaced live snapshot is marked as changed',async({page})=>{
  let calls=0;
  await page.route('**/api/v1/dashboard*',r=>{if(new URL(r.request().url()).searchParams.has('from_date'))calls++;return r.fulfill({json:dashboard([calls<2?live('7','1'):live('9','2')])});});
- await page.goto('/live');const table=page.getByRole('table',{name:'Latest campaign-day snapshots'});
- await expect(table).toContainText('Updated',{timeout:15000});await expect(table).toContainText('9');
- await page.waitForTimeout(5500);await expect(table).toContainText('Updated');
+ await page.goto('/live');const bars=page.getByRole('list',{name:'Provisional net by campaign'});
+ await expect(bars).toContainText('Updated',{timeout:15000});
+ await page.getByText('Exact campaign-day snapshots',{exact:true}).click();
+ const table=page.getByRole('table',{name:'Latest campaign-day snapshots'});
+ await expect(table).toContainText('Updated');await expect(table).toContainText('9');
+ await page.waitForTimeout(5500);await expect(table).toContainText('Updated');await expect(bars).toContainText('Updated');
 });
 
 test('an empty live projection is explicit and draws no fabricated rows',async({page})=>{
  await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:dashboard([])}));
  await page.goto('/live');await expect(page.getByText('No committed streaming snapshot',{exact:false})).toBeVisible();
  await expect(page.getByRole('table',{name:'Latest campaign-day snapshots'})).toHaveCount(0);
+ await expect(page.getByRole('list',{name:'Provisional net by campaign'})).toHaveCount(0);
 });
 
 test('live activity fits a phone viewport',async({page})=>{
  await page.setViewportSize({width:390,height:844});await page.goto('/live');
+ await expect(page.getByRole('list',{name:'Provisional net by campaign'})).toBeVisible();
+ await page.getByText('Exact campaign-day snapshots',{exact:true}).click();
  await expect(page.getByRole('table',{name:'Latest campaign-day snapshots'})).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+});
+
+test('a campaign-day without orders joins its campaign bar instead of adding a currency-less duplicate',async({page})=>{
+ const noOrders={...live('3','2'),metric_key:'a|2026-01-05',order_count:'0',net_revenue_minor:'0',currency:''};
+ const withOrders={...live('7','1'),net_revenue_minor:'1200'};
+ await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:dashboard([withOrders,noOrders])}));
+ await page.goto('/live');const bars=page.getByRole('list',{name:'Provisional net by campaign'});
+ await expect(bars.getByRole('listitem')).toHaveCount(1);await expect(bars).toContainText('Campaign A');await expect(bars).not.toContainText('VND');
 });

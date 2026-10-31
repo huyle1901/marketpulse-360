@@ -1,13 +1,13 @@
 'use client';
 import {useEffect,useState} from 'react';
 import {exact} from '../lib/format';
+import {BarList,Donut} from './charts';
 import {api} from '../app/customers/helpers';
 import type {Profiles} from '../app/customers/types';
 
-const types=[['customer','Customer profiles'],['anonymous','Anonymous device profiles'],['session','Session-only profiles']] as const;
+const types=[['customer','Customer profiles','var(--cat-1)'],['anonymous','Anonymous device profiles','var(--cat-2)'],['session','Session-only profiles','var(--cat-3)']] as const;
 const opportunities=[['high_value','High value','orders ≥1 and net ≥5,000,000 minor units'],['churn_risk','Churn risk','orders ≥1 and recency ≥30 days'],['cart_opportunity','Cart opportunity','cart events ≥1 and no orders']] as const;
 type Count={total:string|null;identity:string};
-const percent=(value:bigint,total:bigint)=>total>0n?Number(value*1000n/total)/10:0;
 
 /** Exact population counts from the filtered profile totals of the displayed release (one-row reads, no sampling). */
 export default function CustomerSummary({identity,profilesTotal,onOpportunity}:{identity:string;profilesTotal:string;onOpportunity:(value:string)=>void}){
@@ -21,16 +21,17 @@ export default function CustomerSummary({identity,profilesTotal,onOpportunity}:{
  },[identity]);
  const values=counts?.identity===identity?counts.values:null;
  const mismatch=values&&Object.values(values).some(v=>v.identity!==identity);
- const total=BigInt(profilesTotal);
  const state=error?<p className="empty">Summary unavailable: {error}</p>:!values?<p className="empty">Loading exact counts…</p>:mismatch?<p className="empty">Counts are from a different certified release; they will update with the next refresh.</p>:null;
- const opportunityMax=values?opportunities.reduce((m,[key])=>{const v=values[key]?.total;return v!=null&&BigInt(v)>m?BigInt(v):m;},1n):1n;
+ const opportunityRows=values?opportunities.map(([key,label,rule])=>({key,label,rule,total:values[key]?.total??null}))
+  .sort((a,b)=>a.total==null?1:b.total==null?-1:Number(BigInt(b.total)-BigInt(a.total))):[];
  return <div className="insight-grid">
   <section className="panel stage-panel" aria-label="Profile mix"><div className="section-heading"><div><h2>Profile mix</h2><p>Historical governed profiles by identity evidence · {exact(profilesTotal)} total</p></div></div>
-   {state||types.map(([key,label])=>{const v=values![key].total;return v==null?<div className="channel-row" key={key}><span>{label}</span><span/><strong>Unavailable</strong></div>:
-    <div className="channel-row" key={key}><span>{label}</span><div className="channel-track" role="img" aria-label={`${label}: ${exact(v)} of ${exact(profilesTotal)}`}><span className="stage" style={{width:percent(BigInt(v),total)+'%'}}/></div><strong>{exact(v)}<small> · {percent(BigInt(v),total)}%</small></strong></div>;})}
+   {state||<Donut name="Profile mix" total={exact(profilesTotal)} caption="profiles" size={148}
+    slices={types.map(([key,label,color])=>{const v=values![key].total;return {key,label,color,value:v==null?0:Number(v),display:v==null?'Unavailable':`${exact(v)} of ${exact(profilesTotal)}`};})}/>}
   </section>
-  <section className="panel stage-panel" aria-label="Opportunity heuristics"><div className="section-heading"><div><h2>Opportunity heuristics</h2><p>Transparent rule-based, not predictions · Historical analytics population</p></div></div>
-   {state||opportunities.map(([key,label,rule])=>{const v=values![key].total;return <div className="channel-row opportunity-row" key={key}><span>{label}<small>{rule}</small></span>{v==null?<span className="source">Event detail unavailable</span>:<div className="channel-track" aria-hidden="true"><span className="stage" style={{width:percent(BigInt(v),opportunityMax)+'%'}}/></div>}<strong>{v==null?'Unavailable':<button className="link-button" aria-label={'Show '+label.toLowerCase()+' profiles'} onClick={()=>onOpportunity(key)}>{exact(v)}</button>}</strong></div>;})}
+  <section className="panel stage-panel" aria-label="Opportunity heuristics"><div className="section-heading"><div><h2>Opportunity heuristics</h2><p>Transparent rule-based, not predictions · Historical analytics population · select a count to list those profiles</p></div></div>
+   {state||<BarList name="Opportunity heuristics ranked by profiles" color="var(--cat-4)" rows={opportunityRows.map(({key,label,rule,total:v})=>({key,label,sub:rule,value:v==null?0:Number(v),
+    display:v==null?<span className="text-muted-foreground">Unavailable</span>:<button className="link-button" aria-label={'Show '+label.toLowerCase()+' profiles'} onClick={()=>onOpportunity(key)}>{exact(v)}</button>}))}/>}
   </section>
  </div>;
 }

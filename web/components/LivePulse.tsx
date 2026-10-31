@@ -15,6 +15,6 @@ export function LivePulse(){
   return()=>{active=false;controller.abort();clearInterval(timer);};
  },[]);
  if(visitors==null)return null;
- return <Link href="/live" className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800 no-underline hover:bg-emerald-100">
-  <span className="size-2 animate-pulse rounded-full bg-emerald-500" aria-hidden/>{exact(visitors)} {visitors==='1'?'shopper':'shoppers'} on the store now · Live View</Link>;
+ return <Link href="/live" className="inline-flex items-center gap-2 rounded-full chip-good px-3 py-1 text-xs font-medium no-underline hover:opacity-90">
+  <span className="size-2 animate-pulse rounded-full bg-live" aria-hidden/>{exact(visitors)} {visitors==='1'?'shopper':'shoppers'} on the store now · Live View</Link>;
 }

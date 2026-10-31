@@ -15,9 +15,10 @@ test.beforeEach(async({page})=>{identity='a'.repeat(64);
 test('customers workspace leads with exact profile mix and opportunity counts',async({page})=>{
  await page.goto('/customers');await expect(page.getByRole('heading',{name:'Customers',level:1})).toBeVisible();
  const mix=page.getByRole('region',{name:'Profile mix'});
- await expect(mix.getByRole('img',{name:'Customer profiles: 40 of 60'})).toBeVisible();
- await expect(mix.getByRole('img',{name:'Anonymous device profiles: 15 of 60'})).toBeVisible();
- await expect(mix.getByRole('img',{name:'Session-only profiles: 5 of 60'})).toBeVisible();
+ await expect(mix.getByRole('img',{name:/Customer profiles 40 of 60.*Anonymous device profiles 15 of 60.*Session-only profiles 5 of 60/})).toBeVisible();
+ await expect(mix.getByRole('list',{name:'Profile mix legend'})).toContainText('Customer profiles');
+ const opportunityBars=page.getByRole('list',{name:'Opportunity heuristics ranked by profiles'});
+ await expect(opportunityBars.getByRole('listitem')).toHaveCount(3);
  const opportunity=page.getByRole('region',{name:'Opportunity heuristics'});
  await expect(opportunity).toContainText('High value');await expect(opportunity).toContainText('9');
  await expect(opportunity).toContainText('Churn risk');await expect(opportunity).toContainText('12');

@@ -14,7 +14,8 @@ test('geography plots positive known cities at their coordinates and ranks every
  const map=page.getByRole('img',{name:'Customer net revenue by city'});
  await expect(map).toContainText('Ho Chi Minh City');await expect(map).toContainText('Ha Noi');
  await expect(map.locator('circle[data-city]')).toHaveCount(2);
- const table=page.getByRole('table',{name:'Net revenue by city'});
+ await expect(page.getByRole('list',{name:'Cities ranked by net revenue'}).getByRole('listitem').first()).toContainText('Ho Chi Minh City');
+ await page.getByText('Exact city values').click();const table=page.getByRole('table',{name:'Net revenue by city'});
  await expect(table.getByRole('row',{name:/Ho Chi Minh City/})).toContainText('₫4,000');
  await expect(table.getByRole('row',{name:/Can Tho/})).toContainText('-₫500');
  await expect(table.getByRole('row',{name:/Hue/})).toBeVisible();
