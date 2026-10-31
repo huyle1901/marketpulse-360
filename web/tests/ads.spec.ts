@@ -17,13 +17,16 @@ test('ad performance is reachable and summarizes efficiency exactly',async({page
 });
 
 test('channels and campaigns compare efficiency, excluding rows with no ad delivery',async({page})=>{
- await page.goto('/ads');const channels=page.getByRole('table',{name:'Efficiency by channel · VND'});
+ await page.goto('/ads');await expect(page.getByRole('list',{name:'Channel legend',exact:true})).toContainText('Google');
+ await expect(page.getByRole('list',{name:'Net ROAS by channel · VND'})).toContainText('Google');
+ await page.getByText('Exact channel values').click();const channels=page.getByRole('table',{name:'Efficiency by channel · VND'});
  await expect(channels.locator('tbody tr')).toHaveCount(2);
  await expect(channels.locator('tbody tr').first()).toContainText('Google');await expect(channels.locator('tbody tr').first()).toContainText('25.00%');
  const share=page.getByRole('region',{name:'Spend share vs revenue share · VND'});
  await expect(share.getByRole('img',{name:'Google: 66.6% of ad spend, 71.4% of net revenue'})).toBeVisible();
  await expect(share.getByRole('img',{name:'Meta: 33.3% of ad spend, 28.5% of net revenue'})).toBeVisible();
- const campaigns=page.getByRole('table',{name:'Efficiency by campaign · VND'});
+ await expect(page.getByRole('img',{name:'Campaign ad spend against net ROAS · VND'})).toBeVisible();
+ await page.getByText('Exact campaign values').click();const campaigns=page.getByRole('table',{name:'Efficiency by campaign · VND'});
  await expect(campaigns.locator('tbody tr').first()).toContainText('Google Traffic 1');
  await expect(campaigns).not.toContainText('Unattributed');
  await expect(page.getByText('Unattributed revenue has no ad delivery',{exact:false})).toBeVisible();

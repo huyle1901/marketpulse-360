@@ -22,6 +22,8 @@ test('products leads with a category and brand treemap of positive net revenue',
 
 test('top products and devices show exact certified values without inventing order counts per device',async({page})=>{
  await page.goto('/products');
+ await expect(page.getByRole('list',{name:'Top products ranked by net revenue'})).toContainText('Nova Phone');
+ await page.getByText('Exact product values').click();
  await expect(page.getByRole('table',{name:'Top products by net revenue'}).getByRole('row',{name:/Nova Phone/})).toContainText('3');
  const devices=page.getByRole('region',{name:'Revenue by purchase device'});
  await expect(devices.getByRole('article',{name:'Mobile'})).toContainText('66.6%');

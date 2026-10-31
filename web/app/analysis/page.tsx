@@ -4,9 +4,12 @@ import FilterActions from '../../components/FilterActions';
 import {useSession} from '../../components/SessionGate';
 import {useEffect,useState} from 'react';
 import AttributionChart from '../../components/AttributionChart';
+import {BarList,ExactValues} from '../../components/charts';
 import {stages,type Model,type Reports,type Provenance,type Credit} from './types';
 const names:Record<Model,string>={first_touch:'First touch',last_touch:'Last touch',linear:'Linear'};
 const stageNames=['Sessions','Page view','View item','Add to cart','Checkout','Purchase'];
+const channelColors:Record<string,string>={google:'var(--chart-1)',meta:'var(--chart-2)',tiktok:'var(--chart-3)'};
+const purchaseRate=(purchase:string,sessions:string)=>BigInt(sessions)>0n?(Number(BigInt(purchase)*10000n/BigInt(sessions))/100).toFixed(2)+'%':'—';
 const exact=(value:string)=>BigInt(value).toLocaleString('en-US');
 async function read<T>(path:string,signal:AbortSignal):Promise<T>{
  const response=await fetch('/api/v1/analysis/'+path,{cache:'no-store',signal});
@@ -61,7 +64,11 @@ export default function Analysis(){
  {f&&a&&<>
  <section id="funnel" className="panel"><div className="section-heading"><div><h2>Funnel stage reach</h2><p>{f.definition}</p></div><span className="badge">{f.provenance.historical?'Historical data':'Certified daily data'}</span></div><strong className="unit">{f.unit}</strong>
  {f.campaigns.length===0?<p className="empty">No funnel data matches this selection.</p>:<div className="stage-chart">{stages.map((stage,index)=>{const reach=stage==='sessions'?(f.totals.sessions==='0'?null:'1.000000'):f.reach_ratios[stage];return <div className="stage-row" key={stage}><span>{stageNames[index]}</span><div className="stage-track" aria-hidden="true"><div style={{width:reach?Math.min(100,Math.max(0,Number(reach)*100))+'%':'0%'}}/></div><strong>{exact(f.totals[stage])}</strong><small>{reach===null||reach===undefined?'Reach unavailable':reach+' of sessions'}</small></div>})}</div>}
- <div className="table-scroll"><table><caption>Stage reach by channel · summed campaign-day buckets</caption><thead><tr><th>Channel</th>{stageNames.map(s=><th key={s}>{s}</th>)}</tr></thead><tbody>{f.channels.map(row=><tr key={row.channel}><td>{['google','meta','tiktok'].includes(row.channel)?<button className="drill" aria-label={'Explore channel '+row.channel} onClick={()=>setFilters(current=>({...current,platform:row.channel,campaign_id:''}))}>{row.channel}</button>:row.channel}</td>{stages.map(s=><td key={s}>{exact(row[s])}</td>)}</tr>)}</tbody></table></div>
+ {f.channels.length>0&&<div className="mt-5 space-y-2"><h3 className="text-sm font-semibold">Sessions by channel</h3><p className="source">Select a paid channel to filter the page.</p>
+ <BarList name="Sessions by channel" rows={[...f.channels].sort((x,y)=>{const a=BigInt(x.sessions),b=BigInt(y.sessions);return a===b?0:a>b?-1:1;}).map(row=>({key:row.channel,value:Number(row.sessions),display:exact(row.sessions),color:channelColors[row.channel]??'var(--chart-4)',
+  label:['google','meta','tiktok'].includes(row.channel)?<button className="link-button" aria-label={'Explore channel '+row.channel} onClick={()=>setFilters(current=>({...current,platform:row.channel,campaign_id:''}))}>{row.channel}</button>:row.channel,
+  sub:<>{exact(row.purchase_sessions)} purchase sessions · {purchaseRate(row.purchase_sessions,row.sessions)} of sessions purchase</>}))}/></div>}
+ <ExactValues label="Exact stage reach by channel"><div className="table-scroll"><table><caption>Stage reach by channel · summed campaign-day buckets</caption><thead><tr><th>Channel</th>{stageNames.map(s=><th key={s}>{s}</th>)}</tr></thead><tbody>{f.channels.map(row=><tr key={row.channel}><td>{row.channel}</td>{stages.map(s=><td key={s}>{exact(row[s])}</td>)}</tr>)}</tbody></table></div></ExactValues>
  <details className="campaign-reach"><summary>Campaign stage reach and drill-down</summary><div className="table-scroll"><table><thead><tr><th>Campaign</th>{stageNames.map(s=><th key={s}>{s}</th>)}</tr></thead><tbody>{f.campaigns.map(row=><tr key={row.campaign_id}><td>{row.campaign_name}</td>{stages.map(s=><td key={s}>{exact(row[s])}</td>)}</tr>)}</tbody></table></div></details><Source value={f.provenance} label="Funnel"/></section>
  <section id="attribution" className="panel"><div className="section-heading"><div><h2>Attribution comparison</h2><p>Selected campaign credit · {a.currency} minor units · Refunds recognized on refund date using original purchase touches.</p></div><span className="badge neutral">Inclusive 30-day paid-touch window</span></div>
  <div className="model-grid">{a.models.map(row=><article className="model-card" key={row.model}><h3>{names[row.model]}</h3><p>{row.definition}</p><dl><dt>Gross credit</dt><dd>{exact(row.gross_revenue_minor)}</dd><dt>Refund credit</dt><dd>{exact(row.refund_amount_minor)}</dd><dt>Net credit</dt><dd>{exact(row.net_revenue_minor)}</dd><dt>Allocated orders</dt><dd>{row.allocated_order_count}</dd></dl></article>)}</div>

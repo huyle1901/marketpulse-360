@@ -2,6 +2,9 @@
 
 import {useEffect,useState} from 'react';
 import {Card,CardContent,CardDescription,CardHeader,CardTitle} from '@/components/ui/card';
+import {StatStrip} from '../../components/StatStrip';
+import {BarList,ExactValues,Legend} from '../../components/charts';
+import {CampaignScatter} from '../../components/CampaignScatter';
 import {Table,TableBody,TableCell,TableHead,TableHeader,TableRow} from '@/components/ui/table';
 import {exact,formatMoney} from '../../lib/format';
 import {multiple,percent,perUnit} from '../../lib/metrics';
@@ -9,6 +12,7 @@ import {useUrlState,choice} from '../../lib/useUrlState';
 import type {Dashboard,Metric} from '../types';
 
 const channelNames:Record<string,string>={google:'Google',meta:'Meta',tiktok:'TikTok'};
+const channelColors:Record<string,string>={google:'var(--chart-1)',meta:'var(--chart-2)',tiktok:'var(--chart-3)'};
 type Sums={spend:bigint;net:bigint;gross:bigint;orders:bigint;clicks:bigint;impressions:bigint};
 const zero=():Sums=>({spend:0n,net:0n,gross:0n,orders:0n,clicks:0n,impressions:0n});
 const add=(sum:Sums,row:Metric)=>{sum.spend+=BigInt(row.spend_minor);sum.net+=BigInt(row.net_revenue_minor);sum.gross+=BigInt(row.gross_revenue_minor??'0');sum.orders+=BigInt(row.orders);sum.clicks+=BigInt(row.clicks??'0');sum.impressions+=BigInt(row.impressions??'0');return sum;};
@@ -58,17 +62,31 @@ export default function AdPerformance(){
     ['Click-through rate',percent(t(total.clicks),t(total.impressions))??'Unavailable','Clicks ÷ impressions'],['Cost per click',money(perUnit(t(total.spend),t(total.clicks))),'Ad spend ÷ clicks'],
     ['Cost per order',money(perUnit(t(total.spend),t(total.orders))),'Ad spend ÷ orders'],['Net ROAS',multiple(t(total.net),t(total.spend))??'Unavailable','Net revenue ÷ ad spend']];
    return <div key={currency} className="min-w-0 space-y-4">
-    <section aria-label={'Ad efficiency · '+currency} className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">{kpis.map(([name,value,hint])=><Card key={name} role="article" aria-label={name} className="gap-1 py-3"><CardHeader className="px-3.5"><CardTitle className="text-xs font-medium text-muted-foreground">{name}</CardTitle></CardHeader><CardContent className="px-3.5"><div className="text-2xl font-semibold tracking-tight tabular-nums">{value}</div><p className="mt-1 text-xs text-muted-foreground">{hint}</p></CardContent></Card>)}</section>
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] [&>*]:min-w-0">
+    <StatStrip label={'Ad efficiency · '+currency} className="xl:grid-cols-6" items={kpis.map(([name,value,hint])=>({name,value,hint}))}/>
+    <div className="grid gap-4 xl:grid-cols-2 [&>*]:min-w-0">
      <Card className="min-w-0"><CardHeader><CardTitle>Spend share vs revenue share</CardTitle><CardDescription>A channel earning a bigger share of revenue than of spend is outperforming · {currency}</CardDescription></CardHeader><CardContent>
-      <section aria-label={'Spend share vs revenue share · '+currency} className="space-y-4">{channels.map(([c,sums])=>{const spend=share(sums.spend,total.spend),net=total.net>0n&&sums.net>=0n?share(sums.net,total.net):null;const name=channelNames[c]||c;
-       return <div key={c} role="img" aria-label={`${name}: ${spend??'unavailable'} of ad spend, ${net??'unavailable'} of net revenue`} className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-3 text-sm"><span className="font-medium">{name}</span><div className="space-y-1.5">
+      <Legend label="Share legend" items={[{key:'spend',label:'Ad spend share',color:'var(--chart-4)'},{key:'net',label:'Net revenue share',color:'var(--primary)'}]}/>
+      <section aria-label={'Spend share vs revenue share · '+currency} className="mt-4 space-y-4">{channels.map(([c,sums])=>{const spend=share(sums.spend,total.spend),net=total.net>0n&&sums.net>=0n?share(sums.net,total.net):null;const name=channelNames[c]||c;
+       return <div key={c} role="img" aria-label={`${name}: ${spend??'unavailable'} of ad spend, ${net??'unavailable'} of net revenue`} className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-3 text-sm"><span className="flex items-center gap-1.5 font-medium"><span className="inline-block size-2.5 rounded-[3px]" style={{background:channelColors[c]}} aria-hidden="true"/>{name}</span><div className="space-y-1.5">
         {([['Ad spend',spend,'var(--chart-4)'],['Net revenue',net,'var(--primary)']] as const).map(([label,value,color])=><div key={label} className="flex items-center gap-2"><div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full" style={{width:value??'0%',background:color}}/></div><span className="w-28 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{value??'—'} {label.toLowerCase()}</span></div>)}
-       </div></div>;})}</section>
-      <p className="mt-3 text-xs text-muted-foreground">Shares of paid-channel totals for the selected window; exact amounts are in the tables.</p></CardContent></Card>
-     <Card><CardHeader><CardTitle>Efficiency by channel</CardTitle><CardDescription>Which platform buys attention and orders most cheaply</CardDescription></CardHeader><CardContent><Table aria-label={'Efficiency by channel · '+currency}><TableHeader><TableRow><TableHead>Channel</TableHead>{header.map(h=><TableHead key={h} className="text-right">{h}</TableHead>)}</TableRow></TableHeader><TableBody>{channels.map(([c,s])=><TableRow key={c}><Efficiency label={channelNames[c]||c} sums={s} currency={currency}/></TableRow>)}</TableBody></Table></CardContent></Card>
+       </div></div>;})}</section></CardContent></Card>
+     <Card className="min-w-0"><CardHeader><CardTitle>Efficiency by channel</CardTitle><CardDescription>Which platform buys attention and orders most cheaply · {currency}</CardDescription></CardHeader><CardContent>
+      <Legend label="Channel legend" items={channels.map(([c])=>({key:c,label:channelNames[c]||c,color:channelColors[c]}))}/>
+      <div className="mt-4 grid gap-x-6 gap-y-5 sm:grid-cols-2">{([
+        ['Click-through rate','higher is better',(s:Sums)=>s.impressions>0n?Number(s.clicks)/Number(s.impressions):0,(s:Sums)=>percent(t(s.clicks),t(s.impressions))??'—'],
+        ['Net ROAS','higher is better',(s:Sums)=>s.spend>0n?Number(s.net)/Number(s.spend):0,(s:Sums)=>multiple(t(s.net),t(s.spend))??'—'],
+        ['Cost per click','lower is better',(s:Sums)=>s.clicks>0n?Number(s.spend)/Number(s.clicks):0,(s:Sums)=>money(perUnit(t(s.spend),t(s.clicks)))],
+        ['Cost per order','lower is better',(s:Sums)=>s.orders>0n?Number(s.spend)/Number(s.orders):0,(s:Sums)=>money(perUnit(t(s.spend),t(s.orders)))],
+       ] as const).map(([metric,direction,value,display])=><div key={metric} className="min-w-0">
+        <p className="mb-2 text-sm font-medium">{metric} <span className="font-normal text-xs text-muted-foreground">· {direction}</span></p>
+        <BarList name={metric+' by channel · '+currency} rows={channels.map(([c,sums])=>({key:c,label:channelNames[c]||c,value:value(sums),display:display(sums),color:channelColors[c]}))}/></div>)}</div>
+      <ExactValues label="Exact channel values"><Table aria-label={'Efficiency by channel · '+currency}><TableHeader><TableRow><TableHead>Channel</TableHead>{header.map(h=><TableHead key={h} className="text-right">{h}</TableHead>)}</TableRow></TableHeader><TableBody>{channels.map(([c,s])=><TableRow key={c}><Efficiency label={channelNames[c]||c} sums={s} currency={currency}/></TableRow>)}</TableBody></Table></ExactValues>
+     </CardContent></Card>
     </div>
-    <Card className="min-w-0"><CardHeader><CardTitle>Efficiency by campaign</CardTitle><CardDescription>Sorted by ad spend · open a campaign on the Overview for budgets and alerts</CardDescription></CardHeader><CardContent><Table aria-label={'Efficiency by campaign · '+currency}><TableHeader><TableRow><TableHead>Campaign</TableHead>{header.map(h=><TableHead key={h} className="text-right">{h}</TableHead>)}</TableRow></TableHeader><TableBody>{[...rows].sort((a,b)=>{const x=BigInt(a.spend_minor),y=BigInt(b.spend_minor);return x===y?(a.campaign_name||'').localeCompare(b.campaign_name||''):x>y?-1:1;}).map(r=><TableRow key={r.campaign_id}><Efficiency label={r.campaign_name||r.campaign_id} sums={add(zero(),r)} currency={currency}/></TableRow>)}</TableBody></Table></CardContent></Card>
+    <Card className="min-w-0"><CardHeader><CardTitle>Campaigns: spend vs return</CardTitle><CardDescription>Each bubble is a campaign; further right spends more, higher returns more net revenue per unit of spend, bigger has more orders · {currency}</CardDescription></CardHeader><CardContent>
+     <CampaignScatter rows={rows} currency={currency}/>
+     <ExactValues label="Exact campaign values"><Table aria-label={'Efficiency by campaign · '+currency}><TableHeader><TableRow><TableHead>Campaign</TableHead>{header.map(h=><TableHead key={h} className="text-right">{h}</TableHead>)}</TableRow></TableHeader><TableBody>{[...rows].sort((a,b)=>{const x=BigInt(a.spend_minor),y=BigInt(b.spend_minor);return x===y?(a.campaign_name||'').localeCompare(b.campaign_name||''):x>y?-1:1;}).map(r=><TableRow key={r.campaign_id}><Efficiency label={r.campaign_name||r.campaign_id} sums={add(zero(),r)} currency={currency}/></TableRow>)}</TableBody></Table></ExactValues>
+    </CardContent></Card>
    </div>;
   })}
   {undelivered.length>0&&<p className="source">Unattributed revenue has no ad delivery, so it is excluded from efficiency metrics; it remains in Overview totals.</p>}

@@ -21,7 +21,7 @@ function Trend({rows,currency,metric,granularity}:{rows:DailyMetric[];currency:s
  const config={value:{label:metricLabel[metric],color:tones[metric]}} satisfies ChartConfig;
  return <figure className="trend" data-segments={segments}><figcaption><strong>{metric==='net_revenue_minor'?'Net revenue':metric==='spend_minor'?'Ad spend':'Orders'} trend · {currency}</strong><span className="legend">{interval} totals · hollow points are partial periods · gaps mean no published data</span></figcaption>
  {!plotted.length?<p className="empty">{interval} {metricLabel[metric]} unavailable for this selection.</p>:
- <div role="img" aria-label={name}><ChartContainer config={config} className="aspect-auto h-[200px] w-full">
+ <div role="img" aria-label={name}><ChartContainer config={config} className="aspect-auto h-[176px] w-full">
   <AreaChart data={points} margin={{left:4,right:12,top:8}}>
    <defs><linearGradient id={'fill-'+metric} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--color-value)" stopOpacity={0.35}/><stop offset="95%" stopColor="var(--color-value)" stopOpacity={0.03}/></linearGradient></defs>
    <CartesianGrid vertical={false}/>
