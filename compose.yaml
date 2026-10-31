@@ -175,6 +175,28 @@ services:
         limits:
           memory: 512M
 
+  live-events-worker:
+    image: marketpulse-360/app:mp06
+    profiles: [app]
+    environment: *app-environment
+    command: ["python", "-m", "marketpulse_app.event_worker"]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib,time; p=pathlib.Path('/tmp/marketpulse-live-events-heartbeat'); assert p.exists() and time.time()-p.stat().st_mtime<15"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: on-failure
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
   collector:
     image: marketpulse-360/app:mp06
     profiles: [observability]
