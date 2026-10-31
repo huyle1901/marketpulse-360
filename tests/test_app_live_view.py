@@ -141,5 +141,26 @@ class LiveViewTests(unittest.TestCase):
         self.assertIsNone(result['today']['conversion'])
 
 
+class LiveViewRouteTests(unittest.TestCase):
+    def test_live_view_is_a_viewer_route_with_no_store_caching(self):
+        from unittest.mock import patch
+        from app_auth_support import TrustedTestAccess
+        from fastapi.testclient import TestClient
+        from marketpulse_app.api import create_app
+        from marketpulse_app.security import policy
+        self.assertEqual(policy('GET', '/api/v1/live/view')[1], 'viewer')
+        self.assertIsNone(policy('POST', '/api/v1/live/view'))
+        client = TestClient(create_app(SimpleNamespace(), SimpleNamespace(), access=TrustedTestAccess()))
+        with patch('marketpulse_app.live_view.LiveViewService.view', return_value={'status': 'empty'}):
+            response = client.get('/api/v1/live/view')
+        self.assertEqual((response.status_code, response.json()), (200, {'status': 'empty'}))
+        self.assertEqual(response.headers['cache-control'], 'no-store')
+
+    def test_web_proxy_allows_only_get_live_view(self):
+        from pathlib import Path
+        route = Path(__file__).resolve().parents[1].joinpath('web/app/api/v1/[...path]/route.ts').read_text()
+        self.assertIn("method==='GET' && /^live\\/view$/.test(path)", route)
+
+
 if __name__ == '__main__':
     unittest.main()
