@@ -4,6 +4,7 @@ import {useEffect,useRef,useState} from 'react';
 import {exact,formatMoney} from '../../lib/format';
 import {useUrlState} from '../../lib/useUrlState';
 import {liveWindow} from '../../lib/live';
+import {LiveView} from '../../components/LiveView';
 import type {Dashboard} from '../types';
 
 type LiveRow=Dashboard['streaming']['rows'][number];
@@ -41,7 +42,9 @@ export default function LiveActivity(){
  const groups=new Map<string,{sessions:bigint;orders:bigint;net:bigint;keys:number}>();
  for(const row of rows){const key=row.currency||'';const total=groups.get(key)||{sessions:0n,orders:0n,net:0n,keys:0};total.sessions+=BigInt(row.sessions);total.orders+=BigInt(row.order_count);total.net+=BigInt(row.net_revenue_minor);total.keys++;groups.set(key,total);}
  return <main>
-  <header className="masthead"><div><h1>Live activity</h1><p>Committed streaming campaign/day snapshots · Provisional, not certified finance</p></div><div className="status"><span className="dot"/> Checks every 5 seconds<br/><small>Last successful check: {lastPoll||'Waiting'} · a successful check is not new input</small></div></header>
+  <header className="masthead"><div><h1>Live View</h1><p>Who is on the store right now and what they are buying · Provisional, not certified finance</p></div><div className="status"><span className="dot"/> Checks every 5 seconds<br/><small>Last successful check: {lastPoll||'Waiting'} · a successful check is not new input</small></div></header>
+  <LiveView/>
+  <h2 className="mt-8">By campaign (provisional)</h2>
   <section className="filters" aria-label="Live window">
    <label>From (UTC)<input type="date" value={filters.from_date} onChange={e=>setFilters({...filters,from_date:e.target.value})}/></label>
    <label>To (exclusive UTC)<input type="date" value={filters.to_date} onChange={e=>setFilters({...filters,to_date:e.target.value})}/></label>

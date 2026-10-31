@@ -23,7 +23,7 @@ test('overview no longer embeds the streaming table',async({page})=>{
 
 test('live activity separates provisional snapshots from certified finance and keeps provenance',async({page})=>{
  await page.goto('/live');
- await expect(page.getByRole('heading',{name:'Live activity',level:1})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Live View',level:1})).toBeVisible();
  const summary=page.getByRole('region',{name:'Provisional live summary'});
  await expect(summary).toContainText('7');await expect(summary).toContainText('-₫5');
  await expect(summary).toContainText('campaign-day session incidences');
