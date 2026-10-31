@@ -25,21 +25,21 @@ export default function GeographyPage(){
   <header className="masthead"><div><h1>Geography</h1><p>Where identified customers live and how much net revenue each city brings</p></div></header>
   {error?<p className="empty">Geography unavailable: {error}</p>:!data?<p className="empty">Loading certified customer locations…</p>:data.status==='unavailable'?<p className="empty">{data.message}</p>:
   <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] [&>*]:min-w-0">
-   <Card><CardHeader><CardTitle>Revenue map</CardTitle><CardDescription>Bubble area is proportional to certified net revenue · {currency}</CardDescription></CardHeader><CardContent>
-    <div role="img" aria-label="Customer net revenue by city" className="mx-auto max-w-[460px]">
+   <section aria-label="Revenue map" className="feature-band rounded-[20px] p-5 md:p-6"><h2 className="text-base font-medium text-white">Revenue map</h2><p className="mt-0.5 text-sm text-[#9fb0c8]">Bubble area is proportional to certified net revenue · {currency}</p><div className="mt-4">
+    <div role="img" aria-label="Customer net revenue by city" className="mx-auto max-w-[560px]">
      <svg viewBox={`-130 -10 ${FRAME.width+260} ${FRAME.height+20}`} className="h-auto w-full">
-      <defs><radialGradient id="bubble" cx="35%" cy="35%" r="75%"><stop offset="0%" stopColor="var(--primary)" stopOpacity="0.95"/><stop offset="100%" stopColor="var(--primary)" stopOpacity="0.55"/></radialGradient></defs>
-      <rect x={0} y={0} width={FRAME.width} height={FRAME.height} rx={14} fill="var(--muted)" opacity="0.6"/>
-      {[10,12,14,16,18,20,22].map(lat=><g key={lat}><line x1={0} x2={FRAME.width} y1={project(lat,FRAME.minLon).y} y2={project(lat,FRAME.minLon).y} stroke="var(--border)" strokeDasharray="3 4"/><text x={4} y={project(lat,FRAME.minLon).y-3} fontSize={9} fill="var(--muted-foreground)">{lat}°N</text></g>)}
-      {[103,105,107,109].map(lon=><line key={lon} y1={0} y2={FRAME.height} x1={project(FRAME.minLat,lon).x} x2={project(FRAME.minLat,lon).x} stroke="var(--border)" strokeDasharray="3 4"/>)}
+      <defs><radialGradient id="bubble" cx="35%" cy="35%" r="75%"><stop offset="0%" stopColor="#a5b4ff" stopOpacity="0.95"/><stop offset="100%" stopColor="#533afd" stopOpacity="0.7"/></radialGradient></defs>
+      <rect x={0} y={0} width={FRAME.width} height={FRAME.height} rx={14} fill="#0b1830" stroke="rgb(255 255 255 / 0.06)"/>
+      {[10,12,14,16,18,20,22].map(lat=><g key={lat}><line x1={0} x2={FRAME.width} y1={project(lat,FRAME.minLon).y} y2={project(lat,FRAME.minLon).y} stroke="rgb(255 255 255 / 0.07)" strokeDasharray="3 4"/><text x={4} y={project(lat,FRAME.minLon).y-3} fontSize={9} fill="#5d7290">{lat}°N</text></g>)}
+      {[103,105,107,109].map(lon=><line key={lon} y1={0} y2={FRAME.height} x1={project(FRAME.minLat,lon).x} x2={project(FRAME.minLat,lon).x} stroke="rgb(255 255 255 / 0.07)" strokeDasharray="3 4"/>)}
       {plotted.map(c=>{const {x,y}=project(CITY_COORDINATES[c.city].lat,CITY_COORDINATES[c.city].lon);const r=5+Math.sqrt(Number(BigInt(c.net_revenue_minor)*10000n/max)/10000)*24,side=CITY_COORDINATES[c.city].label,lx=side==='left'?x-r-6:x+r+6,anchor=side==='left'?'end':'start';
-       return <g key={c.city}><circle data-city={c.city} cx={x} cy={y} r={r} fill="url(#bubble)" fillOpacity={0.85} stroke="var(--primary)" strokeWidth={1.5}><title>{`${c.city}: ${formatMoney(c.net_revenue_minor,currency)} from ${c.customers} customers`}</title></circle>
-        <text x={lx} y={y-2} textAnchor={anchor} fontSize={14} fontWeight={600} fill="var(--foreground)">{c.city}</text><text x={lx} y={y+14} textAnchor={anchor} fontSize={12} fill="var(--muted-foreground)">{compactMoney(c.net_revenue_minor,currency)}</text></g>;})}
+       return <g key={c.city}><circle data-city={c.city} cx={x} cy={y} r={r} fill="url(#bubble)" fillOpacity={0.9} stroke="#c7d0ff" strokeWidth={1.2} style={{filter:'drop-shadow(0 0 10px rgb(124 140 255 / 0.55))'}}><title>{`${c.city}: ${formatMoney(c.net_revenue_minor,currency)} from ${c.customers} customers`}</title></circle>
+        <text x={lx} y={y-2} textAnchor={anchor} fontSize={14} fontWeight={600} fill="#ffffff">{c.city}</text><text x={lx} y={y+14} textAnchor={anchor} fontSize={12} fill="#9fb0c8">{compactMoney(c.net_revenue_minor,currency)}</text></g>;})}
      </svg>
     </div>
-    {skipped.length>0&&<p className="mt-2 text-xs text-muted-foreground">Not on the map: {skipped.join(', ')}.</p>}
-    <p className="mt-1 text-xs text-muted-foreground">City centres are approximate; no basemap is loaded.</p>
-   </CardContent></Card>
+    {skipped.length>0&&<p className="mt-2 text-xs text-[#9fb0c8]">Not on the map: {skipped.join(', ')}.</p>}
+    <p className="mt-1 text-xs text-[#9fb0c8]">City centres are approximate; no basemap is loaded.</p>
+   </div></section>
    <div className="space-y-4">
     <Card><CardHeader><CardTitle>Net revenue by city</CardTitle><CardDescription>{data.definition}</CardDescription></CardHeader><CardContent>
      <Table aria-label="Net revenue by city"><TableHeader><TableRow><TableHead>City</TableHead><TableHead className="text-right">Customers</TableHead><TableHead className="text-right">Orders</TableHead><TableHead className="text-right">Net revenue</TableHead></TableRow></TableHeader>

@@ -5,6 +5,7 @@ import CampaignOverview from '../components/CampaignOverview';
 import ChannelBreakdown from '../components/ChannelBreakdown';
 import StageReach from '../components/StageReach';
 import KpiCards from '../components/KpiCards';
+import {LivePulse} from '../components/LivePulse';
 import CampaignDrawer from '../components/CampaignDrawer';
 import {formatMoney} from '../lib/format';
 import {useUrlState,choice} from '../lib/useUrlState';
@@ -137,7 +138,7 @@ export default function CommandCenter() {
 
   return <main>
 
-    <header className="masthead"><div><div className="brand">MARKETPULSE <span>360</span></div><h1>Marketing Command Center</h1><p>Certified campaign performance, decisions and budget scenarios · UTC dates</p></div><div className="status">{report&&<span id="performance" className="badge">{report.certified.freshness.historical?'Historical data':report.certified.freshness.stale?'Stale data':'Current snapshot'}</span>} <span className="dot"/> Updates every 5 seconds<br/><small>Last successful read: {lastSuccess||'Waiting'}</small></div></header>
+    <header className="masthead"><div><div className="brand">MARKETPULSE <span>360</span></div><h1>Marketing Command Center</h1><p>Certified campaign performance, decisions and budget scenarios · UTC dates</p></div><div className="status"><LivePulse/>{report&&<span id="performance" className="badge">{report.certified.freshness.historical?'Historical data':report.certified.freshness.stale?'Stale data':'Current snapshot'}</span>} <span className="dot"/> Updates every 5 seconds<br/><small>Last successful read: {lastSuccess||'Waiting'}</small></div></header>
     <section className="filters" aria-label="Campaign filters">
       <label>From (UTC)<input type="date" value={filters.from_date} onChange={e=>setFilters({...filters,from_date:e.target.value})}/></label>
       <label>To (exclusive UTC)<input type="date" value={filters.to_date} onChange={e=>setFilters({...filters,to_date:e.target.value})}/></label>

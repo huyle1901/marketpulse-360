@@ -2,6 +2,7 @@
 
 import {useEffect,useState} from 'react';
 import {Card,CardContent,CardDescription,CardHeader,CardTitle} from '@/components/ui/card';
+import {StatStrip} from '../../components/StatStrip';
 import {Table,TableBody,TableCell,TableHead,TableHeader,TableRow} from '@/components/ui/table';
 import {exact,formatMoney} from '../../lib/format';
 import {multiple,percent,perUnit} from '../../lib/metrics';
@@ -58,8 +59,8 @@ export default function AdPerformance(){
     ['Click-through rate',percent(t(total.clicks),t(total.impressions))??'Unavailable','Clicks ÷ impressions'],['Cost per click',money(perUnit(t(total.spend),t(total.clicks))),'Ad spend ÷ clicks'],
     ['Cost per order',money(perUnit(t(total.spend),t(total.orders))),'Ad spend ÷ orders'],['Net ROAS',multiple(t(total.net),t(total.spend))??'Unavailable','Net revenue ÷ ad spend']];
    return <div key={currency} className="min-w-0 space-y-4">
-    <section aria-label={'Ad efficiency · '+currency} className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">{kpis.map(([name,value,hint])=><Card key={name} role="article" aria-label={name} className="gap-1 py-3"><CardHeader className="px-3.5"><CardTitle className="text-xs font-medium text-muted-foreground">{name}</CardTitle></CardHeader><CardContent className="px-3.5"><div className="text-2xl font-semibold tracking-tight tabular-nums">{value}</div><p className="mt-1 text-xs text-muted-foreground">{hint}</p></CardContent></Card>)}</section>
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] [&>*]:min-w-0">
+    <StatStrip label={'Ad efficiency · '+currency} className="xl:grid-cols-6" items={kpis.map(([name,value,hint])=>({name,value,hint}))}/>
+    <div className="grid gap-4 2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] [&>*]:min-w-0">
      <Card className="min-w-0"><CardHeader><CardTitle>Spend share vs revenue share</CardTitle><CardDescription>A channel earning a bigger share of revenue than of spend is outperforming · {currency}</CardDescription></CardHeader><CardContent>
       <section aria-label={'Spend share vs revenue share · '+currency} className="space-y-4">{channels.map(([c,sums])=>{const spend=share(sums.spend,total.spend),net=total.net>0n&&sums.net>=0n?share(sums.net,total.net):null;const name=channelNames[c]||c;
        return <div key={c} role="img" aria-label={`${name}: ${spend??'unavailable'} of ad spend, ${net??'unavailable'} of net revenue`} className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-3 text-sm"><span className="font-medium">{name}</span><div className="space-y-1.5">

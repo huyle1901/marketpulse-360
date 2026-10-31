@@ -2,6 +2,7 @@
 import {useEffect,useState} from 'react';
 import {Bar,BarChart,CartesianGrid,Line,LineChart,XAxis,YAxis} from 'recharts';
 import {Card,CardContent,CardDescription,CardHeader,CardTitle} from '@/components/ui/card';
+import {StatStrip} from './StatStrip';
 import {ChartContainer,ChartLegend,ChartLegendContent,ChartTooltip,ChartTooltipContent,type ChartConfig} from '@/components/ui/chart';
 import {Table,TableBody,TableCell,TableHead,TableHeader,TableRow} from '@/components/ui/table';
 import {exact,formatMoney} from '../lib/format';
@@ -37,7 +38,7 @@ export function EmailWorkspace(){
  const cards:[string,string,string][]=[['Emails sent',exact(t.sent),'All lifecycle sends'],['Delivered',exact(t.delivered),'Reached an inbox'],['Open rate',ratePercent(t.open_rate),'Opened ÷ delivered'],['Click rate',ratePercent(t.click_rate),'Clicked ÷ delivered'],['Unsubscribe rate',ratePercent(t.unsubscribe_rate),'Unsubscribed ÷ delivered']];
  const chart=data.months.map(m=>({month:monthLabel(m.month),sent:Number(m.sent),opened:Number(m.opened),clicked:Number(m.clicked)}));
  return <div className="space-y-4">
-  <section aria-label="Email totals" className="grid grid-cols-2 gap-3 md:grid-cols-5">{cards.map(([name,value,hint])=><Card key={name} role="article" aria-label={name} className="gap-1 py-3"><CardHeader className="px-3.5"><CardTitle className="text-xs font-medium text-muted-foreground">{name}</CardTitle></CardHeader><CardContent className="px-3.5"><div className="text-2xl font-semibold tracking-tight tabular-nums">{value}</div><p className="mt-1 text-xs text-muted-foreground">{hint}</p></CardContent></Card>)}</section>
+  <StatStrip label="Email totals" className="md:grid-cols-5" items={cards.map(([name,value,hint])=>({name,value,hint}))}/>
   <Card className="min-w-0"><CardHeader><CardTitle>Monthly engagement</CardTitle><CardDescription>Governed email events by month · {data.definition}</CardDescription></CardHeader><CardContent>
    <div role="img" aria-label="Monthly emails sent, opened and clicked"><ChartContainer config={emailConfig} className="aspect-auto h-[260px] w-full"><LineChart data={chart} margin={{left:4,right:12,top:8}}><CartesianGrid vertical={false}/><XAxis dataKey="month" tickLine={false} axisLine={false} minTickGap={24}/><YAxis tickLine={false} axisLine={false} width={44}/><ChartTooltip content={<ChartTooltipContent/>}/><ChartLegend content={<ChartLegendContent/>}/>{(['sent','opened','clicked'] as const).map(k=><Line key={k} dataKey={k} type="monotone" stroke={'var(--color-'+k+')'} strokeWidth={2} dot={false} isAnimationActive={false}/>)}</LineChart></ChartContainer></div>
   </CardContent></Card>

@@ -7,7 +7,7 @@ body{background:var(--mp-bg);color:var(--mp-ink);font-family:var(--font-sans);fo
 
 
 #main-content{min-width:0}#main-content>main{max-width:1540px;padding:27px 30px 55px}
-.masthead{padding-bottom:20px}.masthead .brand{display:none}.masthead h1{font-size:28px;letter-spacing:-.9px;margin:0 0 2px;font-weight:650}.masthead p{margin:0;color:var(--mp-muted);font-size:12px}.status{color:var(--mp-muted);font-size:11px}.dot{background:#11a47d}
+.masthead{padding-bottom:20px}.masthead .brand{display:none}.masthead h1{font-size:32px;letter-spacing:-1.2px;margin:0 0 4px;font-weight:650;color:var(--foreground)}.masthead p{margin:0;color:var(--mp-muted);font-size:13px}.status{color:var(--mp-muted);font-size:11px}.dot{background:#11a47d}
 .section-links{gap:4px;margin:0 0 16px}.section-links a{border:0;border-radius:6px;background:transparent;font-size:11px;color:#526f76;padding:7px 10px}.section-links a:hover{background:#e7f0ed;color:#087f6d}
 .filters{gap:9px;padding:14px 16px;border-color:var(--mp-line);border-radius:9px;margin-bottom:15px;box-shadow:0 2px 4px #153c3b05}.filters label{color:#667d84;font-size:10px}.filters input,.filters select{font-size:11px;padding:8px;margin-top:5px;border-color:#dce5e8;border-radius:6px}
 .filter-actions{margin:-5px 0 18px}.filter-actions button{font-size:11px;padding:7px 10px}
@@ -53,7 +53,7 @@ body{background:var(--mp-bg);color:var(--mp-ink);font-family:var(--font-sans);fo
 .overview-title{flex-wrap:wrap}.overview-title .metric-switch{flex-wrap:nowrap}.trend{margin:6px 0 8px}
 .filters{margin-bottom:10px}.filter-actions{margin:0 0 12px}.channel-panel,.stage-panel{padding:16px 18px}.insight-grid{margin:12px 0 10px}.masthead{padding-bottom:14px}#campaign-table .table-tools{margin-bottom:2px}
 
-#main-content>main{max-width:1480px;margin:0 auto;padding:24px 28px 48px}.masthead h1{font-size:24px;letter-spacing:-.6px;font-weight:600}
+#main-content>main{max-width:1480px;margin:0 auto;padding:24px 28px 48px}.masthead h1{font-size:28px;letter-spacing:-1px;font-weight:650}
 .panel,.tool-group,.kpi-group article,.filters,.table-scroll{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:0 1px 2px oklch(0 0 0/.04)}
 .badge{background:var(--secondary);color:var(--secondary-foreground);border:1px solid var(--border);border-radius:6px}.badge.neutral{background:var(--muted)}
 button.secondary,.secondary{background:var(--card);color:var(--foreground);border:1px solid var(--border)}button.secondary:hover{background:var(--accent)}

@@ -30,15 +30,16 @@ test.describe('available',()=>{
   await expect(page.getByRole('article',{name:'Conversion today'})).toContainText('12.0%');
   const behaviour=page.getByRole('list',{name:'Shopper behaviour'});
   await expect(behaviour.getByRole('listitem')).toHaveText([/Browsing\s*1/,/Viewing a product\s*0/,/Holding a cart\s*2/,/Checking out\s*0/,/Purchased\s*1/]);
-  await expect(page.getByRole('img',{name:'Visitors per minute, last 30 minutes'})).toBeVisible();
-  await expect(page.getByRole('img',{name:'Orders per minute, last 30 minutes'})).toBeVisible();
-  const products=page.getByRole('table',{name:'Top products today'});
-  await expect(products.getByRole('row').nth(1)).toContainText('Linen jacket');await expect(products).toContainText('Unlisted product');
+  await expect(page.getByRole('img',{name:'Visitors and orders per minute, last 30 minutes'})).toBeVisible();
+  const products=page.getByRole('list',{name:'Top products today'});
+  await expect(products.getByRole('listitem').first()).toContainText('Linen jacket');await expect(products.getByRole('listitem').first()).toContainText('4 ordered');
+  await expect(products).toContainText('Unlisted product');
+  await expect(page.getByRole('region',{name:'Shop floor'}).locator('.live-dot')).toHaveCount(4);
   const feed=page.getByRole('list',{name:'Recent activity'});
   await expect(feed.getByRole('listitem').first()).toContainText('Order placed');await expect(feed.getByRole('listitem').first()).toContainText('₫300,000');
   await expect(feed.getByRole('listitem').nth(1)).toContainText('Added to cart');
   await expect(page.getByText('Provisional · not certified').first()).toBeVisible();
-  await expect(page.getByText('Replay time',{exact:false})).toContainText('2026-09-03 20:15');
+  await expect(page.getByText('Replay time',{exact:false})).toContainText('20:15');await expect(page.getByText('Replay time',{exact:false})).toContainText('Sep 3, 2026');
   await expect(page.getByRole('heading',{name:'By campaign (provisional)'})).toBeVisible();
  });
  test('live view fits a phone',async({page})=>{

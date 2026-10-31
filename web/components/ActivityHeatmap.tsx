@@ -5,7 +5,7 @@ import {exact} from '../lib/format';
 export type Activity={status:string;message?:string;timezone:string;cells:{weekday:string;hour:string;sessions:string;orders:string}[];busiest:{weekday:string;hour:string;sessions:string}|null};
 const days=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 /** Validated sequential ramp (blue 150→700); zero uses the muted surface so "none" never reads as "some". */
-const ramp=['#b7d3f6','#86b6ef','#5598e7','#2a78d6','#1c5cab','#104281','#0d366b'];
+const ramp=['#eef0ff','#d8dcff','#b8bdff','#959bff','#7379fb','#533afd','#3a22c4'];
 const slot=(hour:number)=>`${String(hour).padStart(2,'0')}:00–${String((hour+1)%24).padStart(2,'0')}:00`;
 
 export default function ActivityHeatmap({data}:{data:Activity}){
