@@ -15,6 +15,7 @@ class Message:
     def error(self): return self._error
     def value(self): return self._value
     def partition(self): return 0
+    def topic(self): return "marketing.clean.customer-events.v1"
     def offset(self): return self._offset
 
 
@@ -26,9 +27,11 @@ class Consumer:
         self.calls.append((num_messages, timeout))
         return self.messages
 
-    def commit(self, asynchronous=True):
-        assert asynchronous is False
+    def commit(self, message=None, offsets=None, asynchronous=True):
+        # librdkafka: with auto offset store disabled, a bare commit() has nothing stored and raises.
+        assert asynchronous is False and offsets, 'commit needs explicit offsets'
         self.commits += 1
+        self.committed = [(tp.topic, tp.partition, tp.offset) for tp in offsets]
 
 
 class Store:
@@ -55,6 +58,7 @@ class EventWorkerTests(unittest.TestCase):
         self.assertEqual(consumer.calls, [(50, 0.5)])
         self.assertEqual([row["offset"] for row in store.batches[0]], [1, 2])
         self.assertEqual(consumer.commits, 1)
+        self.assertEqual(consumer.committed, [("marketing.clean.customer-events.v1", 0, 3)])
 
     def test_empty_poll_neither_writes_nor_commits(self):
         consumer, store = Consumer([]), Store()

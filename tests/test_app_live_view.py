@@ -78,6 +78,13 @@ class LiveViewTests(unittest.TestCase):
         window = next(params for sql, params in session.calls if 'AS active_visitors' in sql)
         self.assertEqual((window['anchor'], window['start']), (ANCHOR, ANCHOR - timedelta(minutes=30)))
 
+    def test_bot_sessions_exclude_only_web_and_app_events_like_silver(self):
+        # Silver: BOT_EXCLUDED applies to web/mobile events; an order placed from a flagged session is still revenue.
+        _, session = view()
+        sql = next(sql for sql, _ in session.calls if 'AS anchor' in sql)
+        self.assertIn("NOT (source IN ('web','mobile') AND (is_bot OR", sql)
+        self.assertNotIn('consent_analytics AND NOT is_bot AND', sql)
+
     def test_active_visitors_and_behaviour_buckets(self):
         result, _ = view()
         self.assertEqual(result['window_minutes'], '30')

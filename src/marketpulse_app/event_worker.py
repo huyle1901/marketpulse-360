@@ -32,7 +32,14 @@ def drain(consumer: Any, store: Any, now: Callable[[], datetime], max_records: i
             raise ValueError("Kafka consumption failed")
         rows.append(parse_event(message.value(), message.partition(), message.offset(), received_at))
     store.write_batch(rows)
-    consumer.commit(asynchronous=False)
+    from confluent_kafka import TopicPartition
+    # Auto offset store is off, so commit the next position of every partition in the batch explicitly.
+    following: dict[tuple[str, int], int] = {}
+    for message in messages:
+        key = (message.topic(), message.partition())
+        following[key] = max(following.get(key, 0), message.offset() + 1)
+    consumer.commit(offsets=[TopicPartition(topic, partition, offset) for (topic, partition), offset in sorted(following.items())],
+                    asynchronous=False)
     return len(rows)
 
 

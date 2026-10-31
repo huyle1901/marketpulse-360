@@ -26,10 +26,10 @@ class LiveViewService:
                  clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)):
         self.analytics, self.database, self.clock = analytics, database, clock
         table = f'{database}.events'
-        # Same admission as certified analytics: Flink-eligible, consented, and not part of a bot session.
-        self.events = (f"(SELECT * FROM {table} FINAL WHERE eligible_for_aggregates AND consent_analytics AND NOT is_bot "
-                       f"AND (session_id IS NULL OR session_id NOT IN (SELECT assumeNotNull(session_id) FROM {table} FINAL "
-                       f"WHERE is_bot AND session_id IS NOT NULL)))")
+        # Same admission as Silver: Flink-eligible and consented; bot sessions drop web/app events only, never orders.
+        self.events = (f"(SELECT * FROM {table} FINAL WHERE eligible_for_aggregates AND consent_analytics "
+                       f"AND NOT (source IN ('web','mobile') AND (is_bot OR ifNull(session_id,'') IN (SELECT assumeNotNull(session_id) "
+                       f"FROM {table} FINAL WHERE is_bot AND session_id IS NOT NULL))))")
 
     def _query(self, sql: str, parameters: dict[str, object] | None = None) -> list[dict[str, object]]:
         return self.analytics._query(sql, parameters)

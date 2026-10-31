@@ -90,10 +90,13 @@ non-negative integers; commerce money requires a 3-letter currency.
 
 ## Read model (`GET /api/v1/live/view`)
 
-Eligible event = `eligible_for_aggregates AND consent_analytics` and its
-session is not a bot session (any event in the session has `is_bot`). This
-matches what certified analytics would admit, so Live View never shows
-behaviour from people who declined analytics.
+Eligible event = `eligible_for_aggregates AND consent_analytics`, and a
+web/app event is dropped when its session is a bot session (any event in the
+session has `is_bot`). Orders and refunds are never dropped for bot sessions —
+exactly Silver's `BOT_EXCLUDED` rule — so Live View sales reconcile with what
+certified analytics admits, and never show behaviour from people who declined
+analytics. (End-to-end check on 2026-09-03 found an order from a flagged
+session that an earlier draft wrongly dropped.)
 
 - **Anchor ("now")** = the latest eligible `event_time`. No eligible events →
   `status: "empty"`.
