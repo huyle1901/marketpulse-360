@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {expectNoMachineTimes} from './dates';
 const models=['first_touch','last_touch','linear'];
 const provenance={identity:'a'.repeat(64),generation:'1',proof_digest:'b'.repeat(64),historical:true,data_through:'2026-01-03T00:00:00Z',model:'gold.funnel_daily',timestamp_resolution:'day'};
 const counts={sessions:'2',page_view_sessions:'2',view_item_sessions:'1',add_to_cart_sessions:'1',checkout_sessions:'1',purchase_sessions:'1'};
@@ -68,6 +69,10 @@ test('reach, counts, times and channels read like a report, not raw data',async(
  await expect(funnel).toContainText('50.0% of sessions');await expect(funnel).not.toContainText('0.500000');
  await expect(page.getByRole('list',{name:'Sessions by channel'})).toContainText('Google');
  const journeys=page.locator('#journeys');
- await expect(journeys).toContainText('2 Jan 2026, 00:00 UTC');await expect(journeys).not.toContainText('2026-01-02T00:00:00');
+ await expect(journeys).toContainText('2 Jan 2026, 07:00 (GMT+7)');await expect(journeys).not.toContainText('2026-01-02T00:00:00');
  await expect(journeys).not.toContainText('1.000000');
+});
+
+test('analysis shows dates and times in one readable format',async({page})=>{
+ await page.goto('/analysis');await expect(page.getByLabel('To',{exact:true})).toBeVisible();await expectNoMachineTimes(page);
 });

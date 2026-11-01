@@ -33,7 +33,7 @@ export default function Insights(){
  return <main>
   <header className="masthead"><div><h1>Insights</h1><p>Patterns behind the numbers: when customers act, what they spend and who they are</p></div></header>
   <div className="space-y-4">
-   <Card><CardHeader><CardTitle>When customers act</CardTitle><CardDescription>Sessions started and orders placed by weekday and hour · UTC · certified history</CardDescription></CardHeader>
+   <Card><CardHeader><CardTitle>When customers act</CardTitle><CardDescription>Sessions started and orders placed by weekday and hour · certified history</CardDescription></CardHeader>
     <CardContent><section aria-label="When customers act"><State {...activity}>{()=><ActivityHeatmap data={activity.data!}/>}</State></section></CardContent></Card>
    <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] [&>*]:min-w-0">
     <Card><CardHeader><CardTitle>Order value distribution</CardTitle><CardDescription>Original order gross amounts · refunds excluded</CardDescription></CardHeader><CardContent>

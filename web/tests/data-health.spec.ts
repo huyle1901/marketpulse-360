@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {expectNoMachineTimes} from './dates';
 const now=new Date().toISOString();
 const live={report_id:'l',scope:'live',status:'passed',observed_at:now,identity:'a'.repeat(64),reason:'certified_rowsets_and_source_finance',relations:[{relation:'gold.campaign_performance_daily',row_count:'12',checksum:'b'.repeat(64)}]};
 const status={status:'available',telemetry:{status:'available',sources:[{name:'mp_source_up',labels:{source:'kafka'},value:'1'},{name:'mp_source_observed_timestamp_seconds',labels:{source:'kafka'},value:String(Date.now()/1000)},{name:'mp_source_up',labels:{source:'flink'},value:'0'},{name:'mp_source_observed_timestamp_seconds',labels:{source:'flink'},value:String(Date.now()/1000)}]},quality:live,probe_active:true};
@@ -9,7 +10,7 @@ test('data health leads with a compact status strip naming failing stages',async
  await page.goto('/operations');await expect(page.getByRole('heading',{name:'Data health',level:1})).toBeVisible();
  const strip=page.getByRole('region',{name:'Data health summary'});
  const tile=(name:string)=>strip.getByRole('article',{name});
- await expect(tile('Certified data')).toContainText('Through 2026-01-03');await expect(tile('Certified data')).toContainText('Generation 4');
+ await expect(tile('Certified data')).toContainText('Through 2 Jan 2026');await expect(tile('Certified data')).toContainText('Generation 4');
  await expect(tile('Live quality')).toContainText('Passed');
  await expect(tile('Platform sources')).toContainText('1 available · 1 unavailable · 7 unknown');
  await expect(tile('Platform sources')).toContainText('Needs attention: Flink');
@@ -38,4 +39,8 @@ test('platform status shows source availability as a labelled meter with a marke
 test('a failed panel is named in words, not by its internal key',async({page})=>{
  await page.route('**/api/v1/ops/lineage',r=>r.fulfill({status:503,json:{code:'unavailable'}}));
  await page.goto('/operations');await expect(page.locator('main').getByRole('alert')).toHaveText('Could not load: validated lineage');
+});
+
+test('data health shows observation times in Vietnam time',async({page})=>{
+ await page.goto('/operations');await expect(page.getByRole('article',{name:'Kafka status'})).toContainText('(GMT+7)');await expectNoMachineTimes(page);
 });

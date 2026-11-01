@@ -1,5 +1,7 @@
 'use client';
 
+import {dayRange} from '../../lib/format';
+import {DAY_RULE,DateRangeFields} from '../../components/DateRange';
 import {useEffect,useState} from 'react';
 import {Card,CardContent,CardDescription,CardHeader,CardTitle} from '@/components/ui/card';
 import {StatStrip} from '../../components/StatStrip';
@@ -46,10 +48,9 @@ export default function AdPerformance(){
  return <main>
   <header className="masthead"><div><h1>Ad performance</h1><p>How efficiently paid media turns impressions into clicks, orders and revenue</p></div></header>
   <section className="filters" aria-label="Ad performance filters">
-   <label>From (UTC)<input type="date" value={filters.from_date} onChange={e=>setFilters({...filters,from_date:e.target.value})}/></label>
-   <label>To (exclusive UTC)<input type="date" value={filters.to_date} onChange={e=>setFilters({...filters,to_date:e.target.value})}/></label>
+   <DateRangeFields from={filters.from_date} toExclusive={filters.to_date} onFrom={from_date=>setFilters({...filters,from_date})} onTo={to_date=>setFilters({...filters,to_date})}/>
    <label>Platform<select value={filters.platform} onChange={e=>setFilters({...filters,platform:e.target.value})}><option value="">All platforms</option>{Object.entries(channelNames).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
-  </section>
+  </section><p className="source -mt-1 mb-3">{DAY_RULE}</p>
   {error&&<div className="error" role="alert"><strong>Ad performance unavailable</strong><p>{error}</p></div>}
   {!report&&!error&&<p className="empty">Loading certified ad performance…</p>}
   {report&&!currencies.length&&<p className="empty">No paid campaign delivery for this selection.</p>}
@@ -90,6 +91,6 @@ export default function AdPerformance(){
    </div>;
   })}
   {undelivered.length>0&&<p className="source">Unattributed revenue has no ad delivery, so it is excluded from efficiency metrics; it remains in Overview totals.</p>}
-  {report&&<details className="provenance"><summary>Data details</summary><p>{report.certified.provenance.model} · generation {report.certified.provenance.generation}</p><p>Release {report.certified.provenance.identity}</p><p>Window {report.filters.from_date} → {report.filters.to_date} (UTC, end exclusive)</p></details>}
+  {report&&<details className="provenance"><summary>Data details</summary><p>{report.certified.provenance.model} · generation {report.certified.provenance.generation}</p><p>Release {report.certified.provenance.identity}</p><p>Window {dayRange(report.filters.from_date,report.filters.to_date)}</p></details>}
  </main>;
 }
