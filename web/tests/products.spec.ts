@@ -26,7 +26,7 @@ test('top products and devices show exact certified values without inventing ord
  await page.getByText('Exact product values').click();
  await expect(page.getByRole('table',{name:'Top products by net revenue'}).getByRole('row',{name:/Nova Phone/})).toContainText('3');
  const devices=page.getByRole('region',{name:'Revenue by purchase device'});
- await expect(devices.getByRole('article',{name:'Mobile'})).toContainText('66.6%');
+ await expect(devices.getByRole('article',{name:'Mobile'})).toContainText('66.7%');
  await expect(devices.getByRole('article',{name:'Mobile'})).toContainText('₫150');
  await expect(devices.getByRole('article',{name:'Unknown device'})).toBeVisible();
  await expect(devices).not.toContainText('AOV');

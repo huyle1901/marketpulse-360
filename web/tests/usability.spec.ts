@@ -56,9 +56,9 @@ test('campaign search, exact numeric sorting, published presets and analysis lin
  await page.getByLabel('Campaign table order').selectOption('net_asc');await expect(table.locator('tbody tr').first()).toContainText('Refund campaign');
  await page.getByLabel('Search campaigns').fill('Larger');await expect(table.locator('tbody tr')).toHaveCount(1);
  const link=table.getByRole('link',{name:'Analyze Larger campaign'});await expect(link).toHaveAttribute('href',/campaign_id=larger/);await expect(link).toHaveAttribute('href',/from_date=2026-01-01/);
- await page.getByRole('button',{name:'Last published day',exact:true}).click();await expect(page.getByLabel('From (UTC)',{exact:true})).toHaveValue('2026-01-02');
- await page.getByRole('button',{name:'Last 7 published days',exact:true}).click();await expect(page.getByLabel('From (UTC)',{exact:true})).toHaveValue('2025-12-27');
- await page.getByRole('button',{name:'Reset filters',exact:true}).click();await expect(page.getByLabel('Search campaigns')).toHaveValue('');await expect(page.getByLabel('From (UTC)',{exact:true})).toHaveValue('2026-01-01');
+ await page.getByRole('button',{name:'Last published day',exact:true}).click();await expect(page.getByLabel('From',{exact:true})).toHaveValue('2026-01-02');
+ await page.getByRole('button',{name:'Last 7 published days',exact:true}).click();await expect(page.getByLabel('From',{exact:true})).toHaveValue('2025-12-27');
+ await page.getByRole('button',{name:'Reset filters',exact:true}).click();await expect(page.getByLabel('Search campaigns')).toHaveValue('');await expect(page.getByLabel('From',{exact:true})).toHaveValue('2026-01-01');
 });
 test('copy view link reports clipboard failure without claiming success',async({page})=>{
  await page.addInitScript(()=>{Object.defineProperty(navigator,'clipboard',{value:{writeText:async()=>{throw new Error('denied');}},configurable:true});});
@@ -88,6 +88,6 @@ test('retained campaign rows do not offer drill links for a failed new selection
 
 test('reset hydration replaces its default dates so Back restores the prior selection',async({page})=>{
  await page.goto('/');await expect(page).toHaveURL(/from_date=/);await page.getByRole('combobox',{name:'Platform',exact:true}).selectOption('google');await expect(page).toHaveURL(/platform=google/);
- await page.getByRole('button',{name:'Reset filters',exact:true}).click();await expect(page.getByLabel('From (UTC)',{exact:true})).toHaveValue('2026-01-01');await expect(page.getByRole('combobox',{name:'Platform',exact:true})).toHaveValue('');
+ await page.getByRole('button',{name:'Reset filters',exact:true}).click();await expect(page.getByLabel('From',{exact:true})).toHaveValue('2026-01-01');await expect(page.getByRole('combobox',{name:'Platform',exact:true})).toHaveValue('');
  await page.goBack();await expect(page.getByRole('combobox',{name:'Platform',exact:true})).toHaveValue('google');
 });

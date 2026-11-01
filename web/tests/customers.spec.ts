@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {expectNoMachineTimes} from './dates';
 import {createHash} from 'node:crypto';
 const id='d'.repeat(64),segmentId='11111111-1111-4111-8111-111111111111';
 const prov={identity:'a'.repeat(64),generation:'1',proof_digest:'b'.repeat(64),as_of:'2026-01-03T00:00:00Z',historical:true,model:'gold.customer_360',data_through:'2026-01-03T00:00:00Z',projection_checksum:'c'.repeat(64),silver_snapshot_id:'123'};
@@ -105,4 +106,9 @@ test('segment summary explains the current draft and consent boundary',async({pa
  await page.goto('/customers');const summary=page.getByRole('region',{name:'Segment rule summary'});await expect(summary).toContainText('Activation preview');await expect(summary).toContainText('Both certified consent flags required');
  await page.getByRole('button',{name:'Add condition',exact:true}).click();await page.getByLabel('Condition 1 whole value').fill('30');await expect(summary).toContainText('recency days at least 30');
  await page.getByLabel('Segment purpose').selectOption('analytics');await expect(summary).toContainText('Historical analytics');await expect(summary).toContainText('Membership is evaluated in preview');
+});
+
+test('customers states its cut-off as a day and cohorts as months',async({page})=>{
+ await page.goto('/customers');await expect(page.getByText('Data through 2 Jan 2026',{exact:false}).first()).toBeVisible();
+ await expect(page.getByRole('table',{name:'Retention heatmap'})).toContainText('Dec 2025');await expectNoMachineTimes(page);
 });

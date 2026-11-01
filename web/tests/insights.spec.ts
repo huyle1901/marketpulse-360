@@ -15,6 +15,7 @@ test.beforeEach(async({page})=>{await page.route('**/api/v1/**',r=>{const p=new 
 test('insights leads with a weekday-hour heatmap and a busiest-slot callout',async({page})=>{
  await page.goto('/insights');await expect(page.getByRole('navigation',{name:'Workspaces'}).getByRole('link',{name:'Insights'})).toHaveAttribute('aria-current','page');
  const region=page.getByRole('region',{name:'When customers act'});
+ await region.getByRole('group',{name:'Time zone'}).getByRole('button',{name:'UTC'}).click();
  const grid=region.getByRole('table',{name:'Sessions by weekday and hour (UTC)'});
  await expect(grid.getByRole('cell',{name:'Wednesday 10:00–11:00 UTC: 12 sessions'})).toBeVisible();
  await expect(region).toContainText('Busiest: Wednesday 10:00–11:00 UTC');
@@ -63,9 +64,20 @@ test('the heatmap color scale spans the observed range so near-uniform activity 
  const flat={...activity,cells:cells.map(c=>({...c,sessions:String(500+Number(c.hour)),orders:'1'})),busiest:{weekday:'1',hour:'23',sessions:'523'}};
  await page.route('**/api/v1/insights/activity',r=>r.fulfill({json:flat}));
  await page.goto('/insights');const region=page.getByRole('region',{name:'When customers act'});
+ await region.getByRole('group',{name:'Time zone'}).getByRole('button',{name:'UTC'}).click();
  await expect(region).toContainText('Color scale: 500 to 523 sessions per hour');
  const grid=region.getByRole('table',{name:'Sessions by weekday and hour (UTC)'});
  const low=await grid.getByRole('cell',{name:'Monday 00:00–01:00 UTC: 500 sessions'}).evaluate(e=>getComputedStyle(e).backgroundColor);
  const high=await grid.getByRole('cell',{name:'Monday 23:00–00:00 UTC: 523 sessions'}).evaluate(e=>getComputedStyle(e).backgroundColor);
  expect(low).not.toBe(high);
+});
+
+test('the heatmap opens in Vietnam time, shifting late UTC hours into the next day',async({page})=>{
+ const late={...activity,busiest:{weekday:'7',hour:'20',sessions:'12'}};
+ await page.route('**/api/v1/insights/activity',r=>r.fulfill({json:late}));
+ await page.goto('/insights');const region=page.getByRole('region',{name:'When customers act'});
+ await expect(region.getByRole('group',{name:'Time zone'}).getByRole('button',{name:'Vietnam time'})).toHaveAttribute('aria-pressed','true');
+ const grid=region.getByRole('table',{name:'Sessions by weekday and hour (Vietnam time)'});
+ await expect(grid.getByRole('cell',{name:'Wednesday 17:00–18:00 Vietnam time: 12 sessions'})).toBeVisible();
+ await expect(region).toContainText('Busiest: Monday 03:00–04:00 Vietnam time');
 });

@@ -73,7 +73,7 @@ test('a changed interval discards a pending scenario from the old interval',asyn
   await page.getByLabel('Allocation for Campaign A').fill('100');
   const request=page.waitForRequest('**/api/v1/budget-simulation');
   await page.getByRole('button',{name:'Simulate allocation'}).click();await request;
-  await page.getByLabel('From (UTC)',{exact:true}).fill('2026-01-02');
+  await page.getByLabel('From',{exact:true}).fill('2026-01-02');
   release();
   await page.waitForResponse('**/api/v1/budget-simulation');
   await page.waitForTimeout(250); // Allow the response continuation to render before a negative assertion.
