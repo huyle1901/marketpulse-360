@@ -68,3 +68,25 @@ for(const theme of ['light','dark'] as const)test(`regions split located revenue
  await expectReadableLegend(regions.getByRole('list',{name:'Region legend'}));
  await expect(page.getByRole('region',{name:'Location coverage'})).toContainText('Known city');
 });
+
+test('bubbles wear their region colour, matching the region legend, with a callout per city',async({page})=>{
+ await page.goto('/geography');const map=page.getByRole('img',{name:'Customer net revenue by city'});
+ const bubble=map.locator('circle[data-city="Ha Noi"]');await expect(bubble).toHaveAttribute('data-region','North');
+ const stroke=await bubble.evaluate(e=>getComputedStyle(e).stroke);
+ const north=await page.getByRole('list',{name:'Region legend'}).getByRole('listitem').filter({hasText:'North'}).locator('[aria-hidden="true"]').evaluate(e=>getComputedStyle(e).backgroundColor);
+ expect(stroke).toBe(north);
+ const callout=map.locator('[data-callout="Ha Noi"]');await expect(callout).toContainText('Ha Noi');await expect(callout).toContainText('₫3,000');
+});
+
+test('bubble motion stops when the reader asks for reduced motion',async({page})=>{
+ await page.emulateMedia({reducedMotion:'reduce'});await page.goto('/geography');
+ const animation=await page.locator('circle[data-city="Ha Noi"]').evaluate(e=>getComputedStyle(e).animationName);
+ expect(animation).toBe('none');
+});
+
+test('each ranked city bar uses its region colour, like its bubble',async({page})=>{
+ await page.goto('/geography');
+ const bar=await page.getByRole('list',{name:'Cities ranked by net revenue'}).getByRole('listitem').filter({hasText:'Ha Noi'}).locator('div[style*="width"]').evaluate(e=>getComputedStyle(e).backgroundColor);
+ const stroke=await page.locator('circle[data-city="Ha Noi"]').evaluate(e=>getComputedStyle(e).stroke);
+ expect(bar).toBe(stroke);
+});

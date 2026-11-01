@@ -44,11 +44,27 @@ is a large donut that repeats two numbers; the left card is half empty.
   "Location unknown" card keeps profiles, orders and net revenue.
 - Exact values stay in the "Exact city values" table.
 
+## Revision: livelier symbols (after review)
+
+The first symbols read as flat. Following Mapbox's blurred-circle halos, Flourish's
+highlight/dim opacity and Datawrapper's haloed labels placed around the symbol:
+
+- each bubble is a soft radial halo, a disc lit from the top left and a thin surface ring,
+  so overlapping circles stay separable;
+- colour names the region (North, Central, South), the same hues as the region bar and the
+  ranking bars, so map, ranking and region split read as one system;
+- labels are pill callouts with a region dot, city and value at the end of a leader line;
+- bubbles grow in on load and the leading city carries a slow pulse ring; both stop under
+  `prefers-reduced-motion`; hovering a city dims the others.
+
+The basemap stays as approved (Viet Nam with Hoàng Sa and Trường Sa, no neighbouring countries).
+
 ## Tests
 
 Playwright: the outline and both archipelago labels render; bubble radii follow the square
 root of value; the size legend exists; the measure switch re-ranks cities and renames the
-map; hover links ranking and bubble; region legend marks are visible and distinct; existing
+map; hover links ranking and bubble; region legend marks are visible and distinct; bubble and
+ranking colours match the region legend; motion stops under reduced motion; existing
 unknown-location, unavailable and phone-width tests still pass.
 
 ## Non-goals

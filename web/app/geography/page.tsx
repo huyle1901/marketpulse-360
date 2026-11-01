@@ -17,6 +17,7 @@ const share=(part:bigint,total:bigint)=>total>0n&&part>=0n?Number(part*1000n/tot
 type Measure='net'|'customers'|'orders';
 const MEASURES:Record<Measure,string>={net:'net revenue',customers:'customers',orders:'orders'};
 const REGIONS=[['North','var(--cat-1)'],['Central','var(--cat-2)'],['South','var(--cat-3)'],['Other','var(--chart-4)']] as const;
+const REGION_COLOR:Record<string,string>=Object.fromEntries(REGIONS);
 const big=(value:string)=>BigInt(value);
 
 export default function GeographyPage(){
@@ -49,14 +50,14 @@ export default function GeographyPage(){
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-base font-medium text-foreground">Where customers are</h2><p className="mt-0.5 text-sm text-muted-foreground">Circle area is proportional to {MEASURES[measure]} · {currency}</p></div>
      <div className="metric-switch" role="group" aria-label="Map measure">{(Object.keys(MEASURES) as Measure[]).map(m=><button key={m} aria-pressed={measure===m} onClick={()=>setMeasure(m)}>{m==='net'?'Net revenue':m==='customers'?'Customers':'Orders'}</button>)}</div></div>
     <div className="mt-2"><VietnamMap name={`Customer ${MEASURES[measure]} by city`} active={active} onActive={setActive}
-     points={plotted.map(c=>({city:c.city,value:Number(raw(c)),display:measure==='net'?compactMoney(c.net_revenue_minor,currency):show(c),title:`${c.city}: ${formatMoney(c.net_revenue_minor,currency)} net · ${exact(c.customers)} customers · ${exact(c.orders)} orders`}))}/></div>
+     points={plotted.map(c=>{const region=CITY_REGION[c.city]??'Other';return {city:c.city,region,color:REGION_COLOR[region],value:Number(raw(c)),display:measure==='net'?compactMoney(c.net_revenue_minor,currency):show(c),title:`${c.city}: ${formatMoney(c.net_revenue_minor,currency)} net · ${exact(c.customers)} customers · ${exact(c.orders)} orders`};})}/></div>
     <div className="mt-3 flex flex-wrap items-end justify-between gap-3"><SizeLegend max={max} format={compact}/>
      <p className="text-xs text-muted-foreground">City centres are approximate · Natural Earth outline</p></div>
     {skipped.length>0&&<p className="mt-2 text-xs text-muted-foreground">Not on the map: {skipped.join(', ')}.</p>}
    </section>
    <div className="space-y-4">
     <Card><CardHeader><CardTitle>Cities by {MEASURES[measure]}</CardTitle><CardDescription>{data.definition}</CardDescription></CardHeader><CardContent>
-     <BarList name={`Cities ranked by ${MEASURES[measure]}`} onActive={setActive} rows={ranked.map((c,i)=>({key:c.city,label:<span className={active&&active!==c.city?'opacity-60':''}><span className="figure mr-2 text-muted-foreground">{i+1}</span>{c.city}</span>,value:Number(raw(c)),display:show(c),
+     <BarList name={`Cities ranked by ${MEASURES[measure]}`} onActive={setActive} rows={ranked.map((c,i)=>({key:c.city,label:<span className={active&&active!==c.city?'opacity-60':''}><span className="figure mr-2 text-muted-foreground">{i+1}</span>{c.city}</span>,value:Number(raw(c)),display:show(c),color:REGION_COLOR[CITY_REGION[c.city]??'Other'],
       sub:`${exact(c.customers)} customers · ${exact(c.orders)} orders · ${c.net_per_customer_minor==null?'—':formatMoney(c.net_per_customer_minor,currency)} per customer`}))}/>
      <ExactValues label="Exact city values">
       <Table aria-label="Net revenue by city"><TableHeader><TableRow><TableHead>City</TableHead><TableHead className="text-right">Customers</TableHead><TableHead className="text-right">Orders</TableHead><TableHead className="text-right">Net revenue</TableHead><TableHead className="text-right">Share</TableHead></TableRow></TableHeader>
