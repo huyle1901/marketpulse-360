@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {expectNoMachineTimes} from './dates';
 
 const provenance={generation:'1',identity:'a'.repeat(64),model:'gold.campaign_performance_daily',data_through:'2026-01-03T00:00:00Z'};
 const row={campaign_id:'g',campaign_name:'Google Traffic 1',currency:'VND',platform:'google',objective:'traffic',spend_minor:'300',net_revenue_minor:'700',orders:'5',source_roas:'2.333333'};
@@ -34,8 +35,8 @@ test('a missing prior period says so instead of showing a change',async({page})=
 test('range tabs pick published windows ending at the latest certified day',async({page})=>{
  await page.goto('/');const ranges=page.getByRole('group',{name:'Date range'});
  await ranges.getByRole('button',{name:'30D'}).click();
- await expect(page.getByLabel('From (UTC)',{exact:true})).toHaveValue('2025-12-04');
- await expect(page.getByLabel('To (exclusive UTC)',{exact:true})).toHaveValue('2026-01-03');
+ await expect(page.getByLabel('From',{exact:true})).toHaveValue('2025-12-04');
+ await expect(page.getByLabel('To',{exact:true})).toHaveValue('2026-01-02');
  await expect(ranges.getByRole('button',{name:'30D'})).toHaveAttribute('aria-pressed','true');
 });
 
@@ -60,8 +61,8 @@ test('large amounts are compact on cards with the exact value available',async({
  await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:long}));
  await page.goto('/?from_date=2025-01-01&to_date=2026-09-01');
  const card=page.getByRole('region',{name:'Key metrics · VND'}).getByRole('article',{name:'Net revenue'});
- await expect(card).toContainText('₫23.19T');await expect(card.locator('[title]').filter({hasText:'₫23.19T'})).toHaveAttribute('title','₫23,195,596,000,000');
- await expect(page.getByRole('region',{name:'Key metrics · VND'}).getByRole('article',{name:'Ad spend'})).toContainText('₫668.63M');
+ await expect(card).toContainText('₫23.20T');await expect(card.locator('[title]').filter({hasText:'₫23.20T'})).toHaveAttribute('title','₫23,195,596,000,000');
+ await expect(page.getByRole('region',{name:'Key metrics · VND'}).getByRole('article',{name:'Ad spend'})).toContainText('₫668.64M');
  await expect(card.getByRole('img',{name:'Net revenue by month'})).toBeVisible();
 });
 
@@ -69,7 +70,16 @@ test('the All range keeps the full readable history instead of snapping back to 
  await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:long}));
  await page.goto('/');await expect(page).toHaveURL(/from_date=2026-06-03/);
  await page.getByRole('group',{name:'Date range'}).getByRole('button',{name:'All'}).click();
- await expect(page.getByLabel('From (UTC)',{exact:true})).toHaveValue('2024-08-31');
- await page.waitForTimeout(600);await expect(page.getByLabel('From (UTC)',{exact:true})).toHaveValue('2024-08-31');
+ await expect(page.getByLabel('From',{exact:true})).toHaveValue('2024-08-31');
+ await page.waitForTimeout(600);await expect(page.getByLabel('From',{exact:true})).toHaveValue('2024-08-31');
  await expect(page.getByRole('group',{name:'Date range'}).getByRole('button',{name:'All'})).toHaveAttribute('aria-pressed','true');
+});
+
+test('the To field shows the last day included while the request keeps the exclusive bound',async({page})=>{
+ const requests:URL[]=[];page.on('request',r=>{if(r.url().includes('/api/v1/dashboard'))requests.push(new URL(r.url()));});
+ await page.goto('/?from_date=2025-12-04&to_date=2026-01-03');await expect(page.getByLabel('To',{exact:true})).toHaveValue('2026-01-02');
+ await page.getByLabel('To',{exact:true}).fill('2026-01-01');await expect(page).toHaveURL(/to_date=2026-01-02/);
+ await expect.poll(()=>requests.some(u=>u.searchParams.get('to_date')==='2026-01-02')).toBeTruthy();
+ await expect(page.getByText('Days are UTC calendar days (07:00–07:00 Vietnam time)')).toBeVisible();
+ await expectNoMachineTimes(page);
 });

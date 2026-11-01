@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {expectNoMachineTimes} from './dates';
 
 const provenance={generation:'1',identity:'a'.repeat(64),model:'gold.campaign_performance_daily',data_through:'2026-01-03T00:00:00Z'};
 const live=(sessions:string,offset:string)=>({metric_key:'a|2026-01-04',campaign_id:'a',sessions,order_count:'2',net_revenue_minor:'-5',currency:'VND',max_event_time:'2026-01-04T10:00:00Z',processed_at:'2026-10-29T10:00:0'+offset+'Z',received_at:'2026-10-29T10:00:0'+offset+'Z',stale:true,mapped:true,offset});
@@ -32,7 +33,7 @@ test('live activity separates provisional snapshots from certified finance and k
  await expect(page.getByRole('list',{name:'Provisional net by campaign'})).toContainText('Campaign A');
  await page.getByText('Exact campaign-day snapshots',{exact:true}).click();
  const table=page.getByRole('table',{name:'Latest campaign-day snapshots'});
- await expect(table).toContainText('Campaign A');await expect(table).toContainText('2026-01-04');
+ await expect(table).toContainText('Campaign A');await expect(table).toContainText('4 Jan 2026');
  await page.getByText('Streaming source provenance',{exact:true}).click();
  await expect(page.getByText('cluster/topic',{exact:false})).toBeVisible();
  await expect(page.getByText('Replay controller status unavailable',{exact:false})).toBeVisible();
@@ -78,4 +79,12 @@ test('a campaign-day without orders joins its campaign bar instead of adding a c
  await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:dashboard([withOrders,noOrders])}));
  await page.goto('/live');const bars=page.getByRole('list',{name:'Provisional net by campaign'});
  await expect(bars.getByRole('listitem')).toHaveCount(1);await expect(bars).toContainText('Campaign A');await expect(bars).not.toContainText('VND');
+});
+
+test('campaign-days without orders join their campaign currency in the totals and the check time is readable',async({page})=>{
+ const noOrders={...live('3','2'),metric_key:'a|2026-01-05',order_count:'0',net_revenue_minor:'0',currency:''};
+ await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:dashboard([live('7','1'),noOrders])}));
+ await page.goto('/live');const summary=page.getByRole('region',{name:'Provisional live summary'});
+ await expect(summary.locator('.kpi-group')).toHaveCount(1);await expect(summary).toContainText('10');await expect(summary).not.toContainText('No currency');
+ await expect(page.getByText(/Last successful check: \d{2}:\d{2}:\d{2} \(GMT\+7\)/)).toBeVisible();await expectNoMachineTimes(page);
 });

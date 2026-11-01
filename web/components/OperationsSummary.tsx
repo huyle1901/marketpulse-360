@@ -1,4 +1,5 @@
 'use client';
+import {localTime,throughLabel} from '../lib/format';
 import {useEffect,useState} from 'react';
 import {exact} from '../lib/format';
 import {Legend} from './charts';
@@ -30,7 +31,7 @@ export function PlatformSummary({value}:{value?:RecordValue}){
   {parts.filter(p=>p.count>0).map(p=><span key={p.key} style={{flexGrow:p.count,background:p.color}}/>)}</div>
   <Legend label="Source availability legend" items={parts.map(p=>({key:p.key,label:p.label,color:p.color,value:String(p.count)}))}/></div>
  <div className="service-grid">{states.map(({key,name,state,observed})=>
- <article key={key} aria-label={name+' status'}><h3>{name}</h3><strong className={'health '+tone(state)}>{state}</strong><small>{observed?'Observed '+new Date(observed*1000).toISOString():'No observation available'}</small></article>)}</div></>;
+ <article key={key} aria-label={name+' status'}><h3>{name}</h3><strong className={'health '+tone(state)}>{state}</strong><small>{observed?'Observed '+localTime(new Date(observed*1000).toISOString(),{seconds:true}):'No observation available'}</small></article>)}</div></>;
 }
 /** Current only for the matching validated release and a report at most three minutes old. */
 export function qualityState(value:unknown,currentIdentity:string|undefined,now:number){
@@ -42,7 +43,7 @@ export function qualityState(value:unknown,currentIdentity:string|undefined,now:
 }
 export function QualitySummary({value,probe,currentIdentity}:{value?:unknown;probe?:unknown;currentIdentity?:string}){
  const now=useObservationClock(),{live,recorded,qualification,state}=qualityState(value,currentIdentity,now);
- return <><section aria-label="Latest live quality" className="quality-summary"><h3>Latest live quality</h3><strong className={'health '+(state==='Passed'?'good':state==='Failed'?'bad':'unknown')}>{state}</strong>{recorded!=='Unavailable'&&<p>Recorded result: {recorded}</p>}<p>{qualification||label(live.reason)}</p><p>{live.observed_at?'Checked '+String(live.observed_at):'No live quality report available'}</p>{live.identity!=null&&<p className="source">Checked release {String(live.identity)}</p>}{Array.isArray(live.relations)&&<p>{live.relations.length} certified relations checked</p>}<small>Current quality requires the active release and a report within three minutes.</small></section><p className={probe===true?'notice':'source'}>{probe===true?'Controlled probe alert active':probe===false?'No controlled probe alert active':'Controlled probe state unknown'}</p><p className="source">Controlled probe results are separate from live release quality.</p></>;
+ return <><section aria-label="Latest live quality" className="quality-summary"><h3>Latest live quality</h3><strong className={'health '+(state==='Passed'?'good':state==='Failed'?'bad':'unknown')}>{state}</strong>{recorded!=='Unavailable'&&<p>Recorded result: {recorded}</p>}<p>{qualification||label(live.reason)}</p><p>{live.observed_at?'Checked '+localTime(String(live.observed_at),{seconds:true}):'No live quality report available'}</p>{live.identity!=null&&<p className="source">Checked release {String(live.identity)}</p>}{Array.isArray(live.relations)&&<p>{live.relations.length} certified relations checked</p>}<small>Current quality requires the active release and a report within three minutes.</small></section><p className={probe===true?'notice':'source'}>{probe===true?'Controlled probe alert active':probe===false?'No controlled probe alert active':'Controlled probe state unknown'}</p><p className="source">Controlled probe results are separate from live release quality.</p></>;
 }
 export function LineageSummary({value}:{value?:RecordValue}){
  if(!value?.identity)return <p className="empty">Validated lineage unavailable</p>;
@@ -61,8 +62,8 @@ export function HealthStrip({status,currentIdentity,certified}:{status?:RecordVa
  const matched=certified&&currentIdentity&&certified.identity===currentIdentity;
  const coverage=!certified?'Unknown':!matched?'Unknown':certified.data_through?'Published':'Empty';
  return <section className="status-grid health-strip" aria-label="Data health summary">
-  <article className="panel" aria-label="Certified data"><span>Certified data</span><strong className={'health '+tone(coverage==='Published'?'Available':'Unknown')}>{coverage}</strong><small>{certified===undefined?'Loading certified release':!certified?'Certified release unavailable':!matched?'Served release does not match validated lineage; trust is unknown':`Through ${certified.data_through?.slice(0,10)||'no data'} · Generation ${certified.generation}`}</small></article>
-  <article className="panel" aria-label="Live quality"><span>Live quality</span><strong className={'health '+tone(quality.state)}>{quality.state}</strong><small>{quality.qualification||(quality.live.observed_at?'Checked '+String(quality.live.observed_at):'No live report')}</small></article>
+  <article className="panel" aria-label="Certified data"><span>Certified data</span><strong className={'health '+tone(coverage==='Published'?'Available':'Unknown')}>{coverage}</strong><small>{certified===undefined?'Loading certified release':!certified?'Certified release unavailable':!matched?'Served release does not match validated lineage; trust is unknown':`Through ${throughLabel(certified.data_through)} · Generation ${certified.generation}`}</small></article>
+  <article className="panel" aria-label="Live quality"><span>Live quality</span><strong className={'health '+tone(quality.state)}>{quality.state}</strong><small>{quality.qualification||(quality.live.observed_at?'Checked '+localTime(String(quality.live.observed_at),{seconds:true}):'No live report')}</small></article>
   <article className="panel" aria-label="Platform sources"><span>Platform sources</span><strong className={'health '+(failing.length?'bad':count('Unknown')?'unknown':'good')}>{failing.length?failing.length+(failing.length===1?' source needs':' sources need')+' attention':count('Unknown')?'Partly unknown':'All available'}</strong><small>{count('Available')} available · {failing.length} unavailable · {count('Unknown')} unknown</small>{failing.length>0&&<small>Needs attention: {failing.join(', ')}</small>}</article>
   <article className="panel" aria-label="Input & replay"><span>Input &amp; replay</span><strong className={'health '+tone(kafka)}>Kafka {kafka.toLowerCase()}</strong><small>Replay controller status unavailable in this deployment</small></article>
  </section>;

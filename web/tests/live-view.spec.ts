@@ -40,7 +40,7 @@ test.describe('available',()=>{
   await expect(feed.getByRole('listitem').first()).toContainText('Order placed');await expect(feed.getByRole('listitem').first()).toContainText('₫300,000');
   await expect(feed.getByRole('listitem').nth(1)).toContainText('Added to cart');
   await expect(page.getByText('Provisional · not certified').first()).toBeVisible();
-  await expect(page.getByText('Replay time',{exact:false})).toContainText('20:15');await expect(page.getByText('Replay time',{exact:false})).toContainText('Sep 3, 2026');
+  await expect(page.getByText('Replay time',{exact:false})).toContainText('4 Sep 2026, 03:15 (GMT+7)');
   await expect(page.getByRole('heading',{name:'By campaign (provisional)'})).toBeVisible();
  });
  test('live view fits a phone',async({page})=>{
@@ -57,6 +57,10 @@ test.describe('empty',()=>{
   await expect(page.getByText('No live event has been projected yet',{exact:false})).toBeVisible();
   await expect(page.getByRole('article',{name:'Visitors right now'})).toHaveCount(0);
  });
+});
+test('freshness reads as elapsed time',async({page})=>{
+ await serve({...view,freshness:{...view.freshness,seconds_since_receipt:'35805',receiving:false}})({page});await page.goto('/live');
+ await expect(page.getByRole('region',{name:'Shop floor'})).toContainText('last event received 9 h 56 min ago');
 });
 
 for(const theme of ['light','dark'] as const)test(`shop floor dots follow the web and app legend and the minute chart has a legend in ${theme} mode`,async({page})=>{

@@ -39,7 +39,7 @@ test('customers shows new versus returning buyers per month with exact counts',a
  await page.goto('/customers');const region=page.getByRole('region',{name:'New vs returning customers'});
  await expect(region.getByRole('img',{name:'Monthly new and returning ordering customers'})).toBeVisible();
  await region.getByText('Exact monthly values',{exact:true}).click();const table=region.getByRole('table',{name:'New and returning customers by month'});
- await expect(table.locator('tbody tr').nth(1)).toContainText('66.6%');await expect(table.locator('tbody tr').first()).toContainText('₫9,007,199,254,740,993');
+ await expect(table.locator('tbody tr').nth(1)).toContainText('66.7%');await expect(table.locator('tbody tr').first()).toContainText('₫9,007,199,254,740,993');
 });
 
 test('email fits a phone',async({page})=>{
