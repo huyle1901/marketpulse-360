@@ -1,7 +1,9 @@
 'use client';
 
+import {dayLabel,dayRange,localTime} from '../../lib/format';
+import {DAY_RULE,DateRangeFields} from '../../components/DateRange';
 import {useEffect,useRef,useState} from 'react';
-import {clockTime,exact,formatMoney} from '../../lib/format';
+import {localClock,exact,formatMoney} from '../../lib/format';
 import {useUrlState} from '../../lib/useUrlState';
 import {liveWindow} from '../../lib/live';
 import {LiveView} from '../../components/LiveView';
@@ -50,20 +52,19 @@ export default function LiveActivity(){
  const campaignBars=[...byCampaign.entries()].sort(([ka,a],[kb,b])=>a.net===b.net?ka.localeCompare(kb):a.net>b.net?-1:1);
  const currencies=new Set(campaignBars.map(([,c])=>c.currency));
  return <main>
-  <header className="masthead"><div><h1>Live View</h1><p>Who is on the store right now and what they are buying · Provisional, not certified finance</p></div><div className="status"><span className="dot"/> Checks every 5 seconds<br/><small>Last successful check: {lastPoll?clockTime(lastPoll):'Waiting'} · a successful check is not new input</small></div></header>
+  <header className="masthead"><div><h1>Live View</h1><p>Who is on the store right now and what they are buying · Provisional, not certified finance</p></div><div className="status"><span className="dot"/> Checks every 5 seconds<br/><small>Last successful check: {lastPoll?localClock(lastPoll):'Waiting'} · a successful check is not new input</small></div></header>
   <LiveView/>
   <h2 className="mt-8">By campaign (provisional)</h2>
   <section className="filters" aria-label="Live window">
-   <label>From (UTC)<input type="date" value={filters.from_date} onChange={e=>setFilters({...filters,from_date:e.target.value})}/></label>
-   <label>To (exclusive UTC)<input type="date" value={filters.to_date} onChange={e=>setFilters({...filters,to_date:e.target.value})}/></label>
-  </section>
+   <DateRangeFields from={filters.from_date} toExclusive={filters.to_date} onFrom={from_date=>setFilters({...filters,from_date})} onTo={to_date=>setFilters({...filters,to_date})}/>
+  </section><p className="source -mt-1 mb-3">{DAY_RULE}</p>
   {error&&<div className="error" role="alert"><strong>{report?'Check failed; showing last successful snapshots':'Live snapshots unavailable'}</strong><p>{error}</p></div>}
   {!report&&!error&&<p className="empty">Loading committed snapshots…</p>}
   {report&&streaming&&<>
    <section className="status-grid" aria-label="Pipeline state">
     <article className="panel"><span>Processing projection</span><strong>{streaming.status}</strong><small>Flink → Kafka → serving worker</small></article>
-    <article className="panel"><span>Latest business event</span><strong>{latest(rows.map(r=>r.max_event_time))||'None'}</strong><small>Event time in the source data</small></article>
-    <article className="panel"><span>Last new input received</span><strong>{latest(rows.map(r=>r.received_at))||'None'}</strong><small>Actual UTC arrival in the projection</small></article>
+    <article className="panel"><span>Latest business event</span><strong>{latest(rows.map(r=>r.max_event_time))?localTime(latest(rows.map(r=>r.max_event_time))):'None'}</strong><small>Event time in the source data</small></article>
+    <article className="panel"><span>Last new input received</span><strong>{latest(rows.map(r=>r.received_at))?localTime(latest(rows.map(r=>r.received_at))):'None'}</strong><small>Arrival in the projection</small></article>
     <article className="panel"><span>Replay</span><strong>Unknown</strong><small>Replay controller status unavailable in this deployment</small></article>
    </section>
    <section className="panel" aria-label="Provisional live summary"><div className="section-heading"><div><h2>Provisional totals</h2><p>Sum of latest keyed snapshots in the window · Not certified finance</p></div><span className="badge neutral">{rows.length} campaign-days</span></div>
@@ -77,15 +78,15 @@ export default function LiveActivity(){
     <BarList name="Provisional net by campaign" color="var(--live)" rows={campaignBars.map(([key,c])=>({key,value:c.net>0n?Number(c.net):0,
      display:c.currency?formatMoney(c.net.toString(),c.currency):exact(c.net.toString()),
      label:<>{name(c.campaign)}{currencies.size>1&&c.currency&&<small className="text-muted-foreground"> · {c.currency}</small>}{c.updated&&<span className="badge change">Updated</span>}</>}))}/>
-    <ExactValues label="Exact campaign-day snapshots"><p className="source">Each row is the latest committed snapshot for one campaign and UTC day; replacing it is not a raw event.</p>
-    <div className="table-scroll"><table aria-label="Latest campaign-day snapshots"><thead><tr><th>Campaign</th><th>UTC day</th><th>Sessions</th><th>Orders</th><th>Provisional net</th><th>Event / processed / received</th></tr></thead><tbody>{rows.map(row=><tr key={row.metric_key}>
+    <ExactValues label="Exact campaign-day snapshots"><p className="source">Each row is the latest committed snapshot for one campaign and day; replacing it is not a raw event.</p>
+    <div className="table-scroll"><table aria-label="Latest campaign-day snapshots"><thead><tr><th>Campaign</th><th>Day</th><th>Sessions</th><th>Orders</th><th>Provisional net</th><th>Event / processed / received</th></tr></thead><tbody>{rows.map(row=><tr key={row.metric_key}>
      <td><strong>{name(row.campaign_id)}</strong>{changed.has(row.metric_key)&&<span className="badge change" title={'Snapshot replaced; received '+changed.get(row.metric_key)}>Updated</span>}<small>{row.mapped?'Mapped':'Unmapped'} · {row.stale?'Historical / stale':'Recent activity'}</small></td>
-     <td>{row.metric_key.split('|')[1]||row.max_event_time.slice(0,10)}</td><td>{exact(row.sessions)}</td><td>{exact(row.order_count)}</td>
+     <td>{dayLabel(row.metric_key.split('|')[1]||row.max_event_time)}</td><td>{exact(row.sessions)}</td><td>{exact(row.order_count)}</td>
      <td>{row.currency?formatMoney(row.net_revenue_minor,row.currency):exact(row.net_revenue_minor)}</td>
-     <td><small>{row.max_event_time}<br/>{row.processed_at}<br/>{row.received_at}</small></td></tr>)}</tbody></table></div>
+     <td><small>{localTime(row.max_event_time,{seconds:true})}<br/>{localTime(row.processed_at,{seconds:true})}<br/>{localTime(row.received_at,{seconds:true})}</small></td></tr>)}</tbody></table></div>
     </ExactValues>
    </section>}
-   <details className="provenance"><summary>Streaming source provenance</summary><p>{streaming.source}</p><p>{streaming.source_identity||'Unavailable'}</p><p>Latest selected offset bounds (gaps may exist): {JSON.stringify(streaming.offset_bounds||[])}</p><p>Window {report.filters.from_date} → {report.filters.to_date} (exclusive UTC)</p></details>
+   <details className="provenance"><summary>Streaming source provenance</summary><p>{streaming.source}</p><p>{streaming.source_identity||'Unavailable'}</p><p>Latest selected offset bounds (gaps may exist): {JSON.stringify(streaming.offset_bounds||[])}</p><p>Window {dayRange(report.filters.from_date,report.filters.to_date)}</p></details>
   </>}
  </main>;
 }

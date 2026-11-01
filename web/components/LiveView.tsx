@@ -2,7 +2,7 @@
 
 import {useEffect,useState} from 'react';
 import {ratePercent} from './Engagement';
-import {elapsed,exact,formatMoney} from '../lib/format';
+import {elapsed,exact,formatMoney,localTime} from '../lib/format';
 
 type Count={visitors:string};
 type Money={currency:string;orders:string;gross_minor:string;refunds_minor:string;net_minor:string};
@@ -25,8 +25,8 @@ const KINDS:Record<string,{label:string;tone:string}>={browsing:{label:'Browsing
 const plural=(value:string,one:string,many:string)=>`${exact(value)} ${value==='1'?one:many}`;
 const SOURCES:Record<string,string>={web:'Web',mobile:'App',commerce:'Store',email:'Email'};
 const MAX_DOTS=24;
-const clock=(iso:string)=>iso.slice(11,16);
-const day=(iso:string)=>new Date(iso).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric',timeZone:'UTC'});
+// Hours and minutes in Vietnam time (GMT+7, no daylight saving).
+const clock=(iso:string)=>new Date(Date.parse(iso)+7*3600000).toISOString().slice(11,16);
 const ago=(iso:string,anchor:string)=>{const minutes=Math.round((Date.parse(anchor)-Date.parse(iso))/60000);return minutes<1?'just now':minutes<60?`${minutes} min ago`:`${Math.floor(minutes/60)} h ${minutes%60} min ago`;};
 const valid=(body:any)=>body&&typeof body.status==='string'&&(body.status!=='available'||(body.active&&Array.isArray(body.behaviour)&&body.today&&Array.isArray(body.series)&&Array.isArray(body.top_products)&&Array.isArray(body.activity)));
 
@@ -65,7 +65,7 @@ function ShopFloor({data}:{data:LiveViewReport}){
    <div className="min-w-0">
     <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
      <h2 className="text-base font-medium text-foreground">Where shoppers are now</h2>
-     <p className="text-xs text-muted-foreground">Replay time <span className="live-mono text-foreground">{clock(data.anchor)}</span> UTC · {day(data.anchor)}</p></div>
+     <p className="text-xs text-muted-foreground">Replay time <span className="live-mono text-foreground">{localTime(data.anchor)}</span></p></div>
     <ol aria-label="Shopper behaviour" className="live-aisle mt-6 grid grid-cols-5">
      {data.behaviour.map((row,index)=>{const count=Number(row.sessions),shown=Math.min(count,MAX_DOTS);
       return <li key={row.stage} className="relative flex min-w-0 flex-col items-center text-center">
@@ -86,8 +86,8 @@ function ShopFloor({data}:{data:LiveViewReport}){
 function Today({data}:{data:LiveViewReport}){
  const money=data.today.money;
  const items:[string,string,string][]=[
-  ['Net sales today',money.length?money.map(m=>formatMoney(m.net_minor,m.currency)).join(' · '):'No sales yet',money.length?money.map(m=>`${formatMoney(m.gross_minor,m.currency)} gross, ${formatMoney(m.refunds_minor,m.currency)} refunded`).join(' · '):'Since 00:00 UTC'],
-  ['Orders today',exact(money.reduce((sum,m)=>sum+BigInt(m.orders),0n).toString()),'Placed since 00:00 UTC'],
+  ['Net sales today',money.length?money.map(m=>formatMoney(m.net_minor,m.currency)).join(' · '):'No sales yet',money.length?money.map(m=>`${formatMoney(m.gross_minor,m.currency)} gross, ${formatMoney(m.refunds_minor,m.currency)} refunded`).join(' · '):'Since 07:00 (GMT+7), the start of the UTC day'],
+  ['Orders today',exact(money.reduce((sum,m)=>sum+BigInt(m.orders),0n).toString()),'Placed since 07:00 (GMT+7)'],
   ['Conversion today',data.today.conversion==null?'No sessions yet':ratePercent(data.today.conversion),`${exact(data.today.purchased_sessions)} of ${exact(data.today.sessions)} sessions bought`],
   ['Visitors today',exact(data.today.visitors),plural(data.today.sessions,'session','sessions')]];
  return <section aria-label="Today so far" className="grid grid-cols-2 gap-y-5 border-y py-5 lg:grid-cols-4 lg:divide-x">
@@ -104,10 +104,10 @@ function Minutes({data}:{data:LiveViewReport}){
   <p className="text-sm text-muted-foreground">Visitors per replay minute; a blue mark is a minute with an order.</p>
   <div role="img" aria-label="Visitors and orders per minute, last 30 minutes" className="mt-4">
    <div className="flex h-28 items-end gap-[3px] border-b">{data.series.map(point=>{const v=Number(point.visitors),o=Number(point.orders);
-    return <div key={point.minute} className="relative flex h-full flex-1 flex-col justify-end" title={`${clock(point.minute)} UTC · ${v} visitors · ${o} orders`}>
+    return <div key={point.minute} className="relative flex h-full flex-1 flex-col justify-end" title={`${clock(point.minute)} (GMT+7) · ${v} visitors · ${o} orders`}>
      {o>0&&<span className="mx-auto mb-1 size-2 rounded-full bg-order"/>}
      <span className={'block rounded-t-[3px] '+(v?'bg-live':'bg-muted')} style={{height:v?Math.max(8,v/peak*100)+'%':'3px'}}/></div>;})}</div>
-   <div className="mt-1 flex justify-between text-[11px] text-muted-foreground"><span>{clock(data.series[0]?.minute||data.anchor)}</span><span>{clock(data.series[data.series.length-1]?.minute||data.anchor)} UTC</span></div>
+   <div className="mt-1 flex justify-between text-[11px] text-muted-foreground"><span>{clock(data.series[0]?.minute||data.anchor)}</span><span>{clock(data.series[data.series.length-1]?.minute||data.anchor)} (GMT+7)</span></div>
   </div>
   <p className="sr-only">{visitors} visitor-minutes and {orders} orders in the last {data.window_minutes} minutes.</p>
  </section>;

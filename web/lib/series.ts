@@ -1,3 +1,4 @@
+import {dayLabel,monthName} from './format';
 import type {DailyMetric} from '../app/types';
 
 export type Granularity='daily'|'weekly'|'monthly';
@@ -28,5 +29,5 @@ export function aggregate(rows:DailyMetric[],granularity:Granularity):Bucket[]{
   bucket.days++;bucket.spend+=BigInt(row.spend_minor);bucket.net+=BigInt(row.net_revenue_minor);bucket.orders=row.orders==null||bucket.orders==null?null:bucket.orders+BigInt(row.orders);buckets.set(key,bucket);
  }
  return [...buckets.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([start,b])=>({start,days:b.days,spend_minor:b.spend.toString(),net_revenue_minor:b.net.toString(),orders:b.orders==null?null:b.orders.toString(),expected:(Date.parse(nextBucket(start,granularity)+'T00:00:00Z')-Date.parse(start+'T00:00:00Z'))/DAY,
-  label:granularity==='monthly'?start.slice(0,7):granularity==='weekly'?'Week of '+start:start}));
+  label:granularity==='monthly'?monthName(start):granularity==='weekly'?'Week of '+dayLabel(start):dayLabel(start)}));
 }

@@ -50,15 +50,38 @@ export function count(value:string|null|undefined):string {
  if(value==null)return 'Unavailable';const [whole,fraction='']=value.split('.');const trimmed=fraction.replace(/0+$/,'');
  return BigInt(whole).toLocaleString('en-US')+(trimmed?'.'+trimmed:'');
 }
-/** "2025-08-31T00:41:52+00:00" → "31 Aug 2025, 00:41 UTC". */
-export function utcTime(iso:string|null|undefined):string {
- const time=iso?new Date(iso):null;if(!time||Number.isNaN(time.getTime()))return 'Unavailable';
- return `${time.getUTCDate()} ${MONTHS[time.getUTCMonth()]} ${time.getUTCFullYear()}, ${pad(time.getUTCHours())}:${pad(time.getUTCMinutes())} UTC`;
+// Vietnam has no daylight saving, so GMT+7 is a fixed shift; certified days stay UTC calendar days.
+const VIETNAM_MS=7*3600*1000;
+const parse=(iso:string|null|undefined)=>{const time=iso?new Date(iso):null;return time&&!Number.isNaN(time.getTime())?time:null;};
+const ymd=(day:string)=>/^(\d{4})-(\d{2})-(\d{2})/.exec(day);
+/** A calendar day, "31 Aug 2026". */
+export function dayLabel(day:string|null|undefined):string {
+ const m=day?ymd(day):null;return m?`${Number(m[3])} ${MONTHS[Number(m[2])-1]} ${m[1]}`:'Unavailable';
 }
-/** Time of day of an instant, "02:48:13 UTC". */
-export function clockTime(iso:string|null|undefined):string {
- const time=iso?new Date(iso):null;if(!time||Number.isNaN(time.getTime()))return 'Unavailable';
- return `${pad(time.getUTCHours())}:${pad(time.getUTCMinutes())}:${pad(time.getUTCSeconds())} UTC`;
+/** A month, "Jan 2023" (any day of the month may be given). */
+export function monthName(day:string|null|undefined):string {
+ const m=day?ymd(day):null;return m?`${MONTHS[Number(m[2])-1]} ${m[1]}`:'Unavailable';
+}
+const shiftDay=(day:string,delta:number)=>new Date(Date.parse(day.slice(0,10)+'T00:00:00Z')+delta*86400000).toISOString().slice(0,10);
+/** The last day included by an exclusive end bound ("2026-09-01" → "2026-08-31"). */
+export const lastDay=(exclusive:string)=>exclusive?shiftDay(exclusive,-1):'';
+/** The exclusive end bound for an inclusive last day ("2026-08-31" → "2026-09-01"). */
+export const dayAfter=(inclusive:string)=>inclusive?shiftDay(inclusive,1):'';
+/** An inclusive day range from an exclusive end: "3 Jun – 31 Aug 2026"; the year shows once when shared. */
+export function dayRange(from:string,toExclusive:string):string {
+ const last=lastDay(toExclusive),a=ymd(from),b=ymd(last);if(!a||!b)return 'Unavailable';
+ if(from===last)return dayLabel(from);
+ return a[1]===b[1]?`${Number(a[3])} ${MONTHS[Number(a[2])-1]} – ${dayLabel(last)}`:`${dayLabel(from)} – ${dayLabel(last)}`;
+}
+/** An instant in Vietnam time, "1 Nov 2026, 09:57 (GMT+7)"; seconds on request. */
+export function localTime(iso:string|null|undefined,{seconds=false}:{seconds?:boolean}={}):string {
+ const time=parse(iso);if(!time)return 'Unavailable';const t=new Date(time.getTime()+VIETNAM_MS);
+ return `${t.getUTCDate()} ${MONTHS[t.getUTCMonth()]} ${t.getUTCFullYear()}, ${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}${seconds?':'+pad(t.getUTCSeconds()):''} (GMT+7)`;
+}
+/** Time of day in Vietnam time, "09:57:05 (GMT+7)". */
+export function localClock(iso:string|null|undefined):string {
+ const time=parse(iso);if(!time)return 'Unavailable';const t=new Date(time.getTime()+VIETNAM_MS);
+ return `${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}:${pad(t.getUTCSeconds())} (GMT+7)`;
 }
 /** Whole seconds as the two largest units: "12 s", "4 min", "9 h 56 min", "2 d 3 h". */
 export function elapsed(seconds:string|number|null|undefined):string {
@@ -68,3 +91,8 @@ export function elapsed(seconds:string|number|null|undefined):string {
 }
 const CHANNELS:Record<string,string>={google:'Google',meta:'Meta',tiktok:'TikTok',unattributed:'Unattributed'};
 export const channelName=(key:string|null|undefined)=>key?CHANNELS[key]??key:'Unattributed';
+/** A "data through" bound: a midnight bound means through the previous day ("31 Aug 2026"); otherwise the instant. */
+export function throughLabel(iso:string|null|undefined):string {
+ if(!iso)return 'no data';
+ return /T00:00:00(\.0+)?(Z|\+00:00)$/.test(iso)||/^\d{4}-\d{2}-\d{2}$/.test(iso)?dayLabel(lastDay(iso.slice(0,10))):localTime(iso);
+}

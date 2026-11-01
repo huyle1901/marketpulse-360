@@ -39,7 +39,7 @@ test.describe('available',()=>{
   await expect(feed.getByRole('listitem').first()).toContainText('Order placed');await expect(feed.getByRole('listitem').first()).toContainText('₫300,000');
   await expect(feed.getByRole('listitem').nth(1)).toContainText('Added to cart');
   await expect(page.getByText('Provisional · not certified').first()).toBeVisible();
-  await expect(page.getByText('Replay time',{exact:false})).toContainText('20:15');await expect(page.getByText('Replay time',{exact:false})).toContainText('Sep 3, 2026');
+  await expect(page.getByText('Replay time',{exact:false})).toContainText('4 Sep 2026, 03:15 (GMT+7)');
   await expect(page.getByRole('heading',{name:'By campaign (provisional)'})).toBeVisible();
  });
  test('live view fits a phone',async({page})=>{

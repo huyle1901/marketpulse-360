@@ -20,7 +20,7 @@ function CampaignDaily({query,row,identity}:{query:string;row:Metric;identity:st
  if(state.error||!report)return <p className="empty">{state.error||'Daily results unavailable'}</p>;
  if(report.certified.provenance.identity!==identity)return <p className="empty">Daily results are from a different certified release; reopen after the next refresh.</p>;
  const days=(report.certified.daily_series||[]).filter(d=>d.currency===row.currency);
- return !days.length?<p className="empty">No certified days for this campaign in the selection.</p>:<div className="table-scroll"><table aria-label={'Daily results · '+name}><thead><tr><th>UTC day</th><th>Net revenue</th><th>Ad spend</th><th>Orders</th></tr></thead><tbody>{days.map(d=><tr key={d.event_date}><td>{d.event_date}</td><td title={d.net_revenue_minor+' minor units'}>{formatMoney(d.net_revenue_minor,row.currency)}<small>{d.net_revenue_minor}</small></td><td>{formatMoney(d.spend_minor,row.currency)}</td><td>{exact(d.orders)}</td></tr>)}</tbody></table></div>;
+ return !days.length?<p className="empty">No certified days for this campaign in the selection.</p>:<div className="table-scroll"><table aria-label={'Daily results · '+name}><thead><tr><th>Day</th><th>Net revenue</th><th>Ad spend</th><th>Orders</th></tr></thead><tbody>{days.map(d=><tr key={d.event_date}><td>{d.event_date}</td><td title={d.net_revenue_minor+' minor units'}>{formatMoney(d.net_revenue_minor,row.currency)}<small>{d.net_revenue_minor}</small></td><td>{formatMoney(d.spend_minor,row.currency)}</td><td>{exact(d.orders)}</td></tr>)}</tbody></table></div>;
 }
 
 export default function CampaignDrawer({row,query,identity,onClose,children}:{row:Metric;query:string;identity:string;onClose:()=>void;children:ReactNode}){
