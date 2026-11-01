@@ -1,7 +1,7 @@
 'use client';
 
 import {useEffect,useRef,useState} from 'react';
-import {exact,formatMoney} from '../../lib/format';
+import {clockTime,exact,formatMoney} from '../../lib/format';
 import {useUrlState} from '../../lib/useUrlState';
 import {liveWindow} from '../../lib/live';
 import {LiveView} from '../../components/LiveView';
@@ -41,14 +41,16 @@ export default function LiveActivity(){
  const streaming=report?.streaming,rows=[...(streaming?.rows||[])].sort((a,b)=>b.max_event_time.localeCompare(a.max_event_time)||a.campaign_id.localeCompare(b.campaign_id));
  const name=(id:string)=>report?.campaigns.find(c=>c.campaign_id===id)?.name||id;
  const groups=new Map<string,{sessions:bigint;orders:bigint;net:bigint;keys:number}>();
- for(const row of rows){const key=row.currency||'';const total=groups.get(key)||{sessions:0n,orders:0n,net:0n,keys:0};total.sessions+=BigInt(row.sessions);total.orders+=BigInt(row.order_count);total.net+=BigInt(row.net_revenue_minor);total.keys++;groups.set(key,total);}
+ // A campaign-day without orders has no currency; it counts in its campaign's declared currency.
+ const currencyOf=(row:LiveRow)=>row.currency||report?.campaigns.find(c=>c.campaign_id===row.campaign_id)?.currency||'';
+ for(const row of rows){const key=currencyOf(row);const total=groups.get(key)||{sessions:0n,orders:0n,net:0n,keys:0};total.sessions+=BigInt(row.sessions);total.orders+=BigInt(row.order_count);total.net+=BigInt(row.net_revenue_minor);total.keys++;groups.set(key,total);}
  // One bar per campaign and currency (a day without orders has no currency and takes its campaign's): the window's latest campaign-day snapshots summed; negatives are text, never drawn.
  const byCampaign=new Map<string,{campaign:string;currency:string;net:bigint;updated:boolean}>();
  for(const row of rows){const currency=row.currency||report?.campaigns.find(c=>c.campaign_id===row.campaign_id)?.currency||'';const key=row.campaign_id+'|'+currency;const item=byCampaign.get(key)||{campaign:row.campaign_id,currency,net:0n,updated:false};item.net+=BigInt(row.net_revenue_minor);item.updated||=changed.has(row.metric_key);byCampaign.set(key,item);}
  const campaignBars=[...byCampaign.entries()].sort(([ka,a],[kb,b])=>a.net===b.net?ka.localeCompare(kb):a.net>b.net?-1:1);
  const currencies=new Set(campaignBars.map(([,c])=>c.currency));
  return <main>
-  <header className="masthead"><div><h1>Live View</h1><p>Who is on the store right now and what they are buying · Provisional, not certified finance</p></div><div className="status"><span className="dot"/> Checks every 5 seconds<br/><small>Last successful check: {lastPoll||'Waiting'} · a successful check is not new input</small></div></header>
+  <header className="masthead"><div><h1>Live View</h1><p>Who is on the store right now and what they are buying · Provisional, not certified finance</p></div><div className="status"><span className="dot"/> Checks every 5 seconds<br/><small>Last successful check: {lastPoll?clockTime(lastPoll):'Waiting'} · a successful check is not new input</small></div></header>
   <LiveView/>
   <h2 className="mt-8">By campaign (provisional)</h2>
   <section className="filters" aria-label="Live window">

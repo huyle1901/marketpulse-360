@@ -57,3 +57,7 @@ test.describe('empty',()=>{
   await expect(page.getByRole('article',{name:'Visitors right now'})).toHaveCount(0);
  });
 });
+test('freshness reads as elapsed time',async({page})=>{
+ await serve({...view,freshness:{...view.freshness,seconds_since_receipt:'35805',receiving:false}})({page});await page.goto('/live');
+ await expect(page.getByRole('region',{name:'Shop floor'})).toContainText('last event received 9 h 56 min ago');
+});

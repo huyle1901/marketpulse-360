@@ -2,7 +2,7 @@
 
 import {useEffect,useState} from 'react';
 import {ratePercent} from './Engagement';
-import {exact,formatMoney} from '../lib/format';
+import {elapsed,exact,formatMoney} from '../lib/format';
 
 type Count={visitors:string};
 type Money={currency:string;orders:string;gross_minor:string;refunds_minor:string;net_minor:string};
@@ -79,7 +79,7 @@ function ShopFloor({data}:{data:LiveViewReport}){
     </ol>
    </div>
   </div>
-  <p className="border-t border-border px-6 py-3 text-[11px] text-muted-foreground md:px-8">Each dot is one active session at the furthest step it reached · Provisional · not certified · last event received {exact(data.freshness.seconds_since_receipt)}s ago</p>
+  <p className="border-t border-border px-6 py-3 text-[11px] text-muted-foreground md:px-8">Each dot is one active session at the furthest step it reached · Provisional · not certified · last event received {elapsed(data.freshness.seconds_since_receipt)} ago</p>
  </section>;
 }
 

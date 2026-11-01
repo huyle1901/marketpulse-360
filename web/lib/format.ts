@@ -26,8 +26,45 @@ export function compactMoney(value:string|null|undefined,currency:string):string
  if(value==null)return 'Unavailable';
  const digits=BigInt(new Intl.NumberFormat('en-US',{style:'currency',currency}).resolvedOptions().maximumFractionDigits??2);
  const amount=BigInt(value),negative=amount<0n,major=(negative?-amount:amount)/10n**digits;
- const unit=([[10n**12n,'T'],[10n**9n,'B'],[10n**6n,'M']] as const).find(([size])=>major>=size);
- if(!unit)return formatMoney(value,currency);
- const scaled=major*100n/unit[0],prefix=formatMoney('0',currency).replace(/0([.,]0+)?$/,'');
+ const units=[[10n**12n,'T'],[10n**9n,'B'],[10n**6n,'M']] as const;
+ const index=units.findIndex(([size])=>major>=size);
+ if(index<0)return formatMoney(value,currency);
+ // Round half up to the hundredth of the unit (₫3,457,576,000 → ₫3.46B); 999.995B carries into 1.00T.
+ const round=(size:bigint)=>((negative?-amount:amount)*100n+size*10n**digits/2n)/(size*10n**digits);
+ let unit=units[index],scaled=round(unit[0]);
+ if(scaled>=100000n&&index>0){unit=units[index-1];scaled=round(unit[0]);}
+ const prefix=formatMoney('0',currency).replace(/0([.,]0+)?$/,'');
  return (negative?'-':'')+prefix+(scaled/100n).toLocaleString('en-US')+'.'+(scaled%100n).toString().padStart(2,'0')+unit[1];
 }
+
+const pad=(n:number)=>String(n).padStart(2,'0');
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+/** A 0–1 fixed-point ratio ("0.848271") as a one-decimal percentage, rounded half up. */
+export function share(value:string|null|undefined):string {
+ const match=value==null?null:/^(\d+)\.(\d{1,6})$/.exec(value);if(!match)return 'Unavailable';
+ const millionths=BigInt(match[1]+match[2].padEnd(6,'0')),tenths=(millionths+500n)/1000n;
+ return (tenths/10n).toString()+'.'+(tenths%10n).toString()+'%';
+}
+/** Fixed-point counts without trailing zeros: "1.000000" → "1", "0.250000" → "0.25". */
+export function count(value:string|null|undefined):string {
+ if(value==null)return 'Unavailable';const [whole,fraction='']=value.split('.');const trimmed=fraction.replace(/0+$/,'');
+ return BigInt(whole).toLocaleString('en-US')+(trimmed?'.'+trimmed:'');
+}
+/** "2025-08-31T00:41:52+00:00" → "31 Aug 2025, 00:41 UTC". */
+export function utcTime(iso:string|null|undefined):string {
+ const time=iso?new Date(iso):null;if(!time||Number.isNaN(time.getTime()))return 'Unavailable';
+ return `${time.getUTCDate()} ${MONTHS[time.getUTCMonth()]} ${time.getUTCFullYear()}, ${pad(time.getUTCHours())}:${pad(time.getUTCMinutes())} UTC`;
+}
+/** Time of day of an instant, "02:48:13 UTC". */
+export function clockTime(iso:string|null|undefined):string {
+ const time=iso?new Date(iso):null;if(!time||Number.isNaN(time.getTime()))return 'Unavailable';
+ return `${pad(time.getUTCHours())}:${pad(time.getUTCMinutes())}:${pad(time.getUTCSeconds())} UTC`;
+}
+/** Whole seconds as the two largest units: "12 s", "4 min", "9 h 56 min", "2 d 3 h". */
+export function elapsed(seconds:string|number|null|undefined):string {
+ const s=Number(seconds);if(seconds==null||!Number.isFinite(s)||s<0)return 'Unavailable';
+ const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
+ return d?`${d} d${h?` ${h} h`:''}`:h?`${h} h${m?` ${m} min`:''}`:m?`${m} min`:`${Math.floor(s)} s`;
+}
+const CHANNELS:Record<string,string>={google:'Google',meta:'Meta',tiktok:'TikTok',unattributed:'Unattributed'};
+export const channelName=(key:string|null|undefined)=>key?CHANNELS[key]??key:'Unattributed';

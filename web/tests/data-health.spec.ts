@@ -35,3 +35,7 @@ test('platform status shows source availability as a labelled meter with a marke
  const legend=page.getByRole('list',{name:'Source availability legend'});
  await expect(legend.getByRole('listitem')).toHaveCount(3);await expect(legend).toContainText('Unavailable / stale');
 });
+test('a failed panel is named in words, not by its internal key',async({page})=>{
+ await page.route('**/api/v1/ops/lineage',r=>r.fulfill({status:503,json:{code:'unavailable'}}));
+ await page.goto('/operations');await expect(page.locator('main').getByRole('alert')).toHaveText('Could not load: validated lineage');
+});

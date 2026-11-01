@@ -63,3 +63,11 @@ test('analysis URL restores model and filters across reload and back',async({pag
 test('automatic analysis dates do not trap Back after an undated entry',async({page})=>{
  await page.goto('/login');await page.goto('/analysis');await expect(page).toHaveURL(/from_date=/);await page.goBack();await expect(page).toHaveURL(url=>url.pathname==='/login');
 });
+test('reach, counts, times and channels read like a report, not raw data',async({page})=>{
+ await page.goto('/analysis');const funnel=page.locator('#funnel');
+ await expect(funnel).toContainText('50.0% of sessions');await expect(funnel).not.toContainText('0.500000');
+ await expect(page.getByRole('list',{name:'Sessions by channel'})).toContainText('Google');
+ const journeys=page.locator('#journeys');
+ await expect(journeys).toContainText('2 Jan 2026, 00:00 UTC');await expect(journeys).not.toContainText('2026-01-02T00:00:00');
+ await expect(journeys).not.toContainText('1.000000');
+});

@@ -60,8 +60,8 @@ test('large amounts are compact on cards with the exact value available',async({
  await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:long}));
  await page.goto('/?from_date=2025-01-01&to_date=2026-09-01');
  const card=page.getByRole('region',{name:'Key metrics · VND'}).getByRole('article',{name:'Net revenue'});
- await expect(card).toContainText('₫23.19T');await expect(card.locator('[title]').filter({hasText:'₫23.19T'})).toHaveAttribute('title','₫23,195,596,000,000');
- await expect(page.getByRole('region',{name:'Key metrics · VND'}).getByRole('article',{name:'Ad spend'})).toContainText('₫668.63M');
+ await expect(card).toContainText('₫23.20T');await expect(card.locator('[title]').filter({hasText:'₫23.20T'})).toHaveAttribute('title','₫23,195,596,000,000');
+ await expect(page.getByRole('region',{name:'Key metrics · VND'}).getByRole('article',{name:'Ad spend'})).toContainText('₫668.64M');
  await expect(card.getByRole('img',{name:'Net revenue by month'})).toBeVisible();
 });
 

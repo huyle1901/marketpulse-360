@@ -11,7 +11,7 @@ import {exact,formatMoney} from '../lib/format';
 /** Six-place certified ratio string to a one-decimal percent, truncated; null stays unavailable. */
 export const ratePercent=(value:string|null|undefined)=>{
  if(value==null)return 'Unavailable';const match=/^(\d+)\.(\d{6})$/.exec(value);if(!match)return 'Unavailable';
- const tenths=BigInt(match[1]+match[2])/1000n;return (tenths/10n).toString()+'.'+(tenths%10n).toString()+'%';
+ const tenths=(BigInt(match[1]+match[2])+500n)/1000n;return (tenths/10n).toString()+'.'+(tenths%10n).toString()+'%';
 };
 const monthLabel=(value:string)=>new Date(value+'T00:00:00Z').toLocaleDateString('en-US',{month:'short',year:'2-digit',timeZone:'UTC'});
 type Provenance={identity:string;generation:string;data_through?:string|null;projection_checksum?:string};

@@ -79,3 +79,11 @@ test('a campaign-day without orders joins its campaign bar instead of adding a c
  await page.goto('/live');const bars=page.getByRole('list',{name:'Provisional net by campaign'});
  await expect(bars.getByRole('listitem')).toHaveCount(1);await expect(bars).toContainText('Campaign A');await expect(bars).not.toContainText('VND');
 });
+
+test('campaign-days without orders join their campaign currency in the totals and the check time is readable',async({page})=>{
+ const noOrders={...live('3','2'),metric_key:'a|2026-01-05',order_count:'0',net_revenue_minor:'0',currency:''};
+ await page.route('**/api/v1/dashboard*',r=>r.fulfill({json:dashboard([live('7','1'),noOrders])}));
+ await page.goto('/live');const summary=page.getByRole('region',{name:'Provisional live summary'});
+ await expect(summary.locator('.kpi-group')).toHaveCount(1);await expect(summary).toContainText('10');await expect(summary).not.toContainText('No currency');
+ await expect(page.getByText(/Last successful check: \d{2}:\d{2}:\d{2} UTC/)).toBeVisible();
+});
