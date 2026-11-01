@@ -79,3 +79,56 @@ class ReplayCursorTests(unittest.TestCase):
                 replay_window(FIXTURE, state, date(2026, 1, 1), date(2026, 1, 3), FakePublisher(),
                               ReplayPacer(PacingConfig(no_sleep=True), next_control), next_control,
                               target_id="other-kafka")
+
+
+class RecordingPacer:
+    """Logs each wait; optionally stops the controller once a given ordinal is due."""
+
+    def __init__(self, log: list, controller: ReplayController, stop_at: int | None = None) -> None:
+        self.log, self.controller, self.stop_at = log, controller, stop_at
+
+    def wait(self, event_time, ordinal: int) -> None:
+        self.log.append(("wait", ordinal))
+        if ordinal == self.stop_at:
+            self.controller.stop()
+
+
+class LoggingPublisher(FakePublisher):
+    def __init__(self, log: list) -> None:
+        super().__init__()
+        self.log = log
+
+    def publish(self, record, callback, *, cancelled=lambda: False) -> None:
+        self.log.append(("publish", len(self.records)))
+        super().publish(record, callback, cancelled=cancelled)
+
+
+class RealTimeReplayTests(unittest.TestCase):
+    def test_each_record_is_published_as_soon_as_it_is_due(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            log: list = []
+            control = ReplayController()
+            replay_window(FIXTURE, Path(temporary) / "cursor.json", date(2026, 1, 1), date(2026, 1, 3),
+                          LoggingPublisher(log), RecordingPacer(log, control), control,
+                          target_id="test-kafka", batch_size=10, initialize=True)
+            self.assertEqual([("wait", 0), ("publish", 0), ("wait", 1), ("publish", 1), ("wait", 2)], log[:5])
+
+    def test_stopping_mid_batch_commits_what_was_sent_and_resumes_after_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary) / "cursor.json"
+            log: list = []
+            control = ReplayController()
+            first = LoggingPublisher(log)
+            result = replay_window(FIXTURE, state, date(2026, 1, 1), date(2026, 1, 3), first,
+                                   RecordingPacer(log, control, stop_at=3), control,
+                                   target_id="test-kafka", batch_size=10, initialize=True)
+            self.assertEqual(3, result.committed)
+            saved = json.loads(state.read_text())
+            self.assertEqual((3, None), (saved["next_index"], saved["pending"]))
+            again = ReplayController()
+            second = FakePublisher()
+            replay_window(FIXTURE, state, date(2026, 1, 1), date(2026, 1, 3), second,
+                          ReplayPacer(PacingConfig(no_sleep=True), again), again,
+                          target_id="test-kafka", batch_size=10)
+            expected = [r.event_id for r in iter_replay_records(FIXTURE)]
+            self.assertEqual(expected, [r.event_id for r in first.records + second.records])
