@@ -3,7 +3,7 @@ import {useEffect,useState} from 'react';
 import {Bar,BarChart,CartesianGrid,Line,LineChart,XAxis,YAxis} from 'recharts';
 import {Card,CardContent,CardDescription,CardHeader,CardTitle} from '@/components/ui/card';
 import {StatStrip} from './StatStrip';
-import {BarList,ExactValues} from './charts';
+import {BarList,ExactValues,Legend} from './charts';
 import {ChartContainer,ChartLegend,ChartLegendContent,ChartTooltip,ChartTooltipContent,type ChartConfig} from '@/components/ui/chart';
 import {Table,TableBody,TableCell,TableHead,TableHeader,TableRow} from '@/components/ui/table';
 import {exact,formatMoney} from '../lib/format';
@@ -41,10 +41,11 @@ export function EmailWorkspace(){
  return <div className="space-y-4">
   <StatStrip label="Email totals" className="md:grid-cols-5" items={cards.map(([name,value,hint])=>({name,value,hint}))}/>
   <Card className="min-w-0"><CardHeader><CardTitle>Monthly engagement</CardTitle><CardDescription>Governed email events by month · {data.definition}</CardDescription></CardHeader><CardContent>
-   <div role="img" aria-label="Monthly emails sent, opened and clicked"><ChartContainer config={emailConfig} className="aspect-auto h-[260px] w-full"><LineChart data={chart} margin={{left:4,right:12,top:8}}><CartesianGrid vertical={false}/><XAxis dataKey="month" tickLine={false} axisLine={false} minTickGap={24}/><YAxis tickLine={false} axisLine={false} width={44}/><ChartTooltip content={<ChartTooltipContent/>}/><ChartLegend content={<ChartLegendContent/>}/>{(['sent','opened','clicked'] as const).map(k=><Line key={k} dataKey={k} type="monotone" stroke={'var(--color-'+k+')'} strokeWidth={2} dot={false} isAnimationActive={false}/>)}</LineChart></ChartContainer></div>
+   <div className="mb-3"><Legend label="Monthly engagement legend" items={(['sent','opened','clicked'] as const).map(k=>({key:k,label:emailConfig[k].label,color:emailConfig[k].color}))}/></div>
+   <div role="img" aria-label="Monthly emails sent, opened and clicked"><ChartContainer config={emailConfig} className="aspect-auto h-[260px] w-full"><LineChart data={chart} margin={{left:4,right:12,top:8}}><CartesianGrid vertical={false}/><XAxis dataKey="month" tickLine={false} axisLine={false} minTickGap={24}/><YAxis tickLine={false} axisLine={false} width={44}/><ChartTooltip content={<ChartTooltipContent/>}/>{(['sent','opened','clicked'] as const).map(k=><Line key={k} dataKey={k} type="monotone" stroke={'var(--color-'+k+')'} strokeWidth={2} dot={false} isAnimationActive={false}/>)}</LineChart></ChartContainer></div>
   </CardContent></Card>
   <Card className="min-w-0"><CardHeader><CardTitle>Email funnel</CardTitle><CardDescription>How many lifecycle emails reached each step across the certified history</CardDescription></CardHeader><CardContent>
-   <BarList name="Email funnel" rows={([['sent','Sent',t.sent,'var(--chart-4)'],['delivered','Delivered',t.delivered,'var(--chart-1)'],['opened','Opened',t.opened,'var(--chart-5)'],['clicked','Clicked',t.clicked,'var(--chart-3)'],['unsubscribed','Unsubscribed',t.unsubscribed,'var(--chart-2)']] as const).map(([key,label,value,color])=>({key,label,value:Number(value),display:exact(value),color}))}/>
+   <BarList name="Email funnel" rows={([['sent','Sent',t.sent],['delivered','Delivered',t.delivered],['opened','Opened',t.opened],['clicked','Clicked',t.clicked],['unsubscribed','Unsubscribed',t.unsubscribed]] as const).map(([key,label,value])=>({key,label,value:Number(value),display:exact(value)}))}/>
    <ExactValues label="Exact monthly email values"><Table aria-label="Email engagement by month"><TableHeader><TableRow>{['Month','Sent','Recipients','Delivered','Opened','Clicked','Unsubscribed','Open rate','Click rate'].map(h=><TableHead key={h} className={h==='Month'?'':'text-right'}>{h}</TableHead>)}</TableRow></TableHeader><TableBody>{[...data.months].reverse().map(m=><TableRow key={m.month}><TableCell className="font-medium">{m.month.slice(0,7)}</TableCell>{[m.sent,m.recipients,m.delivered,m.opened,m.clicked,m.unsubscribed].map((v,i)=><TableCell key={i} className="text-right tabular-nums">{exact(v)}</TableCell>)}<TableCell className="text-right tabular-nums">{ratePercent(m.open_rate)}</TableCell><TableCell className="text-right tabular-nums">{ratePercent(m.click_rate)}</TableCell></TableRow>)}</TableBody></Table></ExactValues>
   </CardContent></Card>
   <p className="source">Email is not credited with revenue here: the certified attribution policy credits paid clicks only, so inventing an email revenue model would contradict it.</p>

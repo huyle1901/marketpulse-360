@@ -35,7 +35,7 @@ class Session:
         if 'GROUP BY source' in sql: return [{'source': 'web', 'visitors': 2}, {'source': 'mobile', 'visitors': 1}]
         if 'GROUP BY device_type' in sql: return [{'device_type': 'mobile', 'visitors': 2}, {'device_type': 'desktop', 'visitors': 1}]
         if 'AS active_visitors' in sql: return [{'active_visitors': 3}]
-        if 'AS stage' in sql: return [{'stage': 1, 'sessions': 1}, {'stage': 3, 'sessions': 2}, {'stage': 5, 'sessions': 1}]
+        if 'AS stage' in sql: return [{'stage': 1, 'sessions': 1, 'web': 1, 'app': 0}, {'stage': 3, 'sessions': 2, 'web': 1, 'app': 1}, {'stage': 5, 'sessions': 1, 'web': 1, 'app': 0}]
         if 'AS purchased' in sql: return [{'visitors': 20, 'sessions': 25, 'purchased': 3}]
         if 'GROUP BY currency' in sql: return self.money
         if 'AS minute' in sql: return [{'minute': ANCHOR.replace(second=0), 'visitors': 2, 'orders': 1},
@@ -93,6 +93,15 @@ class LiveViewTests(unittest.TestCase):
         self.assertEqual([row['device'] for row in result['active']['by_device']], ['desktop', 'mobile', 'tablet', 'unknown'])
         self.assertEqual([row['stage'] for row in result['behaviour']], list(STAGES))
         self.assertEqual([row['sessions'] for row in result['behaviour']], ['1', '0', '2', '0', '1'])
+
+    def test_behaviour_splits_each_stage_by_session_source(self):
+        result, session = view()
+        self.assertEqual([(row['web'], row['app']) for row in result['behaviour']], [('1', '0'), ('0', '0'), ('1', '1'), ('0', '0'), ('1', '0')])
+        sql = next(sql for sql, _ in session.calls if 'AS stage' in sql)
+        # ClickHouse aliases shadow columns, so the per-session source must not be named `source`.
+        self.assertIn('any(source) AS session_source', sql)
+        self.assertIn("countIf(session_source = 'web') AS web", sql)
+        self.assertIn("countIf(session_source = 'mobile') AS app", sql)
 
     def test_today_money_and_conversion(self):
         result, session = view()

@@ -1,10 +1,11 @@
 import {test,expect} from '@playwright/test';
+import {expectReadableLegend} from './legend-marks';
 
 const anchor='2026-09-03T20:15:30+00:00';
 const minute=(i:number)=>new Date(Date.parse('2026-09-03T19:46:00Z')+i*60000).toISOString().replace('.000Z','+00:00');
 const view={status:'available',anchor,window_minutes:'30',
  active:{visitors:'3',by_source:[{source:'mobile',visitors:'1'},{source:'web',visitors:'2'}],by_device:[{device:'desktop',visitors:'1'},{device:'mobile',visitors:'2'},{device:'tablet',visitors:'0'},{device:'unknown',visitors:'0'}]},
- behaviour:[{stage:'browsing',sessions:'1'},{stage:'viewing_product',sessions:'0'},{stage:'cart',sessions:'2'},{stage:'checkout',sessions:'0'},{stage:'purchased',sessions:'1'}],
+ behaviour:[{stage:'browsing',sessions:'1',web:'1',app:'0'},{stage:'viewing_product',sessions:'0',web:'0',app:'0'},{stage:'cart',sessions:'2',web:'1',app:'1'},{stage:'checkout',sessions:'0',web:'0',app:'0'},{stage:'purchased',sessions:'1',web:'1',app:'0'}],
  today:{visitors:'20',sessions:'25',purchased_sessions:'3',conversion:'0.120000',money:[{currency:'VND',orders:'3',gross_minor:'900000',refunds_minor:'100000',net_minor:'800000'}]},
  series:Array.from({length:30},(_,i)=>({minute:minute(i),visitors:i===29?'2':'0',orders:i===29?'1':'0'})),
  top_products:[{label:'Linen jacket',category:'fashion',units:'4',carts:'2',views:'9'},{label:'Unlisted product',category:null,units:'0',carts:'1',views:'3'}],
@@ -56,4 +57,15 @@ test.describe('empty',()=>{
   await expect(page.getByText('No live event has been projected yet',{exact:false})).toBeVisible();
   await expect(page.getByRole('article',{name:'Visitors right now'})).toHaveCount(0);
  });
+});
+
+for(const theme of ['light','dark'] as const)test(`shop floor dots follow the web and app legend and the minute chart has a legend in ${theme} mode`,async({page})=>{
+ await serve(view)({page});await page.addInitScript(t=>localStorage.setItem('mp-theme',t),theme);await page.goto('/live');
+ const sourceLegend=page.getByRole('list',{name:'Visitors by source legend',exact:true});
+ await expectReadableLegend(sourceLegend);
+ const [web,app]=await sourceLegend.getByRole('listitem').evaluateAll(items=>items.map(i=>getComputedStyle(i.querySelector('[aria-hidden="true"]')!).backgroundColor));
+ const dots=(stage:string)=>page.getByRole('list',{name:'Shopper behaviour'}).getByRole('listitem').filter({hasText:stage}).locator('.live-dot').evaluateAll(d=>d.map(x=>getComputedStyle(x).backgroundColor));
+ expect(await dots('Purchased')).toEqual([web]);
+ expect((await dots('Holding a cart')).sort()).toEqual([web,app].sort());
+ await expectReadableLegend(page.getByRole('list',{name:'Minute by minute legend',exact:true}));
 });

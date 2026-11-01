@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {expectReadableLegend} from './legend-marks';
 
 const provenance={identity:'a'.repeat(64),generation:'1',proof_digest:'b'.repeat(64),model:'gold.commerce_daily',serving_relation:'commerce_daily',historical:true,currency:'VND'};
 const products={status:'available',currency:'VND',provenance,definition:'Certified order lines by product and purchase device.',
@@ -46,4 +47,10 @@ test('products fits a phone',async({page})=>{
  await page.setViewportSize({width:390,height:844});await page.goto('/products');
  await expect(page.getByRole('img',{name:'Net revenue by category and brand'})).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+});
+
+for(const theme of ['light','dark'] as const)test(`category and device legends are visible and distinct in ${theme} mode`,async({page})=>{
+ await page.addInitScript(t=>localStorage.setItem('mp-theme',t),theme);await page.goto('/products');
+ await expectReadableLegend(page.getByRole('list',{name:'Category legend',exact:true}));
+ await expectReadableLegend(page.getByRole('list',{name:'Gross revenue by purchase device legend',exact:true}));
 });

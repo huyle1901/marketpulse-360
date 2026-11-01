@@ -2,13 +2,14 @@
 
 import {useEffect,useState} from 'react';
 import {ratePercent} from './Engagement';
+import {Legend} from './charts';
 import {exact,formatMoney} from '../lib/format';
 
 type Count={visitors:string};
 type Money={currency:string;orders:string;gross_minor:string;refunds_minor:string;net_minor:string};
 export type LiveViewReport={status:string;message?:string;anchor:string;window_minutes:string;
  active:{visitors:string;by_source:({source:string}&Count)[];by_device:({device:string}&Count)[]};
- behaviour:{stage:string;sessions:string}[];
+ behaviour:{stage:string;sessions:string;web:string;app:string}[];
  today:{visitors:string;sessions:string;purchased_sessions:string;conversion:string|null;money:Money[]};
  series:{minute:string;visitors:string;orders:string}[];
  top_products:{label:string;category:string|null;units:string;carts:string;views:string}[];
@@ -58,9 +59,9 @@ function ShopFloor({data}:{data:LiveViewReport}){
      <span>{data.freshness.receiving?'Live':'Waiting for events'}</span></div>
     <div className="live-figure mt-4 text-[var(--hero-figure)]">{exact(data.active.visitors)}</div>
     <p className="mt-1 text-sm text-muted-foreground">people on the store in the last {data.window_minutes} minutes</p>
-    <div className="mt-5 flex h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
-     {split>0&&<><span className="bg-live" style={{width:web/split*100+'%'}}/><span className="bg-order" style={{width:app/split*100+'%'}}/></>}</div>
-    <p className="mt-2 flex gap-4 text-xs text-muted-foreground"><span><i className="mr-1.5 inline-block size-2 rounded-full bg-live"/>Web {exact(String(web))}</span><span><i className="mr-1.5 inline-block size-2 rounded-full bg-order"/>App {exact(String(app))}</span></p>
+    <div className="mt-5 flex h-1.5 gap-[2px] overflow-hidden rounded-full bg-muted" aria-hidden>
+     {split>0&&<><span className="bg-source-web" style={{width:web/split*100+'%'}}/><span className="bg-source-app" style={{width:app/split*100+'%'}}/></>}</div>
+    <div className="mt-2"><Legend label="Visitors by source legend" items={[{key:'web',label:'Web',color:'var(--source-web)',value:exact(String(web))},{key:'app',label:'App',color:'var(--source-app)',value:exact(String(app))}]}/></div>
    </article>
    <div className="min-w-0">
     <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
@@ -70,7 +71,7 @@ function ShopFloor({data}:{data:LiveViewReport}){
      {data.behaviour.map((row,index)=>{const count=Number(row.sessions),shown=Math.min(count,MAX_DOTS);
       return <li key={row.stage} className="relative flex min-w-0 flex-col items-center text-center">
        <div className="flex h-16 w-full flex-wrap-reverse content-start items-end justify-center gap-1.5 px-1" aria-hidden>
-        {Array.from({length:shown},(_,dot)=><span key={dot} className={'live-dot '+(row.stage==='purchased'?'is-bought':'')}/>)}
+        {Array.from({length:shown},(_,dot)=><span key={dot} className={'live-dot '+(dot<Number(row.web)?'is-web':dot<Number(row.web)+Number(row.app)?'is-app':'is-other')}/>)}
         {count>MAX_DOTS&&<span className="text-[10px] text-foreground/70">+{count-MAX_DOTS}</span>}</div>
        <span className={'live-station '+(count?'is-busy':'')} aria-hidden>{index+1}</span>
        <span className="mt-3 text-[11px] leading-tight sm:text-xs">{STATIONS[row.stage]||row.stage}</span>
@@ -79,7 +80,7 @@ function ShopFloor({data}:{data:LiveViewReport}){
     </ol>
    </div>
   </div>
-  <p className="border-t border-border px-6 py-3 text-[11px] text-muted-foreground md:px-8">Each dot is one active session at the furthest step it reached · Provisional · not certified · last event received {exact(data.freshness.seconds_since_receipt)}s ago</p>
+  <p className="border-t border-border px-6 py-3 text-[11px] text-muted-foreground md:px-8">Each dot is one active session at the furthest step it reached, coloured web or app · Provisional · not certified · last event received {exact(data.freshness.seconds_since_receipt)}s ago</p>
  </section>;
 }
 
@@ -101,7 +102,8 @@ function Minutes({data}:{data:LiveViewReport}){
  const orders=data.series.reduce((sum,point)=>sum+Number(point.orders),0),visitors=data.series.reduce((sum,point)=>sum+Number(point.visitors),0);
  return <section aria-labelledby="minutes-heading" className="min-w-0">
   <h2 id="minutes-heading" className="text-base font-medium">Minute by minute</h2>
-  <p className="text-sm text-muted-foreground">Visitors per replay minute; a blue mark is a minute with an order.</p>
+  <p className="text-sm text-muted-foreground">Visitors per replay minute</p>
+  <div className="mt-2"><Legend label="Minute by minute legend" items={[{key:'visitors',label:'Visitors',color:'var(--live)'},{key:'orders',label:'Minute with an order',color:'var(--order)'}]}/></div>
   <div role="img" aria-label="Visitors and orders per minute, last 30 minutes" className="mt-4">
    <div className="flex h-28 items-end gap-[3px] border-b">{data.series.map(point=>{const v=Number(point.visitors),o=Number(point.orders);
     return <div key={point.minute} className="relative flex h-full flex-1 flex-col justify-end" title={`${clock(point.minute)} UTC · ${v} visitors · ${o} orders`}>

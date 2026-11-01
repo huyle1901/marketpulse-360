@@ -10,7 +10,7 @@ export type Slice={key:string;label:string;value:number;color:string;display:str
 export function Legend({items,label='Legend'}:{items:{key:string;label:string;color:string;value?:string}[];label?:string}){
  return <ul aria-label={label} className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
   {items.map(item=><li key={item.key} className="flex items-center gap-1.5"><span className="inline-block size-2.5 shrink-0 rounded-[3px]" style={{background:item.color}} aria-hidden="true"/>
-   <span className="text-foreground">{item.label}</span>{item.value&&<span className="tabular-nums">{item.value}</span>}</li>)}
+   <span className="text-foreground">{item.label}</span>{item.value&&<>{' '}<span className="tabular-nums">{item.value}</span></>}</li>)}
  </ul>;
 }
 

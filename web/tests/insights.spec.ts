@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {expectReadableLegend} from './legend-marks';
 
 const provenance={identity:'a'.repeat(64),generation:'1',proof_digest:'b'.repeat(64),as_of:'2026-09-01T00:00:00Z',model:'m',serving_relation:'r',data_through:'2026-09-01T00:00:00Z',observed_at:'2026-09-01T00:00:00Z',historical:true,currency:'VND',timezone:'UTC'};
 const cells=Array.from({length:168},(_,i)=>{const weekday=Math.floor(i/24)+1,hour=i%24;return {weekday:String(weekday),hour:String(hour),sessions:weekday===3&&hour===10?'12':String((i*7)%5),orders:weekday===3&&hour===10?'4':'0'};});
@@ -68,4 +69,10 @@ test('the heatmap color scale spans the observed range so near-uniform activity 
  const low=await grid.getByRole('cell',{name:'Monday 00:00–01:00 UTC: 500 sessions'}).evaluate(e=>getComputedStyle(e).backgroundColor);
  const high=await grid.getByRole('cell',{name:'Monday 23:00–00:00 UTC: 523 sessions'}).evaluate(e=>getComputedStyle(e).backgroundColor);
  expect(low).not.toBe(high);
+});
+
+for(const theme of ['light','dark'] as const)test(`loyalty and source legends are visible and distinct in ${theme} mode`,async({page})=>{
+ await page.addInitScript(t=>localStorage.setItem('mp-theme',t),theme);await page.goto('/insights');
+ await expectReadableLegend(page.getByRole('list',{name:'Net revenue by loyalty tier legend',exact:true}));
+ await expectReadableLegend(page.getByRole('list',{name:'Source legend',exact:true}));
 });
