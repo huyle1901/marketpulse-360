@@ -15,7 +15,7 @@ type Products={status:string;message?:string;currency:string|null;definition?:st
 /** Fixed identity colors from the validated categorical order (color follows the category, never its rank). */
 // Category hues come from the validated --cat-* tokens, so they hold in both themes.
 const categoryColor:Record<string,string>={electronics:'var(--cat-1)',fashion:'var(--cat-2)',home:'var(--cat-3)',sports:'var(--cat-4)',beauty:'var(--cat-5)'};
-const deviceColor:Record<string,string>={mobile:'var(--chart-1)',desktop:'var(--chart-5)',tablet:'var(--chart-3)',unknown:'var(--chart-4)'};
+const deviceColor:Record<string,string>={mobile:'var(--chart-1)',desktop:'var(--chart-2)',tablet:'var(--chart-3)',unknown:'var(--chart-4)'};
 const title=(value:string)=>value.charAt(0).toUpperCase()+value.slice(1);
 const deviceNames:Record<string,string>={desktop:'Desktop',mobile:'Mobile',tablet:'Tablet',unknown:'Unknown device'};
 

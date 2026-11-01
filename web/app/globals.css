@@ -36,6 +36,8 @@
   --color-chart-5: var(--chart-5);
   --color-live: var(--live);
   --color-order: var(--order);
+  --color-source-web: var(--source-web);
+  --color-source-app: var(--source-app);
   --color-intent: var(--intent);
   --color-refund: var(--refund);
   --color-sidebar: var(--sidebar);
@@ -79,9 +81,14 @@
   --chart-4: #94a3b8;
   --chart-5: #533afd;
   /* Product categories validated on #ffffff. */
-  --cat-1: #2a78d6; --cat-2: #eb6834; --cat-3: #1baf7a; --cat-4: #533afd; --cat-5: #c2378f;
+  /* Categories can all touch (treemap, donut), so these five pass every pair, not only legend neighbours. */
+  --cat-1: #2a78d6; --cat-2: #eb6834; --cat-3: #1baf7a; --cat-4: #c2378f; --cat-5: #7a5c00;
   /* Live semantics: visitors, orders, buying intent, refunds. */
   --live: #0f9d6b; --order: #2a78d6; --intent: #c77700; --refund: #e11d48;
+  /* Loyalty tiers: four hues passing every pair; 'no tier' is a hue because each neutral grey sat on the card or met magenta. */
+  --tier-gold: #c77700; --tier-silver: #2a78d6; --tier-bronze: #c2378f; --tier-none: #1baf7a;
+  /* Traffic source: one colour per source everywhere, distinct from live green and order blue. */
+  --source-web: #eb6834; --source-app: #c2378f; --source-unknown: #94a3b8;
   /* Sequential (light → dark violet: more activity is darker). */
   --heat-1: #f0eeff; --heat-2: #dcd7ff; --heat-3: #bdb4ff; --heat-4: #9b8cff; --heat-5: #7a66fb; --heat-6: #5a42f0; --heat-7: #3b25c9;
   --hero-figure: #533afd;
@@ -118,8 +125,10 @@
   --chart-3: #0f9f7a;
   --chart-4: #64748b;
   --chart-5: #8b5cf6;
-  --cat-1: #3b82f6; --cat-2: #e8590c; --cat-3: #0f9f7a; --cat-4: #8b5cf6; --cat-5: #d6409f;
+  --cat-1: #3b82f6; --cat-2: #c9480c; --cat-3: #26ad84; --cat-4: #c03a95; --cat-5: #ad8e12;
   --live: #3ddc97; --order: #6ea8fe; --intent: #f5a524; --refund: #fb7185;
+  --tier-gold: #c4850f; --tier-silver: #3b82f6; --tier-bronze: #c03a95; --tier-none: #26ad84;
+  --source-web: #e8590c; --source-app: #d6409f; --source-unknown: #8fa3bd;
   /* Sequential on a dark ground: more activity is brighter. */
   --heat-1: #1a2340; --heat-2: #262f5c; --heat-3: #353c80; --heat-4: #4a49a8; --heat-5: #6457d6; --heat-6: #8a7cff; --heat-7: #b9b0ff;
   --hero-figure: #ffffff;
@@ -145,7 +154,9 @@
 .live-station { position: relative; z-index: 1; display: grid; place-items: center; width: 1.6rem; height: 1.6rem; margin-top: 0.4rem; border-radius: 9999px; font: 500 0.7rem/1 var(--font-mono); color: var(--muted-foreground); background: var(--card); border: 1px solid var(--input); }
 .live-station.is-busy { color: var(--primary-foreground); background: var(--primary); border-color: var(--primary); }
 .live-dot { width: 0.85rem; height: 0.85rem; border-radius: 9999px; background: var(--live); box-shadow: 0 0 10px color-mix(in oklab, var(--live) 55%, transparent); animation: live-pop 420ms cubic-bezier(.2,.9,.3,1.4) both; }
-.live-dot.is-bought { background: var(--order); box-shadow: 0 0 10px color-mix(in oklab, var(--order) 60%, transparent); }
+.live-dot.is-web { background: var(--source-web); box-shadow: 0 0 10px color-mix(in oklab, var(--source-web) 55%, transparent); }
+.live-dot.is-app { background: var(--source-app); box-shadow: 0 0 10px color-mix(in oklab, var(--source-app) 55%, transparent); }
+.live-dot.is-other { background: var(--source-unknown); box-shadow: none; }
 .live-step::before { content: ""; position: absolute; left: calc(0.25rem + 0.3125rem - 1px); top: 0.9rem; bottom: -0.15rem; width: 2px; background: var(--border); }
 .live-step:last-child::before { display: none; }
 @keyframes live-pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }

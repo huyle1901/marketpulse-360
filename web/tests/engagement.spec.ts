@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {expectReadableLegend} from './legend-marks';
 
 const provenance={identity:'a'.repeat(64),generation:'1',proof_digest:'b'.repeat(64),as_of:'2026-02-03T00:00:00Z',model:'silver.customer_events projection',serving_relation:'journey events',data_through:'2026-02-03T00:00:00Z',observed_at:'2026-02-03T00:00:00Z',historical:true,currency:'VND'};
 const email={status:'available',provenance,definition:'Rates use delivered emails as the denominator.',
@@ -45,4 +46,12 @@ test('email fits a phone',async({page})=>{
  await page.setViewportSize({width:390,height:844});await page.goto('/email');
  await expect(page.getByRole('region',{name:'Email totals'})).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+});
+
+for(const theme of ['light','dark'] as const)test(`email legend follows the funnel order and the funnel uses one colour in ${theme} mode`,async({page})=>{
+ await page.addInitScript(t=>localStorage.setItem('mp-theme',t),theme);await page.goto('/email');
+ const legend=page.getByRole('list',{name:'Monthly engagement legend',exact:true});
+ await expectReadableLegend(legend);await expect(legend.getByRole('listitem')).toHaveText(['Sent','Opened','Clicked']);
+ const bars=await page.getByRole('list',{name:'Email funnel'}).locator('li div[style*="width"]').evaluateAll(b=>b.map(x=>getComputedStyle(x).backgroundColor));
+ expect(new Set(bars).size).toBe(1);
 });

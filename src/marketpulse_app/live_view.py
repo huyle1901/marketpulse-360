@@ -68,15 +68,17 @@ class LiveViewService:
                 'by_device': [{'device': device, 'visitors': devices.get(device, 0)} for device in DEVICES]}
 
     def _behaviour(self, window: dict[str, object]) -> list[dict[str, object]]:
-        rows = self._query(f"""SELECT stage, count() AS sessions FROM (
-            SELECT session_id, max(multiIf(event_name='purchase',5,event_name='begin_checkout',4,event_name='add_to_cart',3,
+        rows = self._query(f"""SELECT stage, count() AS sessions, countIf(session_source = 'web') AS web, countIf(session_source = 'mobile') AS app FROM (
+            SELECT session_id, any(source) AS session_source, max(multiIf(event_name='purchase',5,event_name='begin_checkout',4,event_name='add_to_cart',3,
                                            event_name='view_item',2,1)) AS stage
             FROM {self.events} WHERE {WEB} AND event_time <= {{anchor:DateTime64(6,'UTC')}} AND session_id IN (
                 SELECT session_id FROM {self.events} WHERE {WEB} AND event_time > {{start:DateTime64(6,'UTC')}}
                 AND event_time <= {{anchor:DateTime64(6,'UTC')}})
             GROUP BY session_id) GROUP BY stage""", window)
-        counts = {int(row['stage']): int(row['sessions']) for row in rows}
-        return [{'stage': stage, 'sessions': counts.get(index, 0)} for index, stage in enumerate(STAGES, start=1)]
+        counts = {int(row['stage']): row for row in rows}
+        # A session's source splits each stage so the shop floor can colour dots like the Web/App legend.
+        return [{'stage': stage, **{key: int(counts.get(index, {}).get(key, 0)) for key in ('sessions', 'web', 'app')}}
+                for index, stage in enumerate(STAGES, start=1)]
 
     def _today(self, day: dict[str, object]) -> dict[str, object]:
         where = "event_time >= {day_start:DateTime64(6,'UTC')} AND event_time <= {anchor:DateTime64(6,'UTC')}"

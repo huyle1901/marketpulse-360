@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {expectReadableLegend} from './legend-marks';
 
 const provenance={identity:'a'.repeat(64),generation:'1',proof_digest:'b'.repeat(64),as_of:'2026-09-01T00:00:00Z',model:'m',serving_relation:'r',data_through:'2026-09-01T00:00:00Z',observed_at:'2026-09-01T00:00:00Z',historical:true,currency:'VND',timezone:'UTC'};
 const cells=Array.from({length:168},(_,i)=>{const weekday=Math.floor(i/24)+1,hour=i%24;return {weekday:String(weekday),hour:String(hour),sessions:weekday===3&&hour===10?'12':String((i*7)%5),orders:weekday===3&&hour===10?'4':'0'};});
@@ -80,4 +81,9 @@ test('the heatmap opens in Vietnam time, shifting late UTC hours into the next d
  const grid=region.getByRole('table',{name:'Sessions by weekday and hour (Vietnam time)'});
  await expect(grid.getByRole('cell',{name:'Wednesday 17:00–18:00 Vietnam time: 12 sessions'})).toBeVisible();
  await expect(region).toContainText('Busiest: Monday 03:00–04:00 Vietnam time');
+});
+for(const theme of ['light','dark'] as const)test(`loyalty and source legends are visible and distinct in ${theme} mode`,async({page})=>{
+ await page.addInitScript(t=>localStorage.setItem('mp-theme',t),theme);await page.goto('/insights');
+ await expectReadableLegend(page.getByRole('list',{name:'Net revenue by loyalty tier legend',exact:true}));
+ await expectReadableLegend(page.getByRole('list',{name:'Source legend',exact:true}));
 });
