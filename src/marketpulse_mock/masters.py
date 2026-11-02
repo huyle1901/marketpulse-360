@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, time, timedelta, timezone
 
 from .config import GenerationConfig
@@ -34,17 +35,11 @@ def generate_master_data(config: GenerationConfig) -> MasterData:
 
 
 def _generate_customers(config: GenerationConfig) -> tuple[Customer, ...]:
-    anchor = datetime.combine(config.start_date, time.min, tzinfo=timezone.utc)
     customers: list[Customer] = []
     tiers = ("bronze", "silver", "gold")
     for ordinal in range(config.profile.customers):
         customer_id = stable_id(config.seed, "customer", ordinal)
-        country, city = CITIES[
-            stable_int(config.seed, "customer-city", ordinal, modulo=len(CITIES))
-        ]
-        created_days_ago = 30 + stable_int(
-            config.seed, "customer-age", ordinal, modulo=700
-        )
+        country, city = _customer_city(config, ordinal)
         phone_digits = stable_int(
             config.seed, "customer-phone", ordinal, modulo=10_000_000_000
         )
@@ -55,7 +50,7 @@ def _generate_customers(config: GenerationConfig) -> tuple[Customer, ...]:
                     f"customer-{customer_id[:12]}@marketpulse.example.test"
                 ),
                 phone_token=f"synthetic-{phone_digits:010d}",
-                created_at=anchor - timedelta(days=created_days_ago),
+                created_at=_customer_created_at(config, ordinal),
                 country=country,
                 city=city,
                 loyalty_tier=tiers[
@@ -68,6 +63,49 @@ def _generate_customers(config: GenerationConfig) -> tuple[Customer, ...]:
             )
         )
     return tuple(customers)
+
+
+def _customer_city(config: GenerationConfig, ordinal: int) -> tuple[str, str]:
+    cities = config.scenario.cities
+    if cities is None:
+        return CITIES[
+            stable_int(config.seed, "customer-city", ordinal, modulo=len(CITIES))
+        ]
+    total = sum(weight for _, _, weight in cities)
+    point = stable_int(config.seed, "customer-city", ordinal, modulo=total)
+    cumulative = 0
+    for country, city, weight in cities:
+        cumulative += weight
+        if point < cumulative:
+            return country, city
+    raise AssertionError("unreachable: point is below the total weight")
+
+
+def _customer_created_at(config: GenerationConfig, ordinal: int) -> datetime:
+    anchor = datetime.combine(config.start_date, time.min, tzinfo=timezone.utc)
+    scenario = config.scenario
+    before_share = scenario.customers_before_start_share
+    if before_share is None:
+        days_ago = 30 + stable_int(config.seed, "customer-age", ordinal, modulo=700)
+        return anchor - timedelta(days=days_ago)
+    split = stable_int(config.seed, "customer-join", ordinal, modulo=1000)
+    if split < round(before_share * 1000):
+        days_ago = 1 + stable_int(
+            config.seed, "customer-join-before", ordinal, modulo=730
+        )
+        return anchor - timedelta(days=days_ago)
+    # Inverse CDF of the linear ramp density 1 + a*t on [0, 1], a = ramp - 1.
+    fraction = (
+        stable_int(config.seed, "customer-join-t", ordinal, modulo=1_000_000)
+        / 1_000_000
+    )
+    slope = scenario.join_ramp - 1.0
+    if slope == 0:
+        t = fraction
+    else:
+        t = (-1 + math.sqrt(1 + 2 * slope * fraction * (1 + slope / 2))) / slope
+    day = min(int(t * config.profile.days), config.profile.days - 1)
+    return anchor + timedelta(days=day)
 
 
 def _is_scheduled_rate(ordinal: int, rate: float) -> bool:
