@@ -4,6 +4,7 @@ import {geoMercator,geoPath} from 'd3-geo';
 import type {Feature} from 'geojson';
 import vietnam from '../lib/vietnam.json';
 import {ARCHIPELAGOS,CITY_COORDINATES} from '../lib/cities';
+import {type Box,placeCallouts} from '../lib/callouts';
 
 export type MapPoint={city:string;value:number;display:string;title:string;region:string;color:string};
 const W=560,H=620,MAX_R=30,CALLOUT={width:150,height:44};
@@ -12,17 +13,23 @@ const projection=geoMercator().fitExtent([[20,20],[W-20,H-20]],{type:'MultiPoint
 const outline=geoPath(projection)(vietnam as Feature)??'';
 const at=(lon:number,lat:number)=>projection([lon,lat])??[0,0];
 const key=(region:string)=>region.toLowerCase().replace(/[^a-z]/g,'');
+/** The callout's foreignObject box in SVG units; its rendered pill always fits inside it. */
+const calloutBox=(left:boolean,end:number,cy:number):Box=>({l:left?end-CALLOUT.width:end,r:left?end:end+CALLOUT.width,t:cy-CALLOUT.height/2,b:cy+CALLOUT.height/2});
 
 /**
  * Proportional-symbol map. Circle area follows the value and the colour names the region; each
  * bubble is a soft halo, a lit disc and a surface ring so overlapping circles stay separable.
- * Callouts sit at the end of leader lines for the largest cities (others on hover); hovering one city fades the others.
+ * Callouts sit at the end of leader lines for the largest cities (others on hover or focus); hovering one city fades the others.
+ * Default callouts are placed greedily in rank order and a lower-ranked one whose box would collide with an already placed one
+ * is skipped (Datawrapper-style), so default callouts never overlap; the next city in rank takes its place.
  */
 export function VietnamMap({name,points,active,onActive,callouts=6}:{name:string;points:MapPoint[];active:string|null;onActive:(city:string|null)=>void;callouts?:number}){
  const max=Math.max(1,...points.map(p=>p.value));
  const radius=(value:number)=>Math.max(3,MAX_R*Math.sqrt(value/max));
  const ordered=[...points].sort((a,b)=>b.value-a.value);
- const labelled=new Set(ordered.slice(0,callouts).map(p=>p.city));
+ const geometry=new Map(ordered.map(p=>{const c=CITY_COORDINATES[p.city];const [x,y]=at(c.lon,c.lat);const r=radius(p.value);const left=c.label==='left';
+  const end=left?x-r-22:x+r+22,cy=y+c.dy;return [p.city,{x,y,r,left,end,cy,box:calloutBox(left,end,cy)}];}));
+ const labelled=placeCallouts(ordered.map(p=>({city:p.city,box:geometry.get(p.city)!.box})),callouts);
  const regions=[...new Map(points.map(p=>[p.region,p.color])).entries()];
  return <div role="img" aria-label={name+': '+points.map(p=>`${p.city} ${p.display}`).join(', ')} className="vn-map mx-auto w-full max-w-[560px]">
   <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" aria-hidden="true">
@@ -36,9 +43,9 @@ export function VietnamMap({name,points,active,onActive,callouts=6}:{name:string
    {ARCHIPELAGOS.map(a=>{const [x,y]=at(a.lon,a.lat);return <g key={a.name}>
     {a.islands.map(([lon,lat],i)=>{const [ix,iy]=at(lon,lat);return <circle key={i} cx={ix} cy={iy} r={1.8} fill="var(--muted-foreground)" opacity={0.7}/>;})}
     <text x={x} y={y-16} textAnchor="middle" className="vn-map-place">{a.name} (Việt Nam)</text></g>;})}
-   {ordered.map((p,index)=>{const c=CITY_COORDINATES[p.city];const [x,y]=at(c.lon,c.lat);const r=radius(p.value);const left=c.label==='left';
-    const shown=labelled.has(p.city)||active===p.city,dy=c.dy,cy=y+dy;
-    const end=left?x-r-22:x+r+22,on=active===p.city,dim=active!==null&&!on,k=key(p.region);
+   {ordered.map((p,index)=>{const {x,y,r,left,end,cy}=geometry.get(p.city)!;
+    const shown=labelled.has(p.city)||active===p.city;
+    const on=active===p.city,dim=active!==null&&!on,k=key(p.region);
     return <g key={p.city} className="vn-map-city" style={{opacity:dim?0.35:1}} onMouseEnter={()=>onActive(p.city)} onMouseLeave={()=>onActive(null)}>
      <circle cx={x} cy={y} r={r*1.9} fill={`url(#vn-glow-${k})`} className="vn-map-halo"/>
      {index===0&&<circle cx={x} cy={y} r={r} fill="none" style={{stroke:p.color}} strokeWidth={1.5} className="vn-map-pulse"/>}

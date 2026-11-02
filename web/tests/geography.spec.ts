@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {expectReadableLegend} from './legend-marks';
+import {placeCallouts} from '../lib/callouts';
 
 const provenance={identity:'a'.repeat(64),generation:'1',proof_digest:'b'.repeat(64),model:'gold.customer_360 + customers',serving_relation:'customer_360',historical:true,currency:'VND'};
 const city=(name:string,net:string,customers='10',orders='12')=>({country:'VN',city:name,customers,orders,net_revenue_minor:net,net_per_customer_minor:String(BigInt(net)/BigInt(customers))});
@@ -108,12 +109,65 @@ test('six callouts by default, more on hover',async({page})=>{
  await expect(page.locator('[data-callout="Hue"]')).toBeVisible();
 });
 
+const expectNoOverlap=async(page:import('@playwright/test').Page,label:string)=>{
+ const boxes=await page.locator('[data-callout]:visible').evaluateAll(els=>els.map(e=>{const r=e.getBoundingClientRect();return {n:e.getAttribute('data-callout'),l:r.left,r:r.right,t:r.top,b:r.bottom};}));
+ for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];
+  expect(a.r<=b.l||b.r<=a.l||a.b<=b.t||b.b<=a.t,`${label}: ${a.n} overlaps ${b.n}`).toBeTruthy();}
+ return boxes.map(b=>b.n);
+};
+
 test('default callouts never overlap',async({page})=>{
  await useThirteen(page);await page.setViewportSize({width:1440,height:900});await page.goto('/geography');
  await expect(page.locator('[data-callout]:visible')).toHaveCount(6);
- const boxes=await page.locator('[data-callout]:visible').evaluateAll(els=>els.map(e=>{const r=e.getBoundingClientRect();return {n:e.getAttribute('data-callout'),l:r.left,r:r.right,t:r.top,b:r.bottom};}));
- for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];
-  expect(a.r<=b.l||b.r<=a.l||a.b<=b.t||b.b<=a.t,`${a.n} overlaps ${b.n}`).toBeTruthy();}
+ await expectNoOverlap(page,'net revenue');
+});
+
+/** Story weights (vietnam-retail); the eight heaviest cities are the ones that can reach a top six. */
+const STORY_WEIGHTS:[string,number][]=[['Ho Chi Minh City',28],['Ha Noi',24],['Bien Hoa',6],['Thu Dau Mot',6],['Hai Phong',6],['Da Nang',6],['Can Tho',5],['Nha Trang',4],
+ ['Hue',3],['Vung Tau',3],['Quy Nhon',3],['Buon Ma Thuot',3],['Ha Long',3]];
+const TOP_EIGHT=STORY_WEIGHTS.slice(0,8).map(([n])=>n);
+const sixOfEight:string[][]=[];
+for(let i=0;i<8;i++)for(let j=i+1;j<8;j++)sixOfEight.push(TOP_EIGHT.filter((_,k)=>k!==i&&k!==j));
+/** Seed 360's real Customers ranking, which the old offsets overlapped (Bien Hoa / Thu Dau Mot). */
+const SEED_360=['Ho Chi Minh City','Ha Noi','Thu Dau Mot','Da Nang','Bien Hoa','Can Tho'];
+const RANKINGS=[SEED_360,...sixOfEight];
+/** Values that put `top` first, in that order, sized like the story's top six (28, 24, 6, 6, 6, 6); every other city trails. */
+const RANK_WEIGHTS=[28,24,6,6,6,6];
+const valuesFor=(top:string[])=>Object.fromEntries(STORY_WEIGHTS.map(([n,w])=>{const at=top.indexOf(n);return [n,at>=0?String(1000*RANK_WEIGHTS[at]-at):String(100*w)];}));
+const MEASURE_BUTTONS=[['Net revenue','net revenue'],['Customers','customers'],['Orders','orders']] as const;
+
+test('every likely story ranking shows six non-overlapping callouts',async({page})=>{
+ test.setTimeout(120_000);
+ await page.setViewportSize({width:1440,height:900});
+ for(let g=0;g<RANKINGS.length;g+=3){
+  const group=[0,1,2].map(m=>RANKINGS[Math.min(g+m,RANKINGS.length-1)]);
+  const [net,customers,orders]=group.map(valuesFor);
+  const fixture={...geography,total_net_revenue_minor:String(Object.values(net).reduce((s,v)=>s+Number(v),0)),cities:STORY_WEIGHTS.map(([n])=>city(n,net[n],customers[n],orders[n]))};
+  await page.unroute('**/api/v1/insights/geography');await page.route('**/api/v1/insights/geography',r=>r.fulfill({json:fixture}));
+  await page.goto('/geography');
+  for(let m=0;m<3;m++){const [button,measure]=MEASURE_BUTTONS[m];
+   await page.getByRole('group',{name:'Map measure'}).getByRole('button',{name:button}).click();
+   await expect(page.getByRole('list',{name:`Cities ranked by ${measure}`}).getByRole('listitem').first()).toContainText(group[m][0]);
+   await expect(page.locator('[data-callout]:visible')).toHaveCount(6);
+   const shown=await expectNoOverlap(page,group[m].join(', '));
+   expect(new Set(shown),group[m].join(', ')).toEqual(new Set(group[m]));}
+ }
+});
+
+test('a lower-ranked callout that would collide is skipped and the next city takes its place',()=>{
+ const box=(l:number,t:number)=>({l,r:l+150,t,b:t+44});
+ const placed=placeCallouts([{city:'A',box:box(0,0)},{city:'B',box:box(100,20)},{city:'C',box:box(0,44)},{city:'D',box:box(300,0)},{city:'E',box:box(300,100)}],3);
+ expect([...placed]).toEqual(['A','C','D']);
+});
+
+test('focusing a hidden city in the ranking reveals its callout',async({page})=>{
+ await useThirteen(page);await page.goto('/geography');
+ const callout=page.locator('[data-callout="Hue"]');await expect(callout).toBeHidden();
+ const rows=page.getByRole('list',{name:'Cities ranked by net revenue'}).getByRole('listitem');
+ await rows.filter({hasText:'Hue'}).focus();
+ await expect(callout).toBeVisible();
+ await rows.filter({hasText:'Ha Noi'}).focus();
+ await expect(callout).toBeHidden();
 });
 
 test('every city belongs to a region',async({page})=>{
