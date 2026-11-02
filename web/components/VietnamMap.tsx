@@ -16,12 +16,13 @@ const key=(region:string)=>region.toLowerCase().replace(/[^a-z]/g,'');
 /**
  * Proportional-symbol map. Circle area follows the value and the colour names the region; each
  * bubble is a soft halo, a lit disc and a surface ring so overlapping circles stay separable.
- * Callouts sit at the end of leader lines; hovering one city fades the others.
+ * Callouts sit at the end of leader lines for the largest cities (others on hover); hovering one city fades the others.
  */
-export function VietnamMap({name,points,active,onActive}:{name:string;points:MapPoint[];active:string|null;onActive:(city:string|null)=>void}){
+export function VietnamMap({name,points,active,onActive,callouts=6}:{name:string;points:MapPoint[];active:string|null;onActive:(city:string|null)=>void;callouts?:number}){
  const max=Math.max(1,...points.map(p=>p.value));
  const radius=(value:number)=>Math.max(3,MAX_R*Math.sqrt(value/max));
  const ordered=[...points].sort((a,b)=>b.value-a.value);
+ const labelled=new Set(ordered.slice(0,callouts).map(p=>p.city));
  const regions=[...new Map(points.map(p=>[p.region,p.color])).entries()];
  return <div role="img" aria-label={name+': '+points.map(p=>`${p.city} ${p.display}`).join(', ')} className="vn-map mx-auto w-full max-w-[560px]">
   <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" aria-hidden="true">
@@ -36,6 +37,7 @@ export function VietnamMap({name,points,active,onActive}:{name:string;points:Map
     {a.islands.map(([lon,lat],i)=>{const [ix,iy]=at(lon,lat);return <circle key={i} cx={ix} cy={iy} r={1.8} fill="var(--muted-foreground)" opacity={0.7}/>;})}
     <text x={x} y={y-16} textAnchor="middle" className="vn-map-place">{a.name} (Việt Nam)</text></g>;})}
    {ordered.map((p,index)=>{const c=CITY_COORDINATES[p.city];const [x,y]=at(c.lon,c.lat);const r=radius(p.value);const left=c.label==='left';
+    const shown=labelled.has(p.city)||active===p.city,dy=c.dy,cy=y+dy;
     const end=left?x-r-22:x+r+22,on=active===p.city,dim=active!==null&&!on,k=key(p.region);
     return <g key={p.city} className="vn-map-city" style={{opacity:dim?0.35:1}} onMouseEnter={()=>onActive(p.city)} onMouseLeave={()=>onActive(null)}>
      <circle cx={x} cy={y} r={r*1.9} fill={`url(#vn-glow-${k})`} className="vn-map-halo"/>
@@ -43,13 +45,13 @@ export function VietnamMap({name,points,active,onActive}:{name:string;points:Map
      <circle data-city={p.city} data-region={p.region} data-active={on?'true':'false'} cx={x} cy={y} r={r} fill={`url(#vn-fill-${k})`} fillOpacity={0.88}
       style={{stroke:p.color,animationDelay:`${index*90}ms`}} strokeWidth={on?3:1.5} className="vn-map-bubble"><title>{p.title}</title></circle>
      <circle cx={x} cy={y} r={r+1.5} fill="none" stroke="var(--card)" strokeWidth={1.5} opacity={0.9} pointerEvents="none"/>
-     <line x1={left?x-r:x+r} y1={y} x2={end} y2={y} style={{stroke:p.color}} strokeWidth={1.2} opacity={0.7}/>
-     <foreignObject x={left?end-CALLOUT.width:end} y={y-CALLOUT.height/2} width={CALLOUT.width} height={CALLOUT.height} overflow="visible">
+     {shown&&<><line x1={left?x-r:x+r} y1={y} x2={end} y2={cy} style={{stroke:p.color}} strokeWidth={1.2} opacity={0.7}/>
+     <foreignObject x={left?end-CALLOUT.width:end} y={cy-CALLOUT.height/2} width={CALLOUT.width} height={CALLOUT.height} overflow="visible">
       <div data-callout={p.city} className={'vn-map-callout '+(left?'is-left':'')}>
        <span className="vn-map-callout-dot" style={{background:p.color}} aria-hidden="true"/>
        <span className="min-w-0"><span className="block truncate text-[12.5px] font-semibold leading-tight text-foreground">{p.city}</span><span className="block text-[11.5px] leading-tight text-muted-foreground tabular-nums">{p.display}</span></span>
       </div>
-     </foreignObject>
+     </foreignObject></>}
     </g>;})}
   </svg>
  </div>;

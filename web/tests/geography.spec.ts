@@ -4,7 +4,7 @@ import {expectReadableLegend} from './legend-marks';
 const provenance={identity:'a'.repeat(64),generation:'1',proof_digest:'b'.repeat(64),model:'gold.customer_360 + customers',serving_relation:'customer_360',historical:true,currency:'VND'};
 const city=(name:string,net:string,customers='10',orders='12')=>({country:'VN',city:name,customers,orders,net_revenue_minor:net,net_per_customer_minor:String(BigInt(net)/BigInt(customers))});
 const geography={status:'available',currency:'VND',provenance,total_net_revenue_minor:'9000',definition:'Identified customers by their master-record city.',
- cities:[city('Ho Chi Minh City','4000','10','12'),city('Ha Noi','3000','30','40'),city('Hue','1500'),city('Can Tho','-500')],unknown:{profiles:'40',orders:'7',net_revenue_minor:'1000'}};
+ cities:[city('Ho Chi Minh City','4000','10','12'),city('Ha Noi','3000','30','40'),city('Hue','1500'),city('Can Tho','-500'),city('Lang Son','200')],unknown:{profiles:'40',orders:'7',net_revenue_minor:'1000'}};
 
 test.beforeEach(async({page})=>{await page.route('**/api/v1/**',r=>{const p=new URL(r.request().url()).pathname;
  return r.fulfill({json:p.endsWith('auth/session')?{user_id:'a',username:'admin',role:'admin'}:p.endsWith('/insights/geography')?geography:[]});});});
@@ -14,13 +14,13 @@ test('geography plots positive known cities at their coordinates and ranks every
  await expect(page.getByRole('heading',{name:'Geography',level:1})).toBeVisible();
  const map=page.getByRole('img',{name:'Customer net revenue by city'});
  await expect(map).toContainText('Ho Chi Minh City');await expect(map).toContainText('Ha Noi');
- await expect(map.locator('circle[data-city]')).toHaveCount(2);
+ await expect(map.locator('circle[data-city]')).toHaveCount(3);
  await expect(page.getByRole('list',{name:'Cities ranked by net revenue'}).getByRole('listitem').first()).toContainText('Ho Chi Minh City');
  await page.getByText('Exact city values').click();const table=page.getByRole('table',{name:'Net revenue by city'});
  await expect(table.getByRole('row',{name:/Ho Chi Minh City/})).toContainText('₫4,000');
  await expect(table.getByRole('row',{name:/Can Tho/})).toContainText('-₫500');
  await expect(table.getByRole('row',{name:/Hue/})).toBeVisible();
- await expect(page.getByText('Not on the map: Hue (no bundled coordinates), Can Tho (net revenue not positive)',{exact:false})).toBeVisible();
+ await expect(page.getByText('Not on the map: Can Tho (net revenue not positive), Lang Son (no bundled coordinates)',{exact:false})).toBeVisible();
 });
 
 test('anonymous and unmatched activity stays location unknown',async({page})=>{
@@ -89,4 +89,39 @@ test('each ranked city bar uses its region colour, like its bubble',async({page}
  const bar=await page.getByRole('list',{name:'Cities ranked by net revenue'}).getByRole('listitem').filter({hasText:'Ha Noi'}).locator('div[style*="width"]').evaluate(e=>getComputedStyle(e).backgroundColor);
  const stroke=await page.locator('circle[data-city="Ha Noi"]').evaluate(e=>getComputedStyle(e).stroke);
  expect(bar).toBe(stroke);
+});
+
+const THIRTEEN=[['Ho Chi Minh City',9000],['Ha Noi',8000],['Da Nang',3000],['Hai Phong',2500],['Can Tho',2000],['Bien Hoa',1800],['Nha Trang',1500],['Hue',1200],['Vung Tau',1000],['Thu Dau Mot',900],['Quy Nhon',800],['Buon Ma Thuot',700],['Ha Long',600]] as const;
+const thirteen={...geography,total_net_revenue_minor:String(THIRTEEN.reduce((s,[,v])=>s+v,0)),cities:THIRTEEN.map(([n,v])=>city(n,String(v)))};
+const useThirteen=async(page:import('@playwright/test').Page)=>{await page.route('**/api/v1/insights/geography',r=>r.fulfill({json:thirteen}));};
+
+test('all thirteen cities plot',async({page})=>{
+ await useThirteen(page);await page.goto('/geography');
+ await expect(page.locator('circle[data-city]')).toHaveCount(13);
+});
+
+test('six callouts by default, more on hover',async({page})=>{
+ await useThirteen(page);await page.goto('/geography');
+ await expect(page.locator('[data-callout]:visible')).toHaveCount(6);
+ await expect(page.locator('[data-callout="Hue"]')).toBeHidden();
+ await page.getByRole('list',{name:'Cities ranked by net revenue'}).getByRole('listitem').filter({hasText:'Hue'}).hover();
+ await expect(page.locator('[data-callout="Hue"]')).toBeVisible();
+});
+
+test('default callouts never overlap',async({page})=>{
+ await useThirteen(page);await page.setViewportSize({width:1440,height:900});await page.goto('/geography');
+ await expect(page.locator('[data-callout]:visible')).toHaveCount(6);
+ const boxes=await page.locator('[data-callout]:visible').evaluateAll(els=>els.map(e=>{const r=e.getBoundingClientRect();return {n:e.getAttribute('data-callout'),l:r.left,r:r.right,t:r.top,b:r.bottom};}));
+ for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];
+  expect(a.r<=b.l||b.r<=a.l||a.b<=b.t||b.b<=a.t,`${a.n} overlaps ${b.n}`).toBeTruthy();}
+});
+
+test('every city belongs to a region',async({page})=>{
+ await useThirteen(page);await page.goto('/geography');
+ const total=THIRTEEN.reduce((s,[,v])=>s+v,0);
+ const regions=page.getByRole('region',{name:'Net revenue by region'});
+ const text=await regions.getByRole('list',{name:'Region legend'}).innerText();
+ expect(text).not.toContain('Other');
+ const pct=[...text.matchAll(/([\d.]+)%/g)].map(m=>Number(m[1])).reduce((a,b)=>a+b,0);
+ expect(Math.abs(pct-100)).toBeLessThan(0.5);expect(total).toBeGreaterThan(0);
 });
