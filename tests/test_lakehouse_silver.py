@@ -12,7 +12,10 @@ from marketpulse_lakehouse.silver import (
     build_campaigns,
     build_products,
     build_customers,
+    VENDOR_DATASETS,
+    VendorSpend,
     govern_customer_events,
+    parse_vendor_spend,
     parse_clean_bronze_record,
     recover_raw_click_id,
     parse_dlq_bronze_record,
@@ -574,6 +577,120 @@ class SilverDimensionTests(unittest.TestCase):
         bad_campaigns = [{**campaigns[0], "currency": "USD"}]
         with self.assertRaisesRegex(ValueError, "currency"):
             build_ad_spend_daily(rows[:1], bad_campaigns)
+
+
+class VendorSpendParserTests(unittest.TestCase):
+    def test_google_meta_and_tiktok_values_are_unchanged(self) -> None:
+        google = parse_vendor_spend(
+            "google_ads",
+            {
+                "segments_date": "2026-01-02", "campaign_id": "G-1",
+                "impressions": "10", "clicks": "2", "cost_micros": "1500000",
+                "conversions": "1", "conversions_value": "7",
+            },
+        )
+        self.assertEqual(
+            google,
+            VendorSpend(date(2026, 1, 2), "google", "G-1", 10, 2, 1, 2, 7),
+        )
+        meta = parse_vendor_spend(
+            "meta_ads",
+            {
+                "date_start": "2026-01-02", "date_stop": "2026-01-02",
+                "campaign_id": "M-1", "impressions": "20", "clicks": "3",
+                "spend": "2.5",
+                "actions": [{"action_type": "purchase", "value": "2"}],
+                "action_values": [{"action_type": "purchase", "value": "9.5"}],
+            },
+        )
+        self.assertEqual(
+            meta, VendorSpend(date(2026, 1, 2), "meta", "M-1", 20, 3, 2, 3, 10)
+        )
+        tiktok = parse_vendor_spend(
+            "tiktok_ads",
+            {
+                "stat_time_day": "2026-01-02", "campaign_id": "T-1",
+                "impressions": "30", "clicks": "4", "spend": "3.5",
+                "conversion": "3", "total_purchase_value": "11.5",
+            },
+        )
+        self.assertEqual(
+            tiktok, VendorSpend(date(2026, 1, 2), "tiktok", "T-1", 30, 4, 3, 4, 12)
+        )
+
+    def test_meta_report_spanning_dates_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "multiple dates"):
+            parse_vendor_spend(
+                "meta_ads",
+                {
+                    "date_start": "2026-01-02", "date_stop": "2026-01-03",
+                    "campaign_id": "M-1", "impressions": "1", "clicks": "1",
+                    "spend": "1", "actions": [], "action_values": [],
+                },
+            )
+
+    def test_shopee_row_is_day_first_and_whole_vnd(self) -> None:
+        result = parse_vendor_spend(
+            "shopee_ads",
+            {
+                "date": "05/09/2026", "ad_id": "S-360-00004", "impression": "120",
+                "clicks": "9", "expense": "81000", "conversions": "2",
+                "gmv": "3200000",
+            },
+        )
+        self.assertEqual(result.spend_date, date(2026, 9, 5))
+        self.assertEqual(result.platform, "shopee")
+        self.assertEqual(result.platform_campaign_id, "S-360-00004")
+        self.assertEqual(
+            (result.impressions, result.clicks, result.conversions), (120, 9, 2)
+        )
+        self.assertEqual(result.spend_minor, 81_000)
+        self.assertEqual(result.conversion_value_minor, 3_200_000)
+
+    def test_shopee_rejects_iso_dates_and_bad_numbers(self) -> None:
+        row = {
+            "date": "2026-09-05", "ad_id": "S-1", "impression": "1",
+            "clicks": "1", "expense": "1", "conversions": "1", "gmv": "1",
+        }
+        with self.assertRaises(ValueError):
+            parse_vendor_spend("shopee_ads", row)
+        with self.assertRaises(ValueError):
+            parse_vendor_spend("shopee_ads", {**row, "date": "05/09/2026", "expense": "x"})
+
+    def test_unknown_dataset_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unsupported"):
+            parse_vendor_spend("lazada_ads", {})
+        self.assertEqual(
+            dict(VENDOR_DATASETS),
+            {
+                "google_ads": "google", "meta_ads": "meta",
+                "tiktok_ads": "tiktok", "shopee_ads": "shopee",
+            },
+        )
+
+    def test_build_ad_spend_daily_maps_shopee_rows(self) -> None:
+        campaigns = [
+            {
+                "campaign_id": "internal-shopee", "platform": "shopee",
+                "platform_campaign_id": "S-360-00004", "currency": "VND",
+            }
+        ]
+        rows = [
+            _source_row(
+                "shopee_ads",
+                {
+                    "date": "05/09/2026", "ad_id": "S-360-00004",
+                    "impression": "120", "clicks": "9", "expense": "81000",
+                    "conversions": "2", "gmv": "3200000",
+                },
+                source_file="shopee.csv.gz",
+                source_date=date(2026, 9, 5),
+            )
+        ]
+        (row,) = build_ad_spend_daily(rows, campaigns)
+        self.assertEqual(row["campaign_id"], "internal-shopee")
+        self.assertEqual(row["spend_date"], date(2026, 9, 5))
+        self.assertEqual(row["spend_minor"], 81_000)
 
 
 if __name__ == "__main__":

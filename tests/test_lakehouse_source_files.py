@@ -382,6 +382,11 @@ class SourceFileIngestionTests(unittest.TestCase):
             },
         )
 
+    def test_shopee_ads_is_an_allowed_source_dataset(self) -> None:
+        from marketpulse_lakehouse.source_files import ALLOWED_SOURCE_DATASETS
+
+        self.assertIn("shopee_ads", ALLOWED_SOURCE_DATASETS)
+
     def test_checksum_path_and_row_count_errors_fail_closed(self) -> None:
         content = _gzip_jsonl([{"a": 1}])
         item = self._write_source(

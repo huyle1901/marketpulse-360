@@ -29,6 +29,7 @@ ALLOWED_SOURCE_DATASETS = frozenset(
         "google_ads",
         "meta_ads",
         "tiktok_ads",
+        "shopee_ads",
         "master/ads",
         "master/campaigns",
         "master/customers",
