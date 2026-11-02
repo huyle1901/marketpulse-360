@@ -1032,9 +1032,12 @@ def _click_id(
     day_index: int,
     impression_ordinal: int,
 ) -> str:
-    prefix = {"google": "gclid", "meta": "fbclid", "tiktok": "ttclid"}[
-        platform
-    ]
+    prefix = {
+        "google": "gclid",
+        "meta": "fbclid",
+        "tiktok": "ttclid",
+        "shopee": "shpclid",
+    }[platform]
     value = stable_id(seed, f"click-{day_index}", impression_ordinal).replace("-", "")
     return f"{prefix}-{value}"
 

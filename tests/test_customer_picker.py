@@ -30,7 +30,7 @@ class TenureWeightTests(unittest.TestCase):
 class PickerFrequencyTests(unittest.TestCase):
     def test_picks_follow_tenure_weights(self) -> None:
         profile = ScaleProfile(
-            "picker", 2, 2, 3, 1, 30_000, 1_000, "vietnam-retail"
+            "picker", 2, 2, 4, 1, 30_000, 1_000, "vietnam-retail"
         )
         config = GenerationConfig(
             profile, 360, Path("unused"), date(2025, 1, 1), 1_000

@@ -9,7 +9,6 @@ from .config import GenerationConfig
 from .ids import stable_id, stable_int
 from .models import Ad, Campaign, Customer, MasterData, Product
 
-PLATFORMS = ("google", "meta", "tiktok")
 CATEGORIES = ("electronics", "home", "beauty", "fashion", "sports")
 BRANDS = ("Aster", "Lotus", "Nova", "Orbit", "Pulse")
 CITIES = (
@@ -142,9 +141,10 @@ def _generate_campaigns(config: GenerationConfig) -> tuple[Campaign, ...]:
     generation_end = config.start_date + timedelta(
         days=config.profile.full_days - 1
     )
-    platform_prefix = {"google": "G", "meta": "M", "tiktok": "T"}
+    platforms = config.scenario.platforms
+    platform_prefix = {"google": "G", "meta": "M", "tiktok": "T", "shopee": "S"}
     for ordinal in range(config.profile.campaigns):
-        platform = PLATFORMS[ordinal % len(PLATFORMS)]
+        platform = platforms[ordinal % len(platforms)]
         objective = OBJECTIVES[
             stable_int(config.seed, "campaign-objective", ordinal, modulo=3)
         ]
@@ -174,9 +174,15 @@ def _generate_campaigns(config: GenerationConfig) -> tuple[Campaign, ...]:
 
 def _generate_ads(config: GenerationConfig) -> tuple[Ad, ...]:
     ads: list[Ad] = []
-    platform_prefix = {"google": "GA", "meta": "MA", "tiktok": "TA"}
+    platforms = config.scenario.platforms
+    platform_prefix = {
+        "google": "GA",
+        "meta": "MA",
+        "tiktok": "TA",
+        "shopee": "SA",
+    }
     for campaign_ordinal in range(config.profile.campaigns):
-        platform = PLATFORMS[campaign_ordinal % len(PLATFORMS)]
+        platform = platforms[campaign_ordinal % len(platforms)]
         campaign_id = stable_id(config.seed, "campaign", campaign_ordinal)
         for creative_ordinal in range(2):
             ordinal = campaign_ordinal * 2 + creative_ordinal
