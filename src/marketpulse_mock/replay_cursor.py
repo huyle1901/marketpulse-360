@@ -65,10 +65,10 @@ def replay_window(
 ) -> ReplayWindowSummary:
     """Publish only confirmed batches; an interrupted batch requires reconciliation.
 
-    The durable pending marker is written before the first send. If a process dies
-    after broker acknowledgement but before its cursor commit, the next process
-    refuses to republish that ambiguous range. A normal stop finishes its current
-    batch and resumes from the confirmed cursor.
+    Records are published one by one as they come due. The durable pending marker is
+    written before a batch's first send. If a process dies after broker acknowledgement
+    but before its cursor commit, the next process refuses to republish that ambiguous
+    range. A normal stop flushes what was sent, commits it, and resumes after it.
     """
     if type(from_date) is not date or type(to_date) is not date or from_date >= to_date:
         raise ValueError("invalid UTC replay [from_date,to_date) window")
@@ -121,29 +121,37 @@ def replay_window(
                 state["complete"] = True
                 _write_state(state_path, state)
                 break
-            for ordinal, record in enumerate(batch, start=committed):
-                pacer.wait(record.event_time, ordinal)
-                if controller.stopped:
-                    return ReplayWindowSummary(committed, published, False, state.get("last_event_time"))
-            state["pending"] = {"start": committed, "end": committed + len(batch)}
-            _write_state(state_path, state)
+            # Each record goes to Kafka as soon as it is due, so live consumers see it in real
+            # time; the batch is only the unit of acknowledgement and cursor commit.
             acknowledgements: list[Exception | None] = []
+            sent = 0
             try:
-                for record in batch:
+                for ordinal, record in enumerate(batch, start=committed):
+                    pacer.wait(record.event_time, ordinal)
+                    if controller.stopped:
+                        break
+                    if sent == 0:
+                        state["pending"] = {"start": committed, "end": committed + len(batch)}
+                        _write_state(state_path, state)
                     publisher.publish(record, acknowledgements.append, cancelled=lambda: False)
-                remaining = publisher.flush(flush_timeout)
+                    sent += 1
+                remaining = publisher.flush(flush_timeout) if sent else 0
             except Exception as error:
                 try:
                     publisher.flush(flush_timeout)
                 except Exception:
                     pass
                 raise ValueError("replay batch publication failed; pending acknowledgement is ambiguous") from error
-            if remaining or len(acknowledgements) != len(batch) or any(error is not None for error in acknowledgements):
+            if remaining or len(acknowledgements) != sent or any(error is not None for error in acknowledgements):
                 raise ValueError("replay batch acknowledgement is ambiguous; reconcile before resuming")
-            committed += len(batch)
-            published += len(batch)
-            state["next_index"] = committed
-            state["last_event_time"] = batch[-1].event_time.isoformat()
-            state["pending"] = None
-            _write_state(state_path, state)
+            if sent:
+                # A stop mid-batch commits exactly the records already acknowledged.
+                committed += sent
+                published += sent
+                state["next_index"] = committed
+                state["last_event_time"] = batch[sent - 1].event_time.isoformat()
+                state["pending"] = None
+                _write_state(state_path, state)
+            if sent < len(batch):
+                return ReplayWindowSummary(committed, published, False, state.get("last_event_time"))
         return ReplayWindowSummary(committed, published, bool(state["complete"]), state.get("last_event_time"))
