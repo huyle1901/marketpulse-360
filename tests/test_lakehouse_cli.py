@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import tempfile
 import unittest
 from datetime import date
@@ -138,6 +139,22 @@ class LakehouseCliTests(unittest.TestCase):
             summary = json.loads(output.getvalue())
             self.assertNotIn("manifest_json", summary)
             self.assertEqual(summary["manifest_sha256"], "abc")
+
+    def test_ingest_files_passes_configured_required_platforms(self) -> None:
+        from marketpulse_lakehouse import cli
+
+        for env, expected in (
+            ({}, ("google_ads", "meta_ads", "tiktok_ads")),
+            ({"BATCH_REQUIRED_PLATFORMS": "google_ads,meta_ads,tiktok_ads,shopee_ads"},
+             ("google_ads", "meta_ads", "tiktok_ads", "shopee_ads")),
+        ):
+            with self.subTest(env=env), patch.dict("os.environ", env, clear=False), \
+                    patch("marketpulse_lakehouse.cli.ingest_source_files", return_value={}) as ingest, \
+                    patch("marketpulse_lakehouse.cli._with_session", side_effect=lambda _n, op: op(object())):
+                if not env:
+                    os.environ.pop("BATCH_REQUIRED_PLATFORMS", None)
+                cli._run_ingest_files(run_id="r", input_path=Path("/data"))
+                self.assertEqual(expected, ingest.call_args.kwargs["required_platforms"])
 
     def test_runtime_error_returns_two_without_a_success_summary(self) -> None:
         stdout = io.StringIO()

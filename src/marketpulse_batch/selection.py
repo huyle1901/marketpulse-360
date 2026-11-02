@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from marketpulse_lakehouse.source_files import (
     ALLOWED_SOURCE_DATASETS, SourceArchivePlan, iter_source_file_rows, verify_source_archive_object,
@@ -13,16 +13,36 @@ DAY_FIELDS = {
     "google_ads": ("segments_date",),
     "meta_ads": ("date_start", "date_stop"),
     "tiktok_ads": ("stat_time_day",),
+    "shopee_ads": ("date",),
     "crm": ("snapshot_date",),
 }
 
 
-def select_range_sources(plan: SourceArchivePlan, from_date: date, to_date: date) -> SourceArchivePlan:
+def source_day(dataset: str, value: str) -> date:
+    """Parse a source row's day: Shopee reports are day-first, the rest ISO."""
+    if dataset == "shopee_ads":
+        return datetime.strptime(value, "%d/%m/%Y").date()
+    return date.fromisoformat(value)
+
+
+def _row_matches_day(dataset: str, row: dict, field: str, day: date) -> bool:
+    value = row.get(field)
+    if not isinstance(value, str):
+        return False
+    try:
+        return source_day(dataset, value) == day
+    except ValueError:
+        return False
+
+
+def select_range_sources(plan: SourceArchivePlan, from_date: date, to_date: date,
+                         required_platforms: tuple[str, ...]) -> SourceArchivePlan:
     """Pin complete daily ad/CRM inputs in one half-open history window."""
     if type(from_date) is not date or type(to_date) is not date or from_date >= to_date:
         raise ValueError("invalid UTC source [from_date,to_date) window")
     if (to_date - from_date).days > 731:
         raise ValueError("source window exceeds 731 days")
+    required_platforms = BatchSelection(from_date, required_platforms).required_platforms
     selected = []
     observed: dict[date, set[str]] = {}
     for source in plan.source_files:
@@ -36,18 +56,20 @@ def select_range_sources(plan: SourceArchivePlan, from_date: date, to_date: date
             raise ValueError(f"missing daily date partition: {source.source_file}")
         if not from_date <= day < to_date:
             continue
+        if source.source_dataset in REPORT_PLATFORMS and source.source_dataset not in required_platforms:
+            continue
         verify_source_archive_object(source)
         count = 0
         for count, row in enumerate(iter_source_file_rows(source), start=1):
             for field in DAY_FIELDS[source.source_dataset]:
-                if row.get(field) != day.isoformat():
+                if not _row_matches_day(source.source_dataset, row, field, day):
                     raise ValueError(f"source date mismatch: {source.source_file}:{count}:{field}")
         if count != source.row_count:
             raise ValueError(f"row-count mismatch: {source.source_file}")
         if count:
             observed.setdefault(day, set()).add(source.source_dataset)
         selected.append(source)
-    required = {"crm", *REPORT_PLATFORMS}
+    required = {"crm", *required_platforms}
     for offset in range((to_date - from_date).days):
         day = from_date + timedelta(days=offset)
         if missing := required - observed.get(day, set()):
@@ -78,7 +100,7 @@ def select_daily_sources(plan: SourceArchivePlan, selection: BatchSelection) -> 
         count = 0
         for count, row in enumerate(iter_source_file_rows(source), start=1):
             for field in DAY_FIELDS[source.source_dataset]:
-                if row.get(field) != selection.logical_day.isoformat():
+                if not _row_matches_day(source.source_dataset, row, field, selection.logical_day):
                     raise ValueError(f"source date mismatch: {source.source_file}:{count}:{field}")
         if count != source.row_count:
             raise ValueError(f"row-count mismatch: {source.source_file}")

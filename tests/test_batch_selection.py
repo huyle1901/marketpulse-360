@@ -9,14 +9,16 @@ from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from marketpulse_batch.contracts import BatchSelection
-from marketpulse_batch.selection import select_daily_sources, select_range_sources, select_source_datasets
+from marketpulse_batch.contracts import BatchSelection, parse_required_platforms
+from marketpulse_batch.selection import select_daily_sources, select_range_sources, select_source_datasets, source_day
 from marketpulse_lakehouse.source_files import (
     SourceArchivePlan, build_source_archive_plan, normalize_source_file,
 )
 
 FIXTURE = Path(__file__).resolve().parents[1] / "data/mock/fixtures/seed-360"
 DAY = date(2026, 1, 1)
+THREE = ("google_ads", "meta_ads", "tiktok_ads")
+FOUR = (*THREE, "shopee_ads")
 
 
 class BatchSelectionTests(unittest.TestCase):
@@ -40,14 +42,73 @@ class BatchSelectionTests(unittest.TestCase):
         self.assertEqual(rows[0]["source_file"], "crm/date=2026-01-01/part-00000.csv.gz")
 
     def test_range_selection_includes_only_complete_dates_and_same_lineage(self) -> None:
-        selected = select_range_sources(self.plan, DAY, date(2026, 1, 3))
+        selected = select_range_sources(self.plan, DAY, date(2026, 1, 3), THREE)
         self.assertEqual(12, len(selected.source_files))
         self.assertEqual(self.plan.manifest_sha256, selected.manifest_sha256)
-        first = select_range_sources(self.plan, DAY, date(2026, 1, 2))
+        first = select_range_sources(self.plan, DAY, date(2026, 1, 2), THREE)
         self.assertEqual(8, len(first.source_files))
         self.assertTrue(all(source.source_date in (None, DAY) for source in first.source_files))
         with self.assertRaisesRegex(ValueError, "missing"):
-            select_range_sources(self.plan, DAY, date(2026, 1, 4))
+            select_range_sources(self.plan, DAY, date(2026, 1, 4), THREE)
+
+    def _shopee(self, root: Path, day: date) -> object:
+        original = next(f for f in self.plan.source_files if f.source_dataset == "tiktok_ads" and f.source_date == day)
+        content = gzip.compress(f"date,spend\n{day.strftime('%d/%m/%Y')},1.00\n".encode(), mtime=0)
+        path = root / f"shopee-{day}.csv.gz"
+        path.write_bytes(content)
+        return replace(original, source_dataset="shopee_ads", local_path=path,
+                       file_sha256=hashlib.sha256(content).hexdigest(),
+                       compressed_size_bytes=len(content), row_count=1)
+
+    def _four_platform_plan(self, root: Path, days: tuple[date, ...]) -> SourceArchivePlan:
+        extra = tuple(self._shopee(root, d) for d in days)
+        return replace(self.plan, source_files=(*self.plan.source_files, *extra))
+
+    def test_range_selection_requires_shopee_when_declared(self) -> None:
+        window = (DAY, date(2026, 1, 3))
+        with tempfile.TemporaryDirectory() as root:
+            full = self._four_platform_plan(Path(root), (DAY, date(2026, 1, 2)))
+            selected = select_range_sources(full, *window, FOUR)
+            self.assertEqual(14, len(selected.source_files))
+            partial = self._four_platform_plan(Path(root), (DAY,))
+            with self.assertRaisesRegex(ValueError, "2026-01-02.*shopee_ads"):
+                select_range_sources(partial, *window, FOUR)
+            # A three-platform stack ignores Shopee files and keeps its requirement.
+            three = select_range_sources(partial, *window, THREE)
+            self.assertEqual(12, len(three.source_files))
+
+    def test_shopee_day_first_date_selects_that_day(self) -> None:
+        self.assertEqual(date(2026, 2, 1), source_day("shopee_ads", "01/02/2026"))
+        self.assertEqual(date(2026, 2, 1), source_day("google_ads", "2026-02-01"))
+        with self.assertRaises(ValueError):
+            source_day("shopee_ads", "2026-02-01")
+        with tempfile.TemporaryDirectory() as root:
+            plan = self._four_platform_plan(Path(root), (DAY,))
+            selected = select_daily_sources(plan, BatchSelection(DAY, FOUR))
+            self.assertIn("shopee_ads", {f.source_dataset for f in selected.source_files})
+
+    def test_shopee_row_with_wrong_day_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            plan = self._four_platform_plan(Path(root), (DAY,))
+            bad = replace(plan.source_files[-1], local_path=Path(root) / "bad.csv.gz")
+            content = gzip.compress(b"date,spend\n2026-01-01,1.00\n", mtime=0)
+            bad.local_path.write_bytes(content)
+            bad = replace(bad, file_sha256=hashlib.sha256(content).hexdigest(), compressed_size_bytes=len(content))
+            plan = replace(plan, source_files=(*plan.source_files[:-1], bad))
+            with self.assertRaisesRegex(ValueError, "date mismatch"):
+                select_daily_sources(plan, BatchSelection(DAY, FOUR))
+
+    def test_required_platforms_parsing(self) -> None:
+        self.assertEqual(THREE, parse_required_platforms(None))
+        self.assertEqual(THREE, parse_required_platforms(""))
+        self.assertEqual(FOUR, parse_required_platforms("google_ads, meta_ads,tiktok_ads,shopee_ads"))
+        for bad in ("lazada_ads", "google_ads,google_ads"):
+            with self.assertRaises(ValueError):
+                parse_required_platforms(bad)
+
+    def test_range_rejects_unknown_required_platform(self) -> None:
+        with self.assertRaises(ValueError):
+            select_range_sources(self.plan, DAY, date(2026, 1, 3), (*THREE, "lazada_ads"))
 
     def test_missing_required_platform_rejected(self) -> None:
         files = tuple(f for f in self.plan.source_files if f.source_dataset != "tiktok_ads")
