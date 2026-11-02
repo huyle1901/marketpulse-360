@@ -9,7 +9,7 @@ from pathlib import Path
 from marketpulse_mock.config import GenerationConfig, ScaleProfile, resolve_config
 from marketpulse_mock.generator import generate_dataset
 from marketpulse_mock.ids import stable_id
-from marketpulse_mock.journeys import SourceRecord, iter_day_records
+from marketpulse_mock.journeys import SourceRecord, _customer_picker, iter_day_records
 from marketpulse_mock.masters import generate_master_data
 from marketpulse_mock.models import Customer
 from marketpulse_mock.validator import validate_dataset
@@ -281,6 +281,10 @@ class JoinOverflowTests(unittest.TestCase):
         for c in joiners:
             per_day[c.created_at.date()] += 1
         self.assertGreater(min(per_day.values()), 20)
+        masters = generate_master_data(self.config)
+        for day_index in range(self.profile.days):
+            picker = _customer_picker(self.config, masters, day_index)
+            self.assertTrue(picker.overflow_ordinals, day_index)
         missing = [
             c.customer_id
             for c in joiners
@@ -290,6 +294,21 @@ class JoinOverflowTests(unittest.TestCase):
 
     def test_attribution_matches_sessions(self) -> None:
         _assert_attribution_matches_sessions(self, self.records)
+
+    def test_event_ids_are_unique_across_the_world(self) -> None:
+        # The duplicate_event anomaly re-emits an identical copy (same id and
+        # payload); any other repeated id is a collision.
+        payloads: dict[str, dict[str, object]] = {}
+        checked = 0
+        for r in self.records:
+            event_id = r.payload.get("event_id")
+            if not isinstance(event_id, str):
+                continue
+            checked += 1
+            first = payloads.setdefault(event_id, r.payload)
+            self.assertEqual(first, r.payload, event_id)
+        self.assertGreater(checked, 0)
+        self.assertLess(len(payloads), checked)  # duplicates were exercised
 
     def test_joiner_sessions_keep_fresh_devices(self) -> None:
         checked = _assert_identified_sessions_keep_fresh_devices(
