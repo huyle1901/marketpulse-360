@@ -29,6 +29,14 @@
   join-day sessions.
 - Plan 5 records the scenario in the manifest for non-flat runs.
 
+## Carried from plan 2 (final review)
+
+- Every `_pick_campaign` call for a day (impression loop, overflow, attribution, returning-device
+  scan of earlier days) passes that day's same `shopee_boost`; check `_pick_campaign` cache churn
+  (it clears at 64 entries) once the boost varies by day.
+- The `vietnam-retail` `Scenario` holds `MappingProxyType` fields and is not hashable; do not use
+  it as a cache key without changing that deliberately.
+
 ## Review Focus
 
 - Event-time order across the UTC midnight boundary on a double day (VN date spans two UTC days) — test in Task 2.

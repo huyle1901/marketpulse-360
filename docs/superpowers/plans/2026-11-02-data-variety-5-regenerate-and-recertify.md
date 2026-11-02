@@ -18,6 +18,15 @@
 - Ungoverned measures equal ground truth exactly; governed measures equal an independent governed computation; raw−governed gaps recorded with reasons.
 - Old project volumes are never removed by this plan; passwords only via stdin from `.secrets/`.
 
+## Carried from plan 2 (final review)
+
+- Verify end to end on the v2 stack: the Spark Silver vendor-spend path, the Compose wiring of
+  `BATCH_REQUIRED_PLATFORMS`, and `platform=shopee` against real ClickHouse.
+- Add a fail-closed guard: batch selection errors when `master/campaigns` names a platform whose
+  `<platform>_ads` report is not required (otherwise a three-platform stack shows Shopee revenue
+  with no spend).
+- Record the scenario in the manifest for non-flat runs (carried from plan 1).
+
 ## Review Focus
 
 - Port collisions with v1 services still running (Postgres, MinIO) → v2 must start with v1's app up — checked in Task 1.
