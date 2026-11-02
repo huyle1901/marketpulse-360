@@ -190,8 +190,13 @@ byte-identical output; `vietnam-retail` (used by `story-demo`) adds weighted
 Vietnamese cities, customers who join over time, and returning devices. Story
 customers act only from their join date with tenure-weighted activity, every
 in-window joiner has a join-day session, and about 30 % of anonymous sessions
-return on a device seen in the previous 60 days. All choices remain
-deterministic for a seed.
+return on a device seen in the previous 60 days (identified sessions always keep
+their own device). When a day has more joiners than identified sessions, the
+extra joiners get overflow join-day sessions, each with its own paid impression
+and click, so impressions and spend on heavy join days can exceed
+`impressions_per_day`. A shortened run (`resolve_config(days=N)`, used by tests)
+is the first N days of the full story: join dates and campaign flights keep the
+full profile's length. All choices remain deterministic for a seed.
 
 Mock source data is not application operational data. User accounts, saved segments,
 alert rules, annotations, and platform configuration created through the future
