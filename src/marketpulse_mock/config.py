@@ -40,6 +40,11 @@ class ScaleProfile:
             raise ValueError("campaigns must be divisible by 3")
         if self.story_days is not None and self.story_days < self.days:
             raise ValueError("story_days must be at least days")
+        if self.scenario not in SCENARIOS:
+            choices = ", ".join(SCENARIOS)
+            raise ValueError(
+                f"unknown scenario {self.scenario!r}; choose one of: {choices}"
+            )
 
     @property
     def full_days(self) -> int:
@@ -52,17 +57,54 @@ class ScaleProfile:
 class Scenario:
     """World-shaping settings that make a profile's data varied.
 
-    ``flat`` keeps the legacy uniform behaviour; optional fields are None/0.
-    ``cities`` holds ``(country, city, weight)`` entries when set.
+    ``flat`` keeps the legacy uniform behaviour; its optional fields are
+    None/0 and its ``join_ramp`` is the neutral 1.0.
     """
 
     name: str
+    """Registry key, e.g. ``flat`` or ``vietnam-retail``."""
+
     cities: tuple[tuple[str, str, int], ...] | None = None
+    """``(country, city, weight)`` entries for a weighted customer city draw;
+    None keeps the legacy uniform five cities. Weights must be positive."""
+
     customers_before_start_share: float | None = None
-    join_ramp: float = 0.0
+    """Share (0-1) of customers created in the 730 days before the start;
+    the rest join during the story. None keeps the legacy 30-730 day ages."""
+
+    join_ramp: float = 1.0
+    """Joins per day at the end of the story relative to the start (>= 0);
+    1.0 is a flat rate, 2.0 doubles it."""
+
     tenure_months: float | None = None
+    """Months after which a customer's session weight halves,
+    ``1 / (1 + months / tenure_months)``; None picks customers uniformly."""
+
     returning_device_share: float = 0.0
+    """Share (0-1) of anonymous sessions that reuse an earlier device."""
+
     returning_window_days: int = 0
+    """How many previous days (>= 0) a returning device is drawn from;
+    0 disables returning devices."""
+
+    def __post_init__(self) -> None:
+        if self.cities is not None:
+            if not self.cities:
+                raise ValueError("cities must not be empty when set")
+            for _country, city, weight in self.cities:
+                if weight <= 0:
+                    raise ValueError(f"city weight for {city} must be positive")
+        share = self.customers_before_start_share
+        if share is not None and not 0.0 <= share <= 1.0:
+            raise ValueError("customers_before_start_share must be between 0 and 1")
+        if self.join_ramp < 0:
+            raise ValueError("join_ramp must not be negative")
+        if self.tenure_months is not None and self.tenure_months <= 0:
+            raise ValueError("tenure_months must be positive")
+        if not 0.0 <= self.returning_device_share <= 1.0:
+            raise ValueError("returning_device_share must be between 0 and 1")
+        if self.returning_window_days < 0:
+            raise ValueError("returning_window_days must not be negative")
 
 
 SCENARIOS: Mapping[str, Scenario] = MappingProxyType(

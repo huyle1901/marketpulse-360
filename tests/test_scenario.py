@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from marketpulse_mock.config import resolve_config
+from marketpulse_mock.config import SCENARIOS, ScaleProfile, Scenario, resolve_config
 from marketpulse_mock.generator import generate_dataset
 
 FIXTURE_MANIFEST = Path("data/mock/fixtures/seed-360/manifest.json")
@@ -44,6 +44,30 @@ class ScenarioTests(unittest.TestCase):
             for bad in (0, 639):
                 with self.assertRaises(ValueError):
                     resolve_config("story-demo", 360, Path(tmp), days=bad)
+
+    def test_scenario_defaults_are_neutral(self) -> None:
+        self.assertEqual(Scenario("plain").join_ramp, 1.0)
+        self.assertEqual(sum(w for _, _, w in SCENARIOS["vietnam-retail"].cities), 100)
+
+    def test_scenario_rejects_out_of_range_values(self) -> None:
+        bad = (
+            {"customers_before_start_share": 1.5},
+            {"customers_before_start_share": -0.1},
+            {"join_ramp": -1.0},
+            {"tenure_months": 0.0},
+            {"returning_device_share": 1.2},
+            {"returning_device_share": -0.2},
+            {"returning_window_days": -1},
+            {"cities": (("VN", "Hue", 0),)},
+            {"cities": ()},
+        )
+        for overrides in bad:
+            with self.subTest(overrides), self.assertRaises(ValueError):
+                Scenario("bad", **overrides)
+
+    def test_profile_rejects_unknown_scenario(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unknown scenario"):
+            ScaleProfile("odd", 1, 1, 3, 1, 1, 1, "atlantis")
 
 
 if __name__ == "__main__":
