@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import gzip
+import hashlib
+import json
 import tempfile
 import unittest
 from collections import defaultdict
@@ -316,10 +319,6 @@ class JoinOverflowTests(unittest.TestCase):
         )
         self.assertGreater(checked, 0)
 
-    @unittest.skip(
-        "story campaigns now include Shopee; the shopee_ads dataset "
-        "writer and validator land in a later plan 2 task"
-    )
     def test_overflow_dataset_validates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "overflow"
@@ -396,6 +395,87 @@ class ReturningDeviceTests(unittest.TestCase):
 
 STORY_SPEND_SHARES = {"google": 30, "meta": 28, "tiktok": 24, "shopee": 18}
 TRUTH_TOTALS = ("impressions", "clicks", "spend_minor", "sessions", "orders")
+
+
+class ShopeeReportTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.config = resolve_config("story-demo", 360, Path(tmp), days=3)
+        cls.masters, cls.records = (
+            generate_master_data(cls.config),
+            _generate_window(cls.config)[1],
+        )
+
+    def test_shopee_report_reconciles_with_ground_truth(self) -> None:
+        by_vendor = {c.platform_campaign_id: c for c in self.masters.campaigns}
+        truth = {
+            (str(r.payload["date"]), str(r.payload["campaign_id"])): r.payload
+            for r in self.records
+            if r.dataset == "ground_truth"
+        }
+        reports = [r for r in self.records if r.dataset == "shopee_ads"]
+        self.assertGreater(len(reports), 0)
+        for report in reports:
+            p = report.payload
+            self.assertEqual(
+                {"date", "ad_id", "impression", "clicks", "expense",
+                 "conversions", "gmv"},
+                set(p),
+            )
+            campaign = by_vendor[str(p["ad_id"])]
+            day, month, year = str(p["date"]).split("/")
+            expected = truth[(f"{year}-{month}-{day}", campaign.campaign_id)]
+            self.assertEqual("shopee", campaign.platform)
+            self.assertEqual(expected["impressions"], p["impression"])
+            self.assertEqual(expected["clicks"], p["clicks"])
+            self.assertEqual(expected["spend_minor"], p["expense"])
+            self.assertEqual(expected["orders"], p["conversions"])
+            self.assertEqual(expected["gross_revenue_minor"], p["gmv"])
+
+    def test_shopee_dates_are_day_first(self) -> None:
+        dates = {
+            str(r.payload["date"])
+            for r in self.records
+            if r.dataset == "shopee_ads"
+        }
+        start = self.config.start_date
+        self.assertEqual(
+            {f"{start + timedelta(days=i):%d/%m/%Y}" for i in range(3)}, dates
+        )
+
+    def test_validator_rejects_unknown_shopee_ad_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "world"
+            config = resolve_config("story-demo", 360, root, days=3)
+            generate_dataset(config)
+            self.assertTrue(validate_dataset(root).valid)
+            target = next((root / "shopee_ads").rglob("*.csv.gz"))
+            with gzip.open(target, "rt", encoding="utf-8", newline="") as s:
+                text = s.read()
+            lines = text.splitlines()
+            head, first = lines[0], lines[1].split(",")
+            first[1] = "S-missing"
+            lines[1] = ",".join(first)
+            data = ("\r\n".join([head, *lines[1:]]) + "\r\n").encode()
+            with gzip.GzipFile(target, "wb", mtime=0) as s:
+                s.write(data)
+            content = target.read_bytes()
+            manifest_path = root / "manifest.json"
+            manifest = json.loads(manifest_path.read_text())
+            relative = target.relative_to(root).as_posix()
+            for item in manifest["files"]:
+                if item["relative_path"] == relative:
+                    item["byte_size"] = len(content)
+                    item["sha256"] = hashlib.sha256(content).hexdigest()
+            manifest_path.write_text(json.dumps(manifest))
+            report = validate_dataset(root)
+        self.assertFalse(report.valid)
+        self.assertTrue(
+            any("unknown platform campaign_id S-missing" in e
+                for e in report.errors),
+            report.errors[:5],
+        )
 
 
 class StoryChannelPersonaTests(unittest.TestCase):

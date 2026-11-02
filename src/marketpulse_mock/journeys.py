@@ -789,6 +789,16 @@ def _vendor_report_payload(
                 }
             ],
         }
+    if campaign.platform == "shopee":
+        return {
+            "date": f"{truth.day:%d/%m/%Y}",
+            "ad_id": campaign.platform_campaign_id,
+            "impression": truth.impressions,
+            "clicks": truth.clicks,
+            "expense": truth.spend_minor,
+            "conversions": truth.orders,
+            "gmv": truth.gross_revenue_minor,
+        }
     return {
         "stat_time_day": day,
         **common,
