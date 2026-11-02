@@ -15,6 +15,18 @@ class CertifiedCutoffTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             gold_cutoff({'logical_day': '31/08/2026'})
 
+    def test_ingest_range_passes_the_configured_required_platforms(self):
+        import os
+        from pathlib import Path
+        from unittest.mock import patch
+        from marketpulse_batch.engine import execute
+        four = "google_ads,meta_ads,tiktok_ads,shopee_ads"
+        payload = {"source_root": "/x", "source_window": {"from_date": "2026-01-01", "to_date": "2026-01-03"}}
+        with patch.dict(os.environ, {"BATCH_REQUIRED_PLATFORMS": four}), \
+                patch("marketpulse_batch.engine.ingest_source_files", return_value={}) as ingest:
+            execute(None, "ingest_files", payload)
+        self.assertEqual(tuple(four.split(",")), ingest.call_args.kwargs["required_platforms"])
+
     def test_gold_rejects_a_non_date_cutoff_before_spark(self):
         snapshots = {name: 1 for name in TABLE_CONTRACTS if name.startswith('silver.')}
         with self.assertRaisesRegex(ValueError, 'through_date'):

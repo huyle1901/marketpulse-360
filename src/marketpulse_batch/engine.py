@@ -5,10 +5,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from datetime import UTC, datetime, date
 from pathlib import Path
 
-from marketpulse_batch.contracts import BatchSelection, PreparationReceipt, snapshot_map
+from marketpulse_batch.contracts import BatchSelection, PreparationReceipt, parse_required_platforms, snapshot_map
 from marketpulse_batch.canonical import rowset_checksum
 from marketpulse_batch.export import export_snapshots
 from marketpulse_batch.receipts import read_receipt
@@ -39,7 +40,8 @@ def execute(spark, operation: str, payload: dict[str, object]) -> dict[str, obje
                                    ingested_at=datetime.now(UTC), selection=selection,
                                    from_date=date.fromisoformat(source_window["from_date"]) if source_window else None,
                                    to_date=date.fromisoformat(source_window["to_date"]) if source_window else None,
-                                   datasets=tuple(payload["datasets"]) if payload.get("datasets") else None)
+                                   datasets=tuple(payload["datasets"]) if payload.get("datasets") else None,
+                                   required_platforms=parse_required_platforms(os.environ.get("BATCH_REQUIRED_PLATFORMS")))
     if operation == "bounded_kafka":
         manifest = capture_offset_manifest(spark, bootstrap_servers=payload["bootstrap_servers"], captured_at=datetime.now(UTC))
         result = ingest_kafka_manifest(spark, manifest, bootstrap_servers=payload["bootstrap_servers"],
