@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from datetime import date
 from pathlib import Path
 from types import MappingProxyType
@@ -20,16 +20,64 @@ class ScaleProfile:
     products: int
     impressions_per_day: int
     rows_per_file: int
+    scenario: str = "flat"
 
     def __post_init__(self) -> None:
         for field in fields(self):
-            if field.name == "name":
+            if field.name in ("name", "scenario"):
                 continue
             value = getattr(self, field.name)
             if value <= 0:
                 raise ValueError(f"{field.name} must be positive")
         if self.campaigns % 3:
             raise ValueError("campaigns must be divisible by 3")
+
+
+@dataclass(frozen=True, slots=True)
+class Scenario:
+    """World-shaping settings that make a profile's data varied.
+
+    ``flat`` keeps the legacy uniform behaviour; optional fields are None/0.
+    ``cities`` holds ``(country, city, weight)`` entries when set.
+    """
+
+    name: str
+    cities: tuple[tuple[str, str, int], ...] | None = None
+    customers_before_start_share: float | None = None
+    join_ramp: float = 0.0
+    tenure_months: float | None = None
+    returning_device_share: float = 0.0
+    returning_window_days: int = 0
+
+
+SCENARIOS: Mapping[str, Scenario] = MappingProxyType(
+    {
+        "flat": Scenario("flat"),
+        "vietnam-retail": Scenario(
+            "vietnam-retail",
+            cities=(
+                ("VN", "Ho Chi Minh City", 28),
+                ("VN", "Ha Noi", 24),
+                ("VN", "Bien Hoa", 6),
+                ("VN", "Thu Dau Mot", 6),
+                ("VN", "Hai Phong", 6),
+                ("VN", "Da Nang", 6),
+                ("VN", "Can Tho", 5),
+                ("VN", "Nha Trang", 4),
+                ("VN", "Hue", 3),
+                ("VN", "Vung Tau", 3),
+                ("VN", "Quy Nhon", 3),
+                ("VN", "Buon Ma Thuot", 3),
+                ("VN", "Ha Long", 3),
+            ),
+            customers_before_start_share=0.4,
+            join_ramp=2.0,
+            tenure_months=6.0,
+            returning_device_share=0.3,
+            returning_window_days=60,
+        ),
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,7 +116,16 @@ PROFILES: Mapping[str, ScaleProfile] = MappingProxyType(
         "benchmark": ScaleProfile(
             "benchmark", 30, 250_000, 60, 5_000, 1_000_000, 250_000
         ),
-        "story-demo": ScaleProfile("story-demo", 638, 1_000, 12, 100, 2_000, 50_000),
+        "story-demo": ScaleProfile(
+            "story-demo",
+            638,
+            3_000,
+            12,
+            100,
+            4_000,
+            50_000,
+            "vietnam-retail",
+        ),
     }
 )
 
@@ -88,6 +145,10 @@ class GenerationConfig:
         if self.rows_per_file <= 0:
             raise ValueError("rows_per_file must be positive")
 
+    @property
+    def scenario(self) -> Scenario:
+        return SCENARIOS[self.profile.scenario]
+
 
 def resolve_config(
     profile_name: str,
@@ -95,6 +156,7 @@ def resolve_config(
     output_dir: Path,
     rows_per_file: int | None = None,
     start_date: date | None = None,
+    days: int | None = None,
 ) -> GenerationConfig:
     """Resolve a named profile plus safe CLI overrides."""
 
@@ -105,6 +167,11 @@ def resolve_config(
         raise ValueError(
             f"unknown profile {profile_name!r}; choose one of: {choices}"
         ) from error
+
+    if days is not None:
+        if not 1 <= days <= profile.days:
+            raise ValueError(f"days must be between 1 and {profile.days}")
+        profile = replace(profile, days=days)
 
     if profile_name == "story-demo" and start_date not in (None, date(2025, 1, 1)):
         raise ValueError("story-demo uses one fixed UTC world starting 2025-01-01")

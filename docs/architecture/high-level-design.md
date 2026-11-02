@@ -184,6 +184,12 @@ UTC partitions, schemas, file hashes, anomalies, cross-source attribution, ad sp
 orders, refunds, and daily ground truth. Its reconciliation state is finalized and
 released at each date boundary so memory does not grow across the complete run.
 
+Each generator profile carries a frozen scenario. `flat` (used by `fixture`,
+`smoke`, `demo`, and `benchmark`) keeps the legacy uniform behaviour and
+byte-identical output; `vietnam-retail` (used by `story-demo`) adds weighted
+Vietnamese cities, customers who join over time, and returning devices. All
+choices remain deterministic for a seed.
+
 Mock source data is not application operational data. User accounts, saved segments,
 alert rules, annotations, and platform configuration created through the future
 MarketPulse 360 application remain a separate PostgreSQL domain.
