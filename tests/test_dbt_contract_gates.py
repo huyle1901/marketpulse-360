@@ -21,6 +21,14 @@ class DbtContractGateTests(unittest.TestCase):
             expected = [c.name for c in TABLE_CONTRACTS[logical].columns if not c.nullable and not c.operational]
             self.assertEqual(declared, expected, model)
 
+    def test_accepted_domains_list_the_app_platforms(self):
+        from marketpulse_app.contracts import PLATFORMS
+        sql = (Path(__file__).resolve().parents[1] / "dbt/marketpulse_serving/tests/accepted_domains.sql").read_text()
+        lists = re.findall(r"platform not in \(([^)]*)\)", sql)
+        self.assertEqual(2, len(lists))
+        for body in lists:
+            self.assertEqual(set(PLATFORMS), set(re.findall(r"'([^']+)'", body)))
+
 
 if __name__ == "__main__":
     unittest.main()
