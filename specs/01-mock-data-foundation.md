@@ -42,6 +42,7 @@ with the simulated impressions, clicks, cost, and conversions that produced them
 | `google_ads` | Google Ads daily report | CSV gzip | campaign/day | derived metrics |
 | `meta_ads` | Meta Ads Insights-like report | JSONL gzip | campaign/day | derived metrics |
 | `tiktok_ads` | TikTok Ads daily report | CSV gzip | campaign/day | derived metrics |
+| `shopee_ads` | Shopee Ads Seller Centre report (story scenario) | CSV gzip | campaign/ad/day | `ad_id`; columns `date`, `ad_id`, `impression`, `clicks`, `expense`, `conversions`, `gmv` (whole VND) |
 | `web_events` | Web/mobile analytics SDK | JSONL gzip | one row/event | click, session, customer, product |
 | `orders` | Commerce/transaction service | JSONL gzip | one row/order lifecycle event | session, customer, order |
 | `crm` | CRM daily snapshot/change feed | CSV gzip | customer snapshot/change | customer and consent |
@@ -50,8 +51,8 @@ with the simulated impressions, clicks, cost, and conversions that produced them
 
 Ad platforms normally expose aggregated reports rather than user-level impression
 logs. Therefore impressions and advertising cost appear in vendor report files,
-while clicks are connected to first-party web events using `gclid`, `fbclid`, or
-`ttclid`. This boundary intentionally mirrors real integrations.
+while clicks are connected to first-party web events using `gclid`, `fbclid`,
+`ttclid`, or `shpclid`. This boundary intentionally mirrors real integrations.
 
 ## Journey model
 

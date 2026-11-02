@@ -158,8 +158,8 @@ flowchart LR
 ### 4.0 Source simulation boundary
 
 Before real integrations are available, the `marketpulse_mock` package produces
-deterministic, correlated representations of Google Ads, Meta Ads, TikTok Ads,
-web/mobile analytics, CRM, commerce, and email systems. Ad platforms expose daily
+deterministic, correlated representations of Google Ads, Meta Ads, TikTok Ads
+(plus Shopee Ads in the story scenario only), web/mobile analytics, CRM, commerce, and email systems. Ad platforms expose daily
 aggregate reports, while first-party clickstream and order systems expose event-level
 records connected by platform click IDs, campaign IDs, sessions, customers, and
 orders. This deliberately mirrors common marketing integration boundaries instead
@@ -379,8 +379,12 @@ configured; regression/integration evidence is from the observed local runs.
 
 Implemented first: optional daily file-ingest selection preserves the MP-04
 all-file default. It requires nonempty configured report platforms and CRM;
-checks Google `segments_date`, Meta `date_start`/`date_stop`, TikTok `stat_time_day`
-and CRM `snapshot_date` against the UTC file partition; retains shared master
+checks Google `segments_date`, Meta `date_start`/`date_stop`, TikTok `stat_time_day`,
+Shopee Ads `date` (DD/MM/YYYY, day-first) and CRM `snapshot_date` against the UTC
+file partition. The range and daily window checks require only the configured
+required platforms (default google_ads, meta_ads, tiktok_ads; set via
+`BATCH_REQUIRED_PLATFORMS`, which Compose passes to batch-code, dagster-webserver,
+dagster-daemon and spark-lakehouse); undeclared reports are not required; retains shared master
 files and original row lineage. Preparation identities hash selected day/platforms,
 model digest and pinned Bronze snapshots. Local receipt files use exclusive atomic
 creation, immutable snapshot maps and conflict detection; PostgreSQL/Dagster
