@@ -90,15 +90,17 @@ class Scenario:
     must be divisible by their number."""
 
     platform_spend_share: Mapping[str, int] | None = None
-    """Relative spend share per platform (positive, keys within ``platforms``);
-    None keeps the legacy uniform allocation."""
+    """Relative spend share per platform (positive; exactly the ``platforms``);
+    None keeps the legacy round-robin allocation."""
 
     objective_spend_weight: Mapping[str, float] | None = None
-    """Spend multiplier per campaign objective (positive); None is uniform."""
+    """Spend multiplier per campaign objective (positive) splitting a
+    platform's spend between its campaigns; None (or an unlisted objective)
+    weighs 1.0."""
 
     personas: Mapping[str, tuple[float, float, float]] | None = None
     """``(cost, ctr, strength)`` multipliers per platform (three positive
-    floats, keys within ``platforms``); None keeps every platform identical."""
+    floats; exactly the ``platforms``); None keeps every platform identical."""
 
     def __post_init__(self) -> None:
         if not self.platforms:
@@ -113,6 +115,9 @@ class Scenario:
                     raise ValueError(
                         f"platform_spend_share for {platform} must be positive"
                     )
+            _require_every_platform(
+                "platform_spend_share", self.platform_spend_share, self.platforms
+            )
         if self.objective_spend_weight is not None:
             for objective, weight in self.objective_spend_weight.items():
                 if weight <= 0:
@@ -127,6 +132,7 @@ class Scenario:
                     raise ValueError(
                         f"personas for {platform} must be three positive numbers"
                     )
+            _require_every_platform("personas", self.personas, self.platforms)
         if self.cities is not None:
             if not self.cities:
                 raise ValueError("cities must not be empty when set")
@@ -144,6 +150,14 @@ class Scenario:
             raise ValueError("returning_device_share must be between 0 and 1")
         if self.returning_window_days < 0:
             raise ValueError("returning_window_days must not be negative")
+
+
+def _require_every_platform(
+    name: str, mapping: Mapping[str, object], platforms: tuple[str, ...]
+) -> None:
+    missing = [platform for platform in platforms if platform not in mapping]
+    if missing:
+        raise ValueError(f"{name} is missing platforms: {', '.join(missing)}")
 
 
 SCENARIOS: Mapping[str, Scenario] = MappingProxyType(

@@ -196,7 +196,15 @@ extra joiners get overflow join-day sessions, each with its own paid impression
 and click, so impressions and spend on heavy join days can exceed
 `impressions_per_day`. A shortened run (`resolve_config(days=N)`, used by tests)
 is the first N days of the full story: join dates and campaign flights keep the
-full profile's length. All choices remain deterministic for a seed.
+full profile's length. Story campaigns span Google, Meta, TikTok and Shopee:
+spend splits by platform (30/28/24/18) and, within a platform, by objective
+(conversions 1.3, traffic 1.0, awareness 0.7); each impression's campaign is drawn
+by that spend share divided by the platform's cost multiplier, so cheaper
+channels buy more impressions. Per-platform personas scale cost per impression,
+click-through and a purchase strength `m` that lifts only the late funnel
+(checkout given cart `min(0.9, 0.625·√m)`, purchase given checkout
+`min(0.9, 0.48·m)`). Sessions, returning devices and attribution share one
+campaign draw. All choices remain deterministic for a seed.
 
 Mock source data is not application operational data. User accounts, saved segments,
 alert rules, annotations, and platform configuration created through the future

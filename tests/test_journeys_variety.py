@@ -394,5 +394,169 @@ class ReturningDeviceTests(unittest.TestCase):
         self.assertNotEqual(stream(360), stream(361))
 
 
+STORY_SPEND_SHARES = {"google": 30, "meta": 28, "tiktok": 24, "shopee": 18}
+TRUTH_TOTALS = ("impressions", "clicks", "spend_minor", "sessions", "orders")
+
+
+class StoryChannelPersonaTests(unittest.TestCase):
+    """Spend follows platform budgets; each platform has its own funnel persona."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.config = resolve_config("story-demo", 360, Path(tmp), days=30)
+        _, cls.records = _generate_window(cls.config)
+        totals: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        campaign_platform: dict[str, str] = {}
+        for r in cls.records:
+            if r.dataset != "ground_truth":
+                continue
+            campaign_platform[str(r.payload["campaign_id"])] = str(
+                r.payload["platform"]
+            )
+            platform_totals = totals[str(r.payload["platform"])]
+            for key in TRUTH_TOTALS:
+                platform_totals[key] += int(r.payload[key])
+        cls.totals = totals
+
+        # Funnel stages reached per session, keyed by the session's own platform.
+        session_platform: dict[str, str] = {}
+        stages: dict[str, set[str]] = defaultdict(set)
+        for r in cls.records:
+            if r.dataset != "web_events":
+                continue
+            session_id = str(r.payload["session_id"])
+            if r.payload["event_name"] == "page_view":
+                session_platform.setdefault(
+                    session_id, campaign_platform[str(r.payload["campaign_id"])]
+                )
+            stages[session_id].add(str(r.payload["event_name"]))
+        funnel: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        for session_id, platform in session_platform.items():
+            for stage in stages[session_id]:
+                funnel[platform][stage] += 1
+        cls.funnel = funnel
+
+    def _rate(self, platform: str, numerator: str, denominator: str) -> float:
+        totals = self.totals[platform]
+        return totals[numerator] / totals[denominator]
+
+    def test_spend_follows_platform_shares(self) -> None:
+        spend = {p: t["spend_minor"] for p, t in self.totals.items()}
+        self.assertEqual(set(STORY_SPEND_SHARES), set(spend))
+        total = sum(spend.values())
+        for platform, share in STORY_SPEND_SHARES.items():
+            with self.subTest(platform):
+                self.assertAlmostEqual(
+                    100 * spend[platform] / total, share, delta=3
+                )
+
+    def test_tiktok_buys_cheap_clicks_that_convert_less(self) -> None:
+        self.assertGreater(
+            self._rate("tiktok", "clicks", "impressions"),
+            self._rate("google", "clicks", "impressions"),
+        )
+        self.assertLess(
+            self._rate("tiktok", "orders", "sessions"),
+            self._rate("google", "orders", "sessions"),
+        )
+        self.assertLess(
+            self._rate("tiktok", "spend_minor", "impressions"),
+            self._rate("google", "spend_minor", "impressions"),
+        )
+
+    def test_shopee_converts_best(self) -> None:
+        rates = {p: self._rate(p, "orders", "sessions") for p in STORY_SPEND_SHARES}
+        self.assertEqual("shopee", max(rates, key=rates.__getitem__), rates)
+
+    def test_late_funnel_conditional_rates_are_capped(self) -> None:
+        for platform in STORY_SPEND_SHARES:
+            stages = self.funnel[platform]
+            with self.subTest(platform):
+                self.assertGreater(stages["add_to_cart"], 0)
+                self.assertGreater(stages["begin_checkout"], 0)
+                self.assertLessEqual(
+                    stages["begin_checkout"] / stages["add_to_cart"], 0.9
+                )
+                self.assertLessEqual(
+                    stages["purchase"] / stages["begin_checkout"], 0.9
+                )
+
+    def test_helpers_follow_personas(self) -> None:
+        from marketpulse_mock.journeys import _click_threshold, _funnel_steps
+
+        masters = generate_master_data(self.config)
+        by_key = {(c.platform, c.objective): c for c in masters.campaigns}
+        # Traffic's base cut-off is 90 per 1,000; CTR personas 0.8 and 1.6.
+        self.assertEqual(72, _click_threshold(self.config, by_key["google", "traffic"]))
+        self.assertEqual(
+            144, _click_threshold(self.config, by_key["tiktok", "traffic"])
+        )
+        campaign = masters.campaigns[0]
+        # View and cart cut-offs stay at 850 and 400 whatever the strength.
+        self.assertEqual(
+            (True, True, True, True), _funnel_steps(self.config, campaign, 0, 1.0)
+        )
+        self.assertEqual(
+            (True, False, False, False),
+            _funnel_steps(self.config, campaign, 849, 4.0),
+        )
+        self.assertEqual(
+            (True, True, False, False),
+            _funnel_steps(self.config, campaign, 399, 0.01),
+        )
+        # m = 1 reproduces the legacy 250 / 120 cut-offs.
+        self.assertEqual(
+            (True, True, True, False),
+            _funnel_steps(self.config, campaign, 249, 1.0),
+        )
+        self.assertEqual(
+            (True, True, False, False),
+            _funnel_steps(self.config, campaign, 250, 1.0),
+        )
+        self.assertTrue(_funnel_steps(self.config, campaign, 119, 1.0)[3])
+        self.assertFalse(_funnel_steps(self.config, campaign, 120, 1.0)[3])
+        # Both conditional rates cap at 0.9: 400 * 0.9 = 360, 360 * 0.9 = 324.
+        self.assertTrue(_funnel_steps(self.config, campaign, 359, 100.0)[2])
+        self.assertFalse(_funnel_steps(self.config, campaign, 360, 100.0)[2])
+        self.assertTrue(_funnel_steps(self.config, campaign, 323, 100.0)[3])
+        self.assertFalse(_funnel_steps(self.config, campaign, 324, 100.0)[3])
+
+
+class FlatChannelHelperTests(unittest.TestCase):
+    """The legacy ``flat`` scenario keeps round-robin, uniform-cost behaviour."""
+
+    def test_flat_helpers_match_legacy_behaviour(self) -> None:
+        from marketpulse_mock.journeys import (
+            _click_threshold,
+            _funnel_steps,
+            _impression_cost,
+            _pick_campaign,
+        )
+        from marketpulse_mock.ids import stable_int
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config = resolve_config("fixture", 360, Path(tmp))
+        masters = generate_master_data(config)
+        campaigns = masters.campaigns
+        for ordinal in range(3 * len(campaigns)):
+            campaign = _pick_campaign(config, masters, 1, ordinal)
+            self.assertIs(campaigns[ordinal % len(campaigns)], campaign)
+            self.assertEqual(
+                100 + stable_int(360, "impression-cost", 1, ordinal, modulo=901),
+                _impression_cost(config, campaign, 1, ordinal),
+            )
+        legacy = {"awareness": 45, "traffic": 90, "conversions": 70}
+        for campaign in campaigns:
+            self.assertEqual(
+                legacy[campaign.objective], _click_threshold(config, campaign)
+            )
+        for score in range(1_000):
+            self.assertEqual(
+                (score < 850, score < 400, score < 250, score < 120),
+                _funnel_steps(config, campaigns[0], score, 1.0),
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

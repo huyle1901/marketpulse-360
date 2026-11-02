@@ -147,6 +147,21 @@ class StoryCampaignTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "objective_spend_weight"):
             Scenario("x", objective_spend_weight={"traffic": -1.0})
 
+    def test_scenario_requires_every_platform_in_weights_and_personas(self) -> None:
+        platforms = ("google", "meta")
+        with self.assertRaisesRegex(ValueError, "platform_spend_share.*meta"):
+            Scenario("x", platforms=platforms, platform_spend_share={"google": 5})
+        with self.assertRaisesRegex(ValueError, "personas.*meta"):
+            Scenario(
+                "x", platforms=platforms, personas={"google": (1.0, 1.0, 1.0)}
+            )
+        Scenario(
+            "x",
+            platforms=platforms,
+            platform_spend_share={"google": 5, "meta": 5},
+            personas={"google": (1.0, 1.0, 1.0), "meta": (1.0, 1.0, 1.0)},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
