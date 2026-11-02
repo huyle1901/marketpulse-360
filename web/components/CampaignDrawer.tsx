@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useRef,useState,type ReactNode} from 'react';
-import {exact,formatMoney} from '../lib/format';
+import {channelName,exact,formatMoney} from '../lib/format';
 import type {Dashboard,Metric} from '../app/types';
 
 const focusable='a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex="-1"])';
@@ -42,7 +42,7 @@ export default function CampaignDrawer({row,query,identity,onClose,children}:{ro
  const name=row.campaign_name||row.campaign_id;
  return <div className="drawer-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose();}}>
   <div ref={panel} className="drawer" role="dialog" aria-modal="true" aria-labelledby="campaign-drawer-title">
-   <header className="drawer-header"><div><h2 id="campaign-drawer-title">{name}</h2><p className="source">{row.platform||'Unmapped'} · {row.objective} · {row.currency} · {row.configured_market||'Market unknown'}</p></div><button data-autofocus className="secondary" aria-label="Close campaign details" onClick={onClose}>Close</button></header>
+   <header className="drawer-header"><div><h2 id="campaign-drawer-title">{name}</h2><p className="source">{row.platform?channelName(row.platform):'Unmapped'} · {row.objective} · {row.currency} · {row.configured_market||'Market unknown'}</p></div><button data-autofocus className="secondary" aria-label="Close campaign details" onClick={onClose}>Close</button></header>
    <dl className="drawer-kpis"><div><dt>Net revenue</dt><dd>{formatMoney(row.net_revenue_minor,row.currency)}</dd></div><div><dt>Ad spend</dt><dd>{formatMoney(row.spend_minor,row.currency)}</dd></div><div><dt>Orders</dt><dd>{exact(row.orders)}</dd></div></dl>
    <section aria-label="Daily results"><h3>Daily results</h3><CampaignDaily query={query} row={row} identity={identity}/></section>
    {children}

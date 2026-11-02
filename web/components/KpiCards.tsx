@@ -4,6 +4,9 @@ import {compactMoney,exact,formatMoney} from '../lib/format';
 import {aggregate,defaultGranularity} from '../lib/series';
 import {multiple,percentChange,perUnit,type Totals} from '../lib/metrics';
 import type {Dashboard} from '../app/types';
+import {CHANNELS} from '../lib/channels';
+
+const names=CHANNELS.map(c=>c.label),channelList=names.length>1?names.slice(0,-1).join(', ')+' and '+names[names.length-1]:names.join('');
 
 type Kpi={name:string;value:string;exactValue?:string;hint:string;change:string|null|undefined;higherIsBetter:boolean|null;series:(string|null)[]};
 
@@ -36,7 +39,7 @@ export default function KpiCards({report}:{report:Dashboard}){
   const money=(v:string|null)=>v==null?'Unavailable':formatMoney(v,row.currency),short=(v:string|null)=>v==null?'Unavailable':compactMoney(v,row.currency);
   const kpis:Kpi[]=[
    {name:'Net revenue',value:short(t.net_revenue_minor),exactValue:money(t.net_revenue_minor),hint:'After refunds',change:percentChange(t.net_revenue_minor,prior?.net_revenue_minor),higherIsBetter:true,series:days.map(d=>d.net_revenue_minor)},
-   {name:'Ad spend',value:short(t.spend_minor),exactValue:money(t.spend_minor),hint:'Google, Meta and TikTok',change:percentChange(t.spend_minor,prior?.spend_minor),higherIsBetter:null,series:days.map(d=>d.spend_minor)},
+   {name:'Ad spend',value:short(t.spend_minor),exactValue:money(t.spend_minor),hint:channelList,change:percentChange(t.spend_minor,prior?.spend_minor),higherIsBetter:null,series:days.map(d=>d.spend_minor)},
    {name:'Net ROAS',value:multiple(t.net_revenue_minor,t.spend_minor)??'Unavailable',hint:'Net revenue per unit of ad spend',change:undefined,higherIsBetter:true,series:[]},
    {name:'Orders',value:exact(t.orders),hint:'Original purchases',change:percentChange(t.orders,prior?.orders),higherIsBetter:true,series:days.map(d=>d.orders??null)},
    {name:'Avg. order value',value:short(perUnit(t.gross_revenue_minor,t.orders)),exactValue:money(perUnit(t.gross_revenue_minor,t.orders)),hint:'Gross revenue per order',change:percentChange(perUnit(t.gross_revenue_minor,t.orders),perUnit(prior?.gross_revenue_minor,prior?.orders)),higherIsBetter:true,series:[]},

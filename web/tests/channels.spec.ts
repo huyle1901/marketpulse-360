@@ -72,3 +72,15 @@ test('overview platform filter and analysis channel select offer Shopee',async({
  const fill=bars.getByRole('listitem').filter({hasText:'Shopee'}).locator('div[style*="width"]');
  expect(await fill.evaluate(b=>getComputedStyle(b).backgroundColor)).toBe(await token(page,'shopee'));
 });
+
+test('the ad spend hint names every registered channel',async({page})=>{
+ await setup(page,'light');await page.goto('/');
+ await expect(page.getByRole('article',{name:'Ad spend'})).toHaveAttribute('title','Google, Meta, TikTok and Shopee');
+});
+
+test('the analysis breadcrumb shows the channel label, not the raw key',async({page})=>{
+ await setup(page,'light');await page.goto('/analysis?platform=shopee');
+ const crumb=page.locator('.breadcrumbs span');
+ await expect(crumb).toContainText('Shopee →');
+ await expect(crumb).not.toContainText('shopee');
+});
