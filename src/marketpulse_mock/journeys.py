@@ -8,7 +8,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import Iterator
 
 from .config import GenerationConfig
-from .customer_picker import CustomerPicker
+from .customer_picker import CustomerPicker, _is_identified
 from .ids import stable_id, stable_int
 from .models import Campaign, Customer, MasterData, Product
 
@@ -190,8 +190,8 @@ def iter_day_records(
         session_id = stable_id(
             config.seed, f"session-{day_index}", impression_ordinal
         )
-        anonymous_id = stable_id(
-            config.seed, f"anonymous-{day_index}", impression_ordinal
+        anonymous_id = _anonymous_id(
+            config, masters, day_index, impression_ordinal
         )
         click_id = _click_id(
             config.seed, campaign.platform, day_index, impression_ordinal
@@ -869,6 +869,85 @@ def _customer_picker(
         config.start_date + timedelta(days=day_index),
         session_ordinals=session_ordinals,
     )
+
+
+MAX_RETURNING_CANDIDATES = 8
+
+
+def _fresh_anonymous_id(
+    config: GenerationConfig, day_index: int, impression_ordinal: int
+) -> str:
+    return stable_id(config.seed, f"anonymous-{day_index}", impression_ordinal)
+
+
+def _is_fresh_anonymous_session(
+    config: GenerationConfig,
+    masters: MasterData,
+    day_index: int,
+    impression_ordinal: int,
+) -> bool:
+    """Return whether an impression became a clicked, unidentified session."""
+
+    return _is_clicked(
+        config,
+        _impression_campaign(masters, impression_ordinal),
+        day_index,
+        impression_ordinal,
+    ) and not _is_identified(config, day_index, impression_ordinal)
+
+
+def _anonymous_id(
+    config: GenerationConfig,
+    masters: MasterData,
+    day_index: int,
+    impression_ordinal: int,
+) -> str:
+    """Return a fresh device id, or reuse one first seen in the return window."""
+
+    scenario = config.scenario
+    if day_index > 0 and scenario.returning_window_days > 0:
+        share_per_mille = round(scenario.returning_device_share * 1_000)
+        returns = (
+            stable_int(
+                config.seed,
+                "returning-device",
+                day_index,
+                impression_ordinal,
+                modulo=1_000,
+            )
+            < share_per_mille
+        )
+        if returns:
+            for attempt in range(MAX_RETURNING_CANDIDATES):
+                offset = stable_int(
+                    config.seed,
+                    "returning-day",
+                    day_index,
+                    impression_ordinal,
+                    attempt,
+                    modulo=min(scenario.returning_window_days, day_index),
+                )
+                earlier_day = day_index - 1 - offset
+                impressions = config.profile.impressions_per_day
+                start = stable_int(
+                    config.seed,
+                    "returning-ordinal",
+                    day_index,
+                    impression_ordinal,
+                    attempt,
+                    modulo=impressions,
+                )
+                # Anonymous sessions are sparse among impressions, so scan
+                # forward (wrapping) from a hashed start to the next one.
+                for step in range(impressions):
+                    earlier_ordinal = (start + step) % impressions
+                    if _is_fresh_anonymous_session(
+                        config, masters, earlier_day, earlier_ordinal
+                    ):
+                        return _fresh_anonymous_id(
+                            config, earlier_day, earlier_ordinal
+                        )
+    return _fresh_anonymous_id(config, day_index, impression_ordinal)
 
 
 def _impression_campaign(masters: MasterData, impression_ordinal: int) -> Campaign:

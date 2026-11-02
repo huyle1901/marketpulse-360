@@ -263,5 +263,54 @@ class JoinOverflowTests(unittest.TestCase):
         self.assertTrue(report.valid, report.errors[:5])
 
 
+class ReturningDeviceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.config = resolve_config("story-demo", 360, Path(tmp), days=30)
+        _, cls.records = _generate_window(cls.config)
+
+    def _anonymous_views(self) -> list[tuple[date, str]]:
+        return [
+            (r.event_time.date(), str(r.payload["anonymous_id"]))
+            for r in _page_views(self.records)
+            if _customer_id(r) is None and r.payload["anonymous_id"] is not None
+        ]
+
+    def test_a_fifth_of_anonymous_sessions_return(self) -> None:
+        first_seen: dict[str, date] = {}
+        returning = 0
+        views = self._anonymous_views()
+        for day, anonymous_id in views:
+            if anonymous_id in first_seen and first_seen[anonymous_id] < day:
+                returning += 1
+            first_seen.setdefault(anonymous_id, day)
+        self.assertGreater(len(views), 0)
+        self.assertGreaterEqual(returning / len(views), 0.20)
+
+    def test_day_zero_never_returns(self) -> None:
+        day_zero = self.config.start_date
+        ids_by_day: dict[date, list[str]] = defaultdict(list)
+        for day, anonymous_id in self._anonymous_views():
+            ids_by_day[day].append(anonymous_id)
+        self.assertGreater(len(ids_by_day[day_zero]), 0)
+        self.assertEqual(
+            len(ids_by_day[day_zero]), len(set(ids_by_day[day_zero]))
+        )
+
+    def test_determinism_with_returning_devices(self) -> None:
+        def stream(seed: int) -> list[tuple[str, str, str]]:
+            with tempfile.TemporaryDirectory() as tmp:
+                config = resolve_config("story-demo", seed, Path(tmp), days=30)
+            _, records = _generate_window(config)
+            return [
+                (r.dataset, r.event_time.isoformat(), str(r.payload))
+                for r in records
+            ]
+
+        self.assertEqual(stream(360), stream(360))
+        self.assertNotEqual(stream(360), stream(361))
+
+
 if __name__ == "__main__":
     unittest.main()
