@@ -163,7 +163,8 @@ class StoryJoinAndTenureTests(unittest.TestCase):
             (_customer_id(r), r.event_time.date()) for r in _page_views(self.records)
         }
         joiners = self._joined_in_window()
-        self.assertGreater(len(joiners), 1000)
+        # The first 30 days of the story hold ~2 joiners a day.
+        self.assertGreater(len(joiners), 30)
         missing = [
             c.customer_id
             for c in joiners

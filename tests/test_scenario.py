@@ -36,6 +36,11 @@ class ScenarioTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             config = resolve_config("story-demo", 360, Path(tmp), days=30)
             self.assertEqual(config.profile.days, 30)
+            self.assertEqual(config.profile.story_days, 638)
+            self.assertEqual(config.profile.full_days, 638)
+            for good in (1, 638):
+                window = resolve_config("story-demo", 360, Path(tmp), days=good)
+                self.assertEqual(window.profile.days, good)
             for bad in (0, 639):
                 with self.assertRaises(ValueError):
                     resolve_config("story-demo", 360, Path(tmp), days=bad)

@@ -104,7 +104,8 @@ def _customer_created_at(config: GenerationConfig, ordinal: int) -> datetime:
         t = fraction
     else:
         t = (-1 + math.sqrt(1 + 2 * slope * fraction * (1 + slope / 2))) / slope
-    day = min(int(t * config.profile.days), config.profile.days - 1)
+    story_days = config.profile.full_days
+    day = min(int(t * story_days), story_days - 1)
     return anchor + timedelta(days=day)
 
 
@@ -138,7 +139,9 @@ def _generate_products(config: GenerationConfig) -> tuple[Product, ...]:
 
 def _generate_campaigns(config: GenerationConfig) -> tuple[Campaign, ...]:
     campaigns: list[Campaign] = []
-    generation_end = config.start_date + timedelta(days=config.profile.days - 1)
+    generation_end = config.start_date + timedelta(
+        days=config.profile.full_days - 1
+    )
     platform_prefix = {"google": "G", "meta": "M", "tiktok": "T"}
     for ordinal in range(config.profile.campaigns):
         platform = PLATFORMS[ordinal % len(PLATFORMS)]

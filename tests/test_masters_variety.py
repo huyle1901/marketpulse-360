@@ -50,6 +50,19 @@ class StoryCustomerTests(unittest.TestCase):
         self.assertGreater(first, 0)
         self.assertGreaterEqual(last, 1.6 * first)
 
+    def test_a_shorter_window_is_the_start_of_the_full_story(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            window = resolve_config("story-demo", 360, Path(tmp), days=30)
+        customers = generate_master_data(window).customers
+        self.assertEqual(
+            [c.created_at for c in self.customers],
+            [c.created_at for c in customers],
+        )
+        start = window.start_date
+        joins = sum(0 <= (c.created_at.date() - start).days < 30 for c in customers)
+        # 1,800 joiners over 638 days, starting at ~1.9 a day.
+        self.assertTrue(30 <= joins <= 90, joins)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -11,7 +11,13 @@ from typing import Mapping
 
 @dataclass(frozen=True, slots=True)
 class ScaleProfile:
-    """Capacity settings for a named generator profile."""
+    """Capacity settings for a named generator profile.
+
+    ``days`` is the generated window. ``story_days`` is the length of the full
+    story that window was cut from (None: the window is the whole story);
+    story-wide distributions such as customer join dates and campaign flights
+    follow ``story_days`` so a shorter window is the start of the same world.
+    """
 
     name: str
     days: int
@@ -21,16 +27,25 @@ class ScaleProfile:
     impressions_per_day: int
     rows_per_file: int
     scenario: str = "flat"
+    story_days: int | None = None
 
     def __post_init__(self) -> None:
         for field in fields(self):
-            if field.name in ("name", "scenario"):
+            if field.name in ("name", "scenario", "story_days"):
                 continue
             value = getattr(self, field.name)
             if value <= 0:
                 raise ValueError(f"{field.name} must be positive")
         if self.campaigns % 3:
             raise ValueError("campaigns must be divisible by 3")
+        if self.story_days is not None and self.story_days < self.days:
+            raise ValueError("story_days must be at least days")
+
+    @property
+    def full_days(self) -> int:
+        """Length of the full story: ``story_days``, or ``days`` when unset."""
+
+        return self.days if self.story_days is None else self.story_days
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,7 +173,14 @@ def resolve_config(
     start_date: date | None = None,
     days: int | None = None,
 ) -> GenerationConfig:
-    """Resolve a named profile plus safe CLI overrides."""
+    """Resolve a named profile plus safe CLI overrides.
+
+    ``days`` (1..profile.days) generates only the first ``days`` days of the
+    profile's story: customer join dates and campaign flights still come from
+    the full-length profile (``ScaleProfile.story_days``), so a 30-day
+    story-demo window holds the real story's first 30 days of joiners rather
+    than the whole join history squeezed into 30 days.
+    """
 
     try:
         profile = PROFILES[profile_name]
@@ -171,7 +193,7 @@ def resolve_config(
     if days is not None:
         if not 1 <= days <= profile.days:
             raise ValueError(f"days must be between 1 and {profile.days}")
-        profile = replace(profile, days=days)
+        profile = replace(profile, days=days, story_days=profile.full_days)
 
     if profile_name == "story-demo" and start_date not in (None, date(2025, 1, 1)):
         raise ValueError("story-demo uses one fixed UTC world starting 2025-01-01")
