@@ -34,9 +34,9 @@ export function Donut({name,slices,total,caption,size=168}:{name:string;slices:S
 }
 
 /** Ranked horizontal bars for one measure; bars never encode negatives, which are shown as text. */
-export function BarList({name,rows,color='var(--primary)'}:{name:string;rows:{key:string;label:ReactNode;value:number;display:ReactNode;sub?:ReactNode;color?:string}[];color?:string}){
+export function BarList({name,rows,color='var(--primary)',onActive}:{name:string;rows:{key:string;label:ReactNode;value:number;display:ReactNode;sub?:ReactNode;color?:string}[];color?:string;onActive?:(key:string|null)=>void}){
  const top=Math.max(1,...rows.map(r=>r.value));
- return <ol role="list" aria-label={name} className="space-y-3">{rows.map(row=><li key={row.key} className="min-w-0">
+ return <ol role="list" aria-label={name} className="space-y-3">{rows.map(row=><li key={row.key} className="min-w-0" {...(onActive?{tabIndex:0,onMouseEnter:()=>onActive(row.key),onMouseLeave:()=>onActive(null),onFocus:()=>onActive(row.key),onBlur:()=>onActive(null)}:{})}>
   <div className="flex items-baseline justify-between gap-3 text-sm"><span className="min-w-0 truncate">{row.label}</span><span className="figure shrink-0 text-sm text-foreground">{row.display}</span></div>
   <div className="mt-1.5 h-2 rounded-full bg-muted"><div className="h-full rounded-full" style={{width:Math.max(0,row.value)/top*100+'%',background:row.color??color}}/></div>
   {row.sub&&<div className="mt-1 text-xs text-muted-foreground">{row.sub}</div>}</li>)}</ol>;
