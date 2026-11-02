@@ -42,6 +42,12 @@ class StoryCustomerTests(unittest.TestCase):
                 first += 1
             elif days - 60 <= offset < days:
                 last += 1
+        in_window = sum(
+            0 <= (c.created_at.date() - start).days < days
+            for c in self.customers
+        )
+        self.assertTrue(0.55 <= in_window / len(self.customers) <= 0.65)
+        self.assertGreater(first, 0)
         self.assertGreaterEqual(last, 1.6 * first)
 
 
