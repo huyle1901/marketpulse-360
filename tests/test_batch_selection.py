@@ -10,7 +10,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 from marketpulse_batch.contracts import BatchSelection, parse_required_platforms
-from marketpulse_batch.selection import select_daily_sources, select_range_sources, select_source_datasets, source_day
+from marketpulse_batch.selection import _row_matches_day, select_daily_sources, select_range_sources, select_source_datasets, source_day
 from marketpulse_lakehouse.source_files import (
     SourceArchivePlan, build_source_archive_plan, normalize_source_file,
 )
@@ -76,6 +76,15 @@ class BatchSelectionTests(unittest.TestCase):
             # A three-platform stack ignores Shopee files and keeps its requirement.
             three = select_range_sources(partial, *window, THREE)
             self.assertEqual(12, len(three.source_files))
+
+    def test_row_day_requires_the_canonical_string(self) -> None:
+        day = date(2026, 1, 1)
+        self.assertTrue(_row_matches_day("google_ads", {"segments_date": "2026-01-01"}, "segments_date", day))
+        self.assertFalse(_row_matches_day("google_ads", {"segments_date": "20260101"}, "segments_date", day))
+        self.assertFalse(_row_matches_day("google_ads", {"segments_date": "2026-W01-4"}, "segments_date", day))
+        sday = date(2026, 9, 5)
+        self.assertTrue(_row_matches_day("shopee_ads", {"date": "05/09/2026"}, "date", sday))
+        self.assertFalse(_row_matches_day("shopee_ads", {"date": "5/9/2026"}, "date", sday))
 
     def test_shopee_day_first_date_selects_that_day(self) -> None:
         self.assertEqual(date(2026, 2, 1), source_day("shopee_ads", "01/02/2026"))

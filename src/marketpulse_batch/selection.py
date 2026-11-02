@@ -29,10 +29,8 @@ def _row_matches_day(dataset: str, row: dict, field: str, day: date) -> bool:
     value = row.get(field)
     if not isinstance(value, str):
         return False
-    try:
-        return source_day(dataset, value) == day
-    except ValueError:
-        return False
+    expected = f"{day:%d/%m/%Y}" if dataset == "shopee_ads" else day.isoformat()
+    return value == expected
 
 
 def select_range_sources(plan: SourceArchivePlan, from_date: date, to_date: date,
