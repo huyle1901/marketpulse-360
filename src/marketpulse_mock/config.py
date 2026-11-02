@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from datetime import date
 from pathlib import Path
 from types import MappingProxyType
@@ -11,7 +11,13 @@ from typing import Mapping
 
 @dataclass(frozen=True, slots=True)
 class ScaleProfile:
-    """Capacity settings for a named generator profile."""
+    """Capacity settings for a named generator profile.
+
+    ``days`` is the generated window. ``story_days`` is the length of the full
+    story that window was cut from (None: the window is the whole story);
+    story-wide distributions such as customer join dates and campaign flights
+    follow ``story_days`` so a shorter window is the start of the same world.
+    """
 
     name: str
     days: int
@@ -20,16 +26,115 @@ class ScaleProfile:
     products: int
     impressions_per_day: int
     rows_per_file: int
+    scenario: str = "flat"
+    story_days: int | None = None
 
     def __post_init__(self) -> None:
         for field in fields(self):
-            if field.name == "name":
+            if field.name in ("name", "scenario", "story_days"):
                 continue
             value = getattr(self, field.name)
             if value <= 0:
                 raise ValueError(f"{field.name} must be positive")
         if self.campaigns % 3:
             raise ValueError("campaigns must be divisible by 3")
+        if self.story_days is not None and self.story_days < self.days:
+            raise ValueError("story_days must be at least days")
+        if self.scenario not in SCENARIOS:
+            choices = ", ".join(SCENARIOS)
+            raise ValueError(
+                f"unknown scenario {self.scenario!r}; choose one of: {choices}"
+            )
+
+    @property
+    def full_days(self) -> int:
+        """Length of the full story: ``story_days``, or ``days`` when unset."""
+
+        return self.days if self.story_days is None else self.story_days
+
+
+@dataclass(frozen=True, slots=True)
+class Scenario:
+    """World-shaping settings that make a profile's data varied.
+
+    ``flat`` keeps the legacy uniform behaviour; its optional fields are
+    None/0 and its ``join_ramp`` is the neutral 1.0.
+    """
+
+    name: str
+    """Registry key, e.g. ``flat`` or ``vietnam-retail``."""
+
+    cities: tuple[tuple[str, str, int], ...] | None = None
+    """``(country, city, weight)`` entries for a weighted customer city draw;
+    None keeps the legacy uniform five cities. Weights must be positive."""
+
+    customers_before_start_share: float | None = None
+    """Share (0-1) of customers created in the 730 days before the start;
+    the rest join during the story. None keeps the legacy 30-730 day ages."""
+
+    join_ramp: float = 1.0
+    """Joins per day at the end of the story relative to the start (>= 0);
+    1.0 is a flat rate, 2.0 doubles it."""
+
+    tenure_months: float | None = None
+    """Months after which a customer's session weight halves,
+    ``1 / (1 + months / tenure_months)``; None picks customers uniformly."""
+
+    returning_device_share: float = 0.0
+    """Share (0-1) of anonymous sessions that reuse an earlier device."""
+
+    returning_window_days: int = 0
+    """How many previous days (>= 0) a returning device is drawn from;
+    0 disables returning devices."""
+
+    def __post_init__(self) -> None:
+        if self.cities is not None:
+            if not self.cities:
+                raise ValueError("cities must not be empty when set")
+            for _country, city, weight in self.cities:
+                if weight <= 0:
+                    raise ValueError(f"city weight for {city} must be positive")
+        share = self.customers_before_start_share
+        if share is not None and not 0.0 <= share <= 1.0:
+            raise ValueError("customers_before_start_share must be between 0 and 1")
+        if self.join_ramp < 0:
+            raise ValueError("join_ramp must not be negative")
+        if self.tenure_months is not None and self.tenure_months <= 0:
+            raise ValueError("tenure_months must be positive")
+        if not 0.0 <= self.returning_device_share <= 1.0:
+            raise ValueError("returning_device_share must be between 0 and 1")
+        if self.returning_window_days < 0:
+            raise ValueError("returning_window_days must not be negative")
+
+
+SCENARIOS: Mapping[str, Scenario] = MappingProxyType(
+    {
+        "flat": Scenario("flat"),
+        "vietnam-retail": Scenario(
+            "vietnam-retail",
+            cities=(
+                ("VN", "Ho Chi Minh City", 28),
+                ("VN", "Ha Noi", 24),
+                ("VN", "Bien Hoa", 6),
+                ("VN", "Thu Dau Mot", 6),
+                ("VN", "Hai Phong", 6),
+                ("VN", "Da Nang", 6),
+                ("VN", "Can Tho", 5),
+                ("VN", "Nha Trang", 4),
+                ("VN", "Hue", 3),
+                ("VN", "Vung Tau", 3),
+                ("VN", "Quy Nhon", 3),
+                ("VN", "Buon Ma Thuot", 3),
+                ("VN", "Ha Long", 3),
+            ),
+            customers_before_start_share=0.4,
+            join_ramp=2.0,
+            tenure_months=6.0,
+            returning_device_share=0.3,
+            returning_window_days=60,
+        ),
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,7 +173,16 @@ PROFILES: Mapping[str, ScaleProfile] = MappingProxyType(
         "benchmark": ScaleProfile(
             "benchmark", 30, 250_000, 60, 5_000, 1_000_000, 250_000
         ),
-        "story-demo": ScaleProfile("story-demo", 638, 1_000, 12, 100, 2_000, 50_000),
+        "story-demo": ScaleProfile(
+            "story-demo",
+            638,
+            3_000,
+            12,
+            100,
+            4_000,
+            50_000,
+            "vietnam-retail",
+        ),
     }
 )
 
@@ -88,6 +202,10 @@ class GenerationConfig:
         if self.rows_per_file <= 0:
             raise ValueError("rows_per_file must be positive")
 
+    @property
+    def scenario(self) -> Scenario:
+        return SCENARIOS[self.profile.scenario]
+
 
 def resolve_config(
     profile_name: str,
@@ -95,8 +213,16 @@ def resolve_config(
     output_dir: Path,
     rows_per_file: int | None = None,
     start_date: date | None = None,
+    days: int | None = None,
 ) -> GenerationConfig:
-    """Resolve a named profile plus safe CLI overrides."""
+    """Resolve a named profile plus safe CLI overrides.
+
+    ``days`` (1..profile.days) generates only the first ``days`` days of the
+    profile's story: customer join dates and campaign flights still come from
+    the full-length profile (``ScaleProfile.story_days``), so a 30-day
+    story-demo window holds the real story's first 30 days of joiners rather
+    than the whole join history squeezed into 30 days.
+    """
 
     try:
         profile = PROFILES[profile_name]
@@ -105,6 +231,11 @@ def resolve_config(
         raise ValueError(
             f"unknown profile {profile_name!r}; choose one of: {choices}"
         ) from error
+
+    if days is not None:
+        if not 1 <= days <= profile.days:
+            raise ValueError(f"days must be between 1 and {profile.days}")
+        profile = replace(profile, days=days, story_days=profile.full_days)
 
     if profile_name == "story-demo" and start_date not in (None, date(2025, 1, 1)):
         raise ValueError("story-demo uses one fixed UTC world starting 2025-01-01")

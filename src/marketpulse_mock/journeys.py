@@ -8,6 +8,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import Iterator
 
 from .config import GenerationConfig
+from .customer_picker import CustomerPicker, is_identified
 from .ids import stable_id, stable_int
 from .models import Campaign, Customer, MasterData, Product
 
@@ -158,10 +159,10 @@ def iter_day_records(
         yield from with_anomalies(record)
 
     impression_count = config.profile.impressions_per_day
-    for impression_ordinal in range(impression_count):
-        campaign = masters.campaigns[
-            impression_ordinal % len(masters.campaigns)
-        ]
+    picker = _customer_picker(config, masters, day_index)
+
+    def record_impression(impression_ordinal: int) -> Campaign:
+        campaign = _impression_campaign(masters, impression_ordinal)
         aggregate = aggregates[campaign.campaign_id]
         aggregate.impressions += 1
         aggregate.spend_minor += 100 + stable_int(
@@ -171,31 +172,31 @@ def iter_day_records(
             impression_ordinal,
             modulo=901,
         )
+        return campaign
 
-        click_score = stable_int(
-            config.seed, "click", day_index, impression_ordinal, modulo=1_000
-        )
-        if click_score >= _click_threshold(campaign):
-            continue
+    def emit_session(
+        impression_ordinal: int,
+        campaign: Campaign,
+        event_time: datetime,
+    ) -> Iterator[SourceRecord]:
+        """Generate one paid-click session and its funnel, orders and cases."""
 
+        nonlocal click_index, order_index
+        aggregate = aggregates[campaign.campaign_id]
         aggregate.clicks += 1
         aggregate.sessions += 1
-        event_time = day_start + timedelta(
-            seconds=(impression_ordinal * 86_000) // max(1, impression_count)
-        )
+        event_ordinal = _event_ordinal(config, day_index, impression_ordinal)
         yield from flush_until(event_time)
         session_id = stable_id(
             config.seed, f"session-{day_index}", impression_ordinal
         )
-        anonymous_id = stable_id(
-            config.seed, f"anonymous-{day_index}", impression_ordinal
+        anonymous_id = _anonymous_id(
+            config, masters, day_index, impression_ordinal
         )
         click_id = _click_id(
             config.seed, campaign.platform, day_index, impression_ordinal
         )
-        customer = _select_customer(
-            config, masters.customers, day_index, impression_ordinal
-        )
+        customer = picker.pick(day_index, impression_ordinal)
         product = _select_product(
             config, masters.products, day_index, impression_ordinal
         )
@@ -213,7 +214,7 @@ def iter_day_records(
 
         page_view = _event_record(
             config=config,
-            ordinal=(day_index * impression_count + impression_ordinal) * 10,
+            ordinal=event_ordinal,
             dataset="web_events",
             event_name="page_view",
             event_time=event_time,
@@ -240,7 +241,7 @@ def iter_day_records(
         if page_view.payload["payload"]["is_bot"]:
             bot_view = _event_record(
                 config=config,
-                ordinal=(day_index * impression_count + impression_ordinal) * 10 + 1,
+                ordinal=event_ordinal + 1,
                 dataset="web_events",
                 event_name="page_view",
                 event_time=event_time + timedelta(milliseconds=100),
@@ -266,7 +267,7 @@ def iter_day_records(
         if funnel_score < 850:
             view_item = _event_record(
                 config=config,
-                ordinal=(day_index * impression_count + impression_ordinal) * 10 + 2,
+                ordinal=event_ordinal + 2,
                 dataset="web_events",
                 event_name="view_item",
                 event_time=event_time + timedelta(seconds=2),
@@ -283,7 +284,7 @@ def iter_day_records(
         if funnel_score < 400:
             add_to_cart = _event_record(
                 config=config,
-                ordinal=(day_index * impression_count + impression_ordinal) * 10 + 3,
+                ordinal=event_ordinal + 3,
                 dataset="web_events",
                 event_name="add_to_cart",
                 event_time=event_time + timedelta(seconds=8),
@@ -300,7 +301,7 @@ def iter_day_records(
         if funnel_score < 250:
             checkout = _event_record(
                 config=config,
-                ordinal=(day_index * impression_count + impression_ordinal) * 10 + 4,
+                ordinal=event_ordinal + 4,
                 dataset="web_events",
                 event_name="begin_checkout",
                 event_time=event_time + timedelta(seconds=20),
@@ -320,6 +321,7 @@ def iter_day_records(
             attributed_touch = _latest_purchase_touch(
                 config=config,
                 masters=masters,
+                picker=picker,
                 day_index=day_index,
                 impression_ordinal=impression_ordinal,
                 customer=customer,
@@ -350,7 +352,7 @@ def iter_day_records(
 
             web_purchase = _event_record(
                 config=config,
-                ordinal=(day_index * impression_count + impression_ordinal) * 10 + 5,
+                ordinal=event_ordinal + 5,
                 dataset="web_events",
                 event_name="purchase",
                 event_time=purchase_time,
@@ -371,7 +373,7 @@ def iter_day_records(
 
             order_created = _event_record(
                 config=config,
-                ordinal=(day_index * impression_count + impression_ordinal) * 10 + 6,
+                ordinal=event_ordinal + 6,
                 dataset="orders",
                 event_name="order_created",
                 event_time=purchase_time + timedelta(seconds=1),
@@ -406,7 +408,7 @@ def iter_day_records(
                 attributed_aggregate.refunds_minor += amount_minor
                 refund_event = _event_record(
                     config=config,
-                    ordinal=(day_index * impression_count + impression_ordinal) * 10 + 7,
+                    ordinal=event_ordinal + 7,
                     dataset="orders",
                     event_name="order_refunded",
                     event_time=purchase_time + timedelta(seconds=2),
@@ -440,6 +442,26 @@ def iter_day_records(
                 click_id,
             )
         click_index += 1
+
+    for impression_ordinal in range(impression_count):
+        campaign = record_impression(impression_ordinal)
+        if not _is_clicked(config, campaign, day_index, impression_ordinal):
+            continue
+        event_time = day_start + timedelta(
+            seconds=(impression_ordinal * 86_000) // max(1, impression_count)
+        )
+        yield from emit_session(impression_ordinal, campaign, event_time)
+
+    # Joiners beyond the day's identified sessions still visit on their join
+    # day: forced paid sessions packed into the 300 s after the last impression.
+    overflow_count = len(picker.overflow_ordinals)
+    for position, impression_ordinal in enumerate(picker.overflow_ordinals):
+        campaign = record_impression(impression_ordinal)
+        event_time = day_start + timedelta(
+            seconds=86_000,
+            milliseconds=(position * 300_000) // overflow_count,
+        )
+        yield from emit_session(impression_ordinal, campaign, event_time)
 
     yield from flush_until(datetime.max.replace(tzinfo=timezone.utc))
 
@@ -479,9 +501,11 @@ def _iter_crm_snapshots(
 ) -> Iterator[SourceRecord]:
     email_ordinals = {
         customer.customer_id: ordinal
-        for ordinal, customer in enumerate(_email_audience(masters))
+        for ordinal, customer in _email_audience(masters, day)
     }
     for ordinal, customer in enumerate(masters.customers):
+        if customer.created_at.date() > day:
+            continue
         email_ordinal = email_ordinals.get(customer.customer_id)
         consent_marketing = customer.consent_marketing and not (
             email_ordinal is not None
@@ -511,7 +535,8 @@ def _iter_email_events(
     day_index: int,
     day_start: datetime,
 ) -> Iterator[SourceRecord]:
-    for ordinal, customer in enumerate(_email_audience(masters)):
+    day = day_start.date()
+    for ordinal, customer in _email_audience(masters, day):
         if _email_unsubscribed_before(config, ordinal, day_index):
             continue
         message_id = stable_id(config.seed, f"email-{day_index}", ordinal)
@@ -556,14 +581,25 @@ def _iter_email_events(
             )
 
 
-def _email_audience(masters: MasterData) -> tuple[Customer, ...]:
+def _email_audience(
+    masters: MasterData, day: date
+) -> tuple[tuple[int, Customer], ...]:
+    """Return ``(email_ordinal, customer)`` for members who have joined by ``day``.
+
+    Ordinals index the fixed legacy audience, so they stay stable across days.
+    """
+
     eligible = tuple(
         customer
         for customer in masters.customers
         if customer.consent_marketing
     )
     selected_count = max(1, len(eligible) // 50)
-    return eligible[:selected_count]
+    return tuple(
+        (ordinal, customer)
+        for ordinal, customer in enumerate(eligible[:selected_count])
+        if customer.created_at.date() <= day
+    )
 
 
 def _email_unsubscribed_before(
@@ -766,13 +802,18 @@ def _latest_purchase_touch(
     *,
     config: GenerationConfig,
     masters: MasterData,
+    picker: CustomerPicker,
     day_index: int,
     impression_ordinal: int,
     customer: Customer | None,
     current_touch: PaidTouch,
     purchase_time: datetime,
 ) -> PaidTouch | None:
-    """Resolve last paid click, including clicks during an overlapping journey."""
+    """Resolve last paid click, including clicks during an overlapping journey.
+
+    ``picker`` must be the one that assigned the day's sessions, so the later
+    clicks credited here belong to the customer who actually made them.
+    """
 
     if customer is None:
         return current_touch
@@ -786,22 +827,10 @@ def _latest_purchase_touch(
         )
         if candidate_time > purchase_time:
             break
-        campaign = masters.campaigns[candidate_ordinal % len(masters.campaigns)]
-        click_score = stable_int(
-            config.seed,
-            "click",
-            day_index,
-            candidate_ordinal,
-            modulo=1_000,
-        )
-        if click_score >= _click_threshold(campaign):
+        campaign = _impression_campaign(masters, candidate_ordinal)
+        if not _is_clicked(config, campaign, day_index, candidate_ordinal):
             continue
-        candidate_customer = _select_customer(
-            config,
-            masters.customers,
-            day_index,
-            candidate_ordinal,
-        )
+        candidate_customer = picker.pick(day_index, candidate_ordinal)
         if candidate_customer != customer:
             continue
         touches.append(
@@ -820,29 +849,159 @@ def _latest_purchase_touch(
     return last_paid_touch(touches, purchase_time)
 
 
-def _select_customer(
+def _customer_picker(
     config: GenerationConfig,
-    customers: tuple[Customer, ...],
+    masters: MasterData,
+    day_index: int,
+) -> CustomerPicker:
+    """Build the day's picker from the same click decisions the loop makes."""
+
+    session_ordinals = (
+        ordinal
+        for ordinal in range(config.profile.impressions_per_day)
+        if _is_clicked(
+            config, _impression_campaign(masters, ordinal), day_index, ordinal
+        )
+    )
+    return CustomerPicker.for_day(
+        config,
+        masters.customers,
+        config.start_date + timedelta(days=day_index),
+        session_ordinals=session_ordinals,
+    )
+
+
+MAX_RETURNING_CANDIDATES = 8
+
+
+def _fresh_anonymous_id(
+    config: GenerationConfig, day_index: int, impression_ordinal: int
+) -> str:
+    return stable_id(config.seed, f"anonymous-{day_index}", impression_ordinal)
+
+
+def _is_fresh_anonymous_session(
+    config: GenerationConfig,
+    masters: MasterData,
     day_index: int,
     impression_ordinal: int,
-) -> Customer | None:
-    identified = stable_int(
-        config.seed,
-        "identified",
+) -> bool:
+    """Return whether an impression became a clicked, unidentified session."""
+
+    return _is_clicked(
+        config,
+        _impression_campaign(masters, impression_ordinal),
         day_index,
         impression_ordinal,
-        modulo=100,
-    ) < 70
-    if not identified:
-        return None
-    index = stable_int(
+    ) and not is_identified(config, day_index, impression_ordinal)
+
+
+def _is_returning_session(
+    config: GenerationConfig, day_index: int, impression_ordinal: int
+) -> bool:
+    """Return whether a session reuses an earlier device instead of a fresh one.
+
+    Only anonymous sessions return: identified sessions, and overflow join-day
+    sessions (ordinal >= ``impressions_per_day``, always a joiner's), keep their
+    own fresh device so no device id is shared between customers.
+    """
+
+    scenario = config.scenario
+    if day_index == 0 or scenario.returning_window_days <= 0:
+        return False
+    if impression_ordinal >= config.profile.impressions_per_day or is_identified(
+        config, day_index, impression_ordinal
+    ):
+        return False
+    return stable_int(
         config.seed,
-        "session-customer",
+        "returning-device",
         day_index,
         impression_ordinal,
-        modulo=len(customers),
+        modulo=1_000,
+    ) < round(scenario.returning_device_share * 1_000)
+
+
+def _anonymous_id(
+    config: GenerationConfig,
+    masters: MasterData,
+    day_index: int,
+    impression_ordinal: int,
+) -> str:
+    """Return a fresh device id, or reuse one first seen in the return window."""
+
+    scenario = config.scenario
+    if _is_returning_session(config, day_index, impression_ordinal):
+        for attempt in range(MAX_RETURNING_CANDIDATES):
+            offset = stable_int(
+                config.seed,
+                "returning-day",
+                day_index,
+                impression_ordinal,
+                attempt,
+                modulo=min(scenario.returning_window_days, day_index),
+            )
+            earlier_day = day_index - 1 - offset
+            impressions = config.profile.impressions_per_day
+            start = stable_int(
+                config.seed,
+                "returning-ordinal",
+                day_index,
+                impression_ordinal,
+                attempt,
+                modulo=impressions,
+            )
+            # Anonymous sessions are sparse among impressions, so scan
+            # forward (wrapping) from a hashed start to the next one.
+            for step in range(impressions):
+                earlier_ordinal = (start + step) % impressions
+                # Only a session that kept its fresh id guarantees the
+                # device was really emitted on the earlier day.
+                if _is_fresh_anonymous_session(
+                    config, masters, earlier_day, earlier_ordinal
+                ) and not _is_returning_session(
+                    config, earlier_day, earlier_ordinal
+                ):
+                    return _fresh_anonymous_id(
+                        config, earlier_day, earlier_ordinal
+                    )
+    return _fresh_anonymous_id(config, day_index, impression_ordinal)
+
+
+def _impression_campaign(masters: MasterData, impression_ordinal: int) -> Campaign:
+    """Return the paid campaign serving an impression (round-robin allocation)."""
+
+    return masters.campaigns[impression_ordinal % len(masters.campaigns)]
+
+
+def _is_clicked(
+    config: GenerationConfig,
+    campaign: Campaign,
+    day_index: int,
+    impression_ordinal: int,
+) -> bool:
+    click_score = stable_int(
+        config.seed, "click", day_index, impression_ordinal, modulo=1_000
     )
-    return customers[index]
+    return click_score < _click_threshold(campaign)
+
+
+def _event_ordinal(
+    config: GenerationConfig,
+    day_index: int,
+    impression_ordinal: int,
+) -> int:
+    """Return the base event ordinal of a session; offsets 0-7 name its events.
+
+    Overflow join-day sessions (ordinal >= impressions_per_day) use negative
+    bases so their event ids never collide with another day's impressions.
+    """
+
+    impression_count = config.profile.impressions_per_day
+    if impression_ordinal < impression_count:
+        return (day_index * impression_count + impression_ordinal) * 10
+    overflow_position = impression_ordinal - impression_count
+    return -10 * (day_index * config.profile.customers + overflow_position + 1)
 
 
 def _select_product(
