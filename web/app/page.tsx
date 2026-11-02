@@ -5,6 +5,7 @@ import {DAY_RULE,DateRangeFields} from '../components/DateRange';
 import {useEffect,useRef,useState} from 'react';
 import CampaignOverview from '../components/CampaignOverview';
 import ChannelBreakdown from '../components/ChannelBreakdown';
+import {CHANNELS,CHANNEL_KEYS} from '../lib/channels';
 import StageReach from '../components/StageReach';
 import KpiCards from '../components/KpiCards';
 import {LivePulse} from '../components/LivePulse';
@@ -33,7 +34,7 @@ const reachQuery=(query:string,report:Dashboard)=>{const params=new URLSearchPar
 export default function CommandCenter() {
   const {canOperate}=useSession();
   const [report,setReport]=useState<Dashboard|null>(null);
-  const [filters,setFilters,replaceFilters]=useUrlState({from_date:'',to_date:'',platform:'',campaign_id:'',objective:'',market:'',q:'',sort:'name'},v=>({...v,platform:choice(v.platform,['google','meta','tiktok']),objective:choice(v.objective,['awareness','traffic','conversions']),sort:choice(v.sort,['name','net_desc','net_asc','spend_desc','orders_desc'],'name')}));
+  const [filters,setFilters,replaceFilters]=useUrlState({from_date:'',to_date:'',platform:'',campaign_id:'',objective:'',market:'',q:'',sort:'name'},v=>({...v,platform:choice(v.platform,CHANNEL_KEYS),objective:choice(v.objective,['awareness','traffic','conversions']),sort:choice(v.sort,['name','net_desc','net_asc','spend_desc','orders_desc'],'name')}));
   const [refreshError,setRefreshError]=useState('');
   const [lastSuccess,setLastSuccess]=useState('');
   const [displayedQuery,setDisplayedQuery]=useState('');
@@ -143,7 +144,7 @@ export default function CommandCenter() {
     <header className="masthead"><div><div className="brand">MARKETPULSE <span>360</span></div><h1>Marketing Command Center</h1><p>Certified campaign performance, decisions and budget scenarios</p></div><div className="status"><LivePulse/>{report&&<span id="performance" className="badge">{report.certified.freshness.historical?'Historical data':report.certified.freshness.stale?'Stale data':'Current snapshot'}</span>} <span className="dot"/> Updates every 5 seconds<br/><small>Last successful read: {lastSuccess||'Waiting'}</small></div></header>
     <section className="filters" aria-label="Campaign filters">
       <DateRangeFields from={filters.from_date} toExclusive={filters.to_date} onFrom={from_date=>setFilters({...filters,from_date})} onTo={to_date=>setFilters({...filters,to_date})}/>
-      <label>Platform<select value={filters.platform} onChange={e=>setFilters({...filters,platform:e.target.value})}><option value="">All platforms</option>{['google','meta','tiktok'].map(value=><option key={value}>{value}</option>)}</select></label>
+      <label>Platform<select value={filters.platform} onChange={e=>setFilters({...filters,platform:e.target.value})}><option value="">All platforms</option>{CHANNELS.map(c=><option key={c.key} value={c.key}>{c.label}</option>)}</select></label>
       <label>Campaign<select value={filters.campaign_id} onChange={e=>setFilters({...filters,campaign_id:e.target.value})}><option value="">All campaigns</option>{campaigns.map(row=><option key={row.campaign_id} value={row.campaign_id}>{row.name}</option>)}</select></label>
       <label>Objective<select value={filters.objective} onChange={e=>setFilters({...filters,objective:e.target.value})}><option value="">All objectives</option>{['awareness','traffic','conversions'].map(value=><option key={value}>{value}</option>)}</select></label>
       <label>Configured market<input maxLength={2} placeholder="All / e.g. VN" value={filters.market} onChange={e=>setFilters({...filters,market:e.target.value.toUpperCase()})}/></label>

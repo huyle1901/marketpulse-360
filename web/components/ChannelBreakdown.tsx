@@ -1,9 +1,8 @@
 import type {Metric} from '../app/types';
-import {compactMoney,formatMoney} from '../lib/format';
+import {channelColor} from '../lib/channels';
+import {channelName,compactMoney,formatMoney} from '../lib/format';
 import {Donut} from './charts';
 
-const labels:Record<string,string>={google:'Google',meta:'Meta',tiktok:'TikTok',unattributed:'Unattributed'};
-const colors:Record<string,string>={google:'var(--chart-1)',meta:'var(--chart-2)',tiktok:'var(--chart-3)',unattributed:'var(--chart-4)'};
 
 export default function ChannelBreakdown({rows}:{rows:Metric[]}){
   const currencies=[...new Set(rows.map(row=>row.currency))];
@@ -19,8 +18,8 @@ export default function ChannelBreakdown({rows}:{rows:Metric[]}){
       // A donut cannot draw a negative part; such channels are named below it with their exact amount.
       return <div key={currency} className="channel-currency">
         <Donut name={'Net revenue by channel · '+currency} total={compactMoney(positive.toString(),currency)} caption={'net revenue · '+currency} size={132}
-          slices={entries.map(([platform,value])=>({key:platform,label:labels[platform]||platform,value:value>0n?Number(value):0,color:colors[platform]||'var(--chart-5)',display:formatMoney(value.toString(),currency)}))}/>
-        {negative.length>0&&<p className="source">Negative net revenue, not drawn: {negative.map(([platform,value])=>`${labels[platform]||platform} ${formatMoney(value.toString(),currency)}`).join(', ')}.</p>}
+          slices={entries.map(([platform,value])=>({key:platform,label:channelName(platform),value:value>0n?Number(value):0,color:channelColor(platform),display:formatMoney(value.toString(),currency)}))}/>
+        {negative.length>0&&<p className="source">Negative net revenue, not drawn: {negative.map(([platform,value])=>`${channelName(platform)} ${formatMoney(value.toString(),currency)}`).join(', ')}.</p>}
         <p className="source">Source campaign finance · attribution credit is shown in Analysis.</p></div>;
     })}
   </section>;

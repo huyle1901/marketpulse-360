@@ -8,13 +8,12 @@ import {StatStrip} from '../../components/StatStrip';
 import {BarList,ExactValues,Legend} from '../../components/charts';
 import {CampaignScatter} from '../../components/CampaignScatter';
 import {Table,TableBody,TableCell,TableHead,TableHeader,TableRow} from '@/components/ui/table';
-import {exact,formatMoney} from '../../lib/format';
+import {channelName,exact,formatMoney} from '../../lib/format';
+import {CHANNELS,CHANNEL_KEYS,UNATTRIBUTED_COLOR,channelColor} from '../../lib/channels';
 import {multiple,percent,perUnit} from '../../lib/metrics';
 import {useUrlState,choice} from '../../lib/useUrlState';
 import type {Dashboard,Metric} from '../types';
 
-const channelNames:Record<string,string>={google:'Google',meta:'Meta',tiktok:'TikTok'};
-const channelColors:Record<string,string>={google:'var(--chart-1)',meta:'var(--chart-2)',tiktok:'var(--chart-3)'};
 type Sums={spend:bigint;net:bigint;gross:bigint;orders:bigint;clicks:bigint;impressions:bigint};
 const zero=():Sums=>({spend:0n,net:0n,gross:0n,orders:0n,clicks:0n,impressions:0n});
 const add=(sum:Sums,row:Metric)=>{sum.spend+=BigInt(row.spend_minor);sum.net+=BigInt(row.net_revenue_minor);sum.gross+=BigInt(row.gross_revenue_minor??'0');sum.orders+=BigInt(row.orders);sum.clicks+=BigInt(row.clicks??'0');sum.impressions+=BigInt(row.impressions??'0');return sum;};
@@ -32,7 +31,7 @@ function Efficiency({label,sums,currency}:{label:string;sums:Sums;currency:strin
 const header=['Spend','Impressions','Clicks','CTR','CPC','Orders','Cost per order','Net revenue','Net ROAS'];
 
 export default function AdPerformance(){
- const [filters,setFilters,replaceFilters]=useUrlState({from_date:'',to_date:'',platform:''},v=>({...v,platform:choice(v.platform,['google','meta','tiktok'])}));
+ const [filters,setFilters,replaceFilters]=useUrlState({from_date:'',to_date:'',platform:''},v=>({...v,platform:choice(v.platform,CHANNEL_KEYS)}));
  const [report,setReport]=useState<Dashboard|null>(null);const [error,setError]=useState('');
  const query=new URLSearchParams(Object.entries(filters).filter(([,v])=>!!v)).toString();
  useEffect(()=>{
@@ -49,7 +48,7 @@ export default function AdPerformance(){
   <header className="masthead"><div><h1>Ad performance</h1><p>How efficiently paid media turns impressions into clicks, orders and revenue</p></div></header>
   <section className="filters" aria-label="Ad performance filters">
    <DateRangeFields from={filters.from_date} toExclusive={filters.to_date} onFrom={from_date=>setFilters({...filters,from_date})} onTo={to_date=>setFilters({...filters,to_date})}/>
-   <label>Platform<select value={filters.platform} onChange={e=>setFilters({...filters,platform:e.target.value})}><option value="">All platforms</option>{Object.entries(channelNames).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
+   <label>Platform<select value={filters.platform} onChange={e=>setFilters({...filters,platform:e.target.value})}><option value="">All platforms</option>{CHANNELS.map(c=><option key={c.key} value={c.key}>{c.label}</option>)}</select></label>
   </section><p className="source -mt-1 mb-3">{DAY_RULE}</p>
   {error&&<div className="error" role="alert"><strong>Ad performance unavailable</strong><p>{error}</p></div>}
   {!report&&!error&&<p className="empty">Loading certified ad performance…</p>}
@@ -66,13 +65,13 @@ export default function AdPerformance(){
     <StatStrip label={'Ad efficiency · '+currency} className="xl:grid-cols-6" items={kpis.map(([name,value,hint])=>({name,value,hint}))}/>
     <div className="grid gap-4 xl:grid-cols-2 [&>*]:min-w-0">
      <Card className="min-w-0"><CardHeader><CardTitle>Spend share vs revenue share</CardTitle><CardDescription>A channel earning a bigger share of revenue than of spend is outperforming · {currency}</CardDescription></CardHeader><CardContent>
-      <Legend label="Share legend" items={[{key:'spend',label:'Ad spend share',color:'var(--chart-4)'},{key:'net',label:'Net revenue share',color:'var(--primary)'}]}/>
-      <section aria-label={'Spend share vs revenue share · '+currency} className="mt-4 space-y-4">{channels.map(([c,sums])=>{const spend=share(sums.spend,total.spend),net=total.net>0n&&sums.net>=0n?share(sums.net,total.net):null;const name=channelNames[c]||c;
-       return <div key={c} role="img" aria-label={`${name}: ${spend??'unavailable'} of ad spend, ${net??'unavailable'} of net revenue`} className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-3 text-sm"><span className="flex items-center gap-1.5 font-medium"><span className="inline-block size-2.5 rounded-[3px]" style={{background:channelColors[c]}} aria-hidden="true"/>{name}</span><div className="space-y-1.5">
-        {([['Ad spend',spend,'var(--chart-4)'],['Net revenue',net,'var(--primary)']] as const).map(([label,value,color])=><div key={label} className="flex items-center gap-2"><div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full" style={{width:value??'0%',background:color}}/></div><span className="w-28 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{value??'—'} {label.toLowerCase()}</span></div>)}
+      <Legend label="Share legend" items={[{key:'spend',label:'Ad spend share',color:UNATTRIBUTED_COLOR},{key:'net',label:'Net revenue share',color:'var(--primary)'}]}/>
+      <section aria-label={'Spend share vs revenue share · '+currency} className="mt-4 space-y-4">{channels.map(([c,sums])=>{const spend=share(sums.spend,total.spend),net=total.net>0n&&sums.net>=0n?share(sums.net,total.net):null;const name=channelName(c);
+       return <div key={c} role="img" aria-label={`${name}: ${spend??'unavailable'} of ad spend, ${net??'unavailable'} of net revenue`} className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-3 text-sm"><span className="flex items-center gap-1.5 font-medium"><span className="inline-block size-2.5 rounded-[3px]" style={{background:channelColor(c)}} aria-hidden="true"/>{name}</span><div className="space-y-1.5">
+        {([['Ad spend',spend,UNATTRIBUTED_COLOR],['Net revenue',net,'var(--primary)']] as const).map(([label,value,color])=><div key={label} className="flex items-center gap-2"><div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full" style={{width:value??'0%',background:color}}/></div><span className="w-28 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{value??'—'} {label.toLowerCase()}</span></div>)}
        </div></div>;})}</section></CardContent></Card>
      <Card className="min-w-0"><CardHeader><CardTitle>Efficiency by channel</CardTitle><CardDescription>Which platform buys attention and orders most cheaply · {currency}</CardDescription></CardHeader><CardContent>
-      <Legend label="Channel legend" items={channels.map(([c])=>({key:c,label:channelNames[c]||c,color:channelColors[c]}))}/>
+      <Legend label="Channel legend" items={channels.map(([c])=>({key:c,label:channelName(c),color:channelColor(c)}))}/>
       <div className="mt-4 grid gap-x-6 gap-y-5 sm:grid-cols-2">{([
         ['Click-through rate','higher is better',(s:Sums)=>s.impressions>0n?Number(s.clicks)/Number(s.impressions):0,(s:Sums)=>percent(t(s.clicks),t(s.impressions))??'—'],
         ['Net ROAS','higher is better',(s:Sums)=>s.spend>0n?Number(s.net)/Number(s.spend):0,(s:Sums)=>multiple(t(s.net),t(s.spend))??'—'],
@@ -80,8 +79,8 @@ export default function AdPerformance(){
         ['Cost per order','lower is better',(s:Sums)=>s.orders>0n?Number(s.spend)/Number(s.orders):0,(s:Sums)=>money(perUnit(t(s.spend),t(s.orders)))],
        ] as const).map(([metric,direction,value,display])=><div key={metric} className="min-w-0">
         <p className="mb-2 text-sm font-medium">{metric} <span className="font-normal text-xs text-muted-foreground">· {direction}</span></p>
-        <BarList name={metric+' by channel · '+currency} rows={channels.map(([c,sums])=>({key:c,label:channelNames[c]||c,value:value(sums),display:display(sums),color:channelColors[c]}))}/></div>)}</div>
-      <ExactValues label="Exact channel values"><Table aria-label={'Efficiency by channel · '+currency}><TableHeader><TableRow><TableHead>Channel</TableHead>{header.map(h=><TableHead key={h} className="text-right">{h}</TableHead>)}</TableRow></TableHeader><TableBody>{channels.map(([c,s])=><TableRow key={c}><Efficiency label={channelNames[c]||c} sums={s} currency={currency}/></TableRow>)}</TableBody></Table></ExactValues>
+        <BarList name={metric+' by channel · '+currency} rows={channels.map(([c,sums])=>({key:c,label:channelName(c),value:value(sums),display:display(sums),color:channelColor(c)}))}/></div>)}</div>
+      <ExactValues label="Exact channel values"><Table aria-label={'Efficiency by channel · '+currency}><TableHeader><TableRow><TableHead>Channel</TableHead>{header.map(h=><TableHead key={h} className="text-right">{h}</TableHead>)}</TableRow></TableHeader><TableBody>{channels.map(([c,s])=><TableRow key={c}><Efficiency label={channelName(c)} sums={s} currency={currency}/></TableRow>)}</TableBody></Table></ExactValues>
      </CardContent></Card>
     </div>
     <Card className="min-w-0"><CardHeader><CardTitle>Campaigns: spend vs return</CardTitle><CardDescription>Each bubble is a campaign; further right spends more, higher returns more net revenue per unit of spend, bigger has more orders · {currency}</CardDescription></CardHeader><CardContent>

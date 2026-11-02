@@ -1,10 +1,10 @@
-import {formatMoney} from '../lib/format';
+import {channelName,formatMoney} from '../lib/format';
+import {CHANNEL_KEYS,isChannel} from '../lib/channels';
 import type {Credit,Model} from '../app/analysis/types';
 
 export const modelNames:Record<Model,string>={first_touch:'First touch',last_touch:'Last touch',linear:'Linear'};
 const models=Object.keys(modelNames) as Model[];
-const paid=['google','meta','tiktok'];
-const channelName=(channel?:string)=>channel==='unattributed'?'Unattributed':channel||'Unknown';
+const paid=CHANNEL_KEYS;
 const abs=(value:bigint)=>value<0n?-value:value;
 
 /** Signed horizontal bar on a shared zero baseline; negative credit extends left of zero. */
@@ -28,7 +28,7 @@ export default function AttributionChart({channels,campaigns,currency,model,onMo
    <p className="source">Attribution credit, not source campaign finance. Bars share one zero baseline; refunds can make credit negative.</p>
    <ul className="credit-legend" aria-hidden="true">{models.map(m=><li key={m}><span className={'swatch '+m}/>{modelNames[m]}</li>)}</ul>
    {keys.map(key=>{const values=models.map(m=>net(channels,m,r=>r.channel===key));return <div className="credit-group" key={key}>
-    {paid.includes(key)?<button className="link-button" aria-label={'Filter to channel '+key} onClick={()=>onChannel(key)}>{key}</button>:<strong>{channelName(key)}</strong>}
+    {isChannel(key)?<button className="link-button" aria-label={'Filter to channel '+key} onClick={()=>onChannel(key)}>{channelName(key)}</button>:<strong>{channelName(key)}</strong>}
     <div role="img" aria-label={channelName(key)+': '+models.map((m,i)=>modelNames[m]+' '+money(values[i])).join(', ')}>{models.map((m,i)=><div className={'credit-line'+(m===model?' selected':'')} key={m}><Bar value={BigInt(values[i])} className={m} {...channelScale}/><small>{money(values[i])}</small></div>)}</div>
    </div>;})}
   </section>

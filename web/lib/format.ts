@@ -1,3 +1,4 @@
+import {channelOf} from './channels';
 /** Exact formatting: monetary integers never pass through Number. */
 export const exact=(value:string|null|undefined)=>value==null?'Unavailable':BigInt(value).toLocaleString('en-US');
 export function formatMoney(value:string|null|undefined,currency:string):string {
@@ -89,8 +90,7 @@ export function elapsed(seconds:string|number|null|undefined):string {
  const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
  return d?`${d} d${h?` ${h} h`:''}`:h?`${h} h${m?` ${m} min`:''}`:m?`${m} min`:`${Math.floor(s)} s`;
 }
-const CHANNELS:Record<string,string>={google:'Google',meta:'Meta',tiktok:'TikTok',unattributed:'Unattributed'};
-export const channelName=(key:string|null|undefined)=>key?CHANNELS[key]??key:'Unattributed';
+export const channelName=(key:string|null|undefined)=>key?channelOf(key)?.label??(key==='unattributed'?'Unattributed':key):'Unattributed';
 /** A "data through" bound: a midnight bound means through the previous day ("31 Aug 2026"); otherwise the instant. */
 export function throughLabel(iso:string|null|undefined):string {
  if(!iso)return 'no data';
