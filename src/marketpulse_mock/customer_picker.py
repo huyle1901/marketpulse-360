@@ -23,7 +23,7 @@ IDENTIFIED_PERCENT = 70
 """Share of sessions (percent) that belong to a known customer."""
 
 
-def _is_identified(
+def is_identified(
     config: GenerationConfig, day_index: int, impression_ordinal: int
 ) -> bool:
     """Return whether a session belongs to a known customer (the 70 % rule)."""
@@ -106,7 +106,7 @@ class CustomerPicker:
         next_joiner = next(waiting, None)
         if next_joiner is not None:
             for ordinal in session_ordinals:
-                if not _is_identified(config, day_index, ordinal):
+                if not is_identified(config, day_index, ordinal):
                     continue
                 joiner_sessions[ordinal] = next_joiner
                 next_joiner = next(waiting, None)
@@ -141,7 +141,7 @@ class CustomerPicker:
         joiner = self.joiner_sessions.get(impression_ordinal)
         if joiner is not None:
             return joiner
-        if not _is_identified(self.config, day_index, impression_ordinal):
+        if not is_identified(self.config, day_index, impression_ordinal):
             return None
         if self.cumulative_weights is None:
             index = stable_int(

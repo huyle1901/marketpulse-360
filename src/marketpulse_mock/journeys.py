@@ -8,7 +8,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import Iterator
 
 from .config import GenerationConfig
-from .customer_picker import CustomerPicker, _is_identified
+from .customer_picker import CustomerPicker, is_identified
 from .ids import stable_id, stable_int
 from .models import Campaign, Customer, MasterData, Product
 
@@ -893,7 +893,7 @@ def _is_fresh_anonymous_session(
         _impression_campaign(masters, impression_ordinal),
         day_index,
         impression_ordinal,
-    ) and not _is_identified(config, day_index, impression_ordinal)
+    ) and not is_identified(config, day_index, impression_ordinal)
 
 
 def _is_returning_session(
