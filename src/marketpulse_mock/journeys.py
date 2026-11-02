@@ -899,10 +899,19 @@ def _is_fresh_anonymous_session(
 def _is_returning_session(
     config: GenerationConfig, day_index: int, impression_ordinal: int
 ) -> bool:
-    """Return whether a session reuses an earlier device instead of a fresh one."""
+    """Return whether a session reuses an earlier device instead of a fresh one.
+
+    Only anonymous sessions return: identified sessions, and overflow join-day
+    sessions (ordinal >= ``impressions_per_day``, always a joiner's), keep their
+    own fresh device so no device id is shared between customers.
+    """
 
     scenario = config.scenario
     if day_index == 0 or scenario.returning_window_days <= 0:
+        return False
+    if impression_ordinal >= config.profile.impressions_per_day or is_identified(
+        config, day_index, impression_ordinal
+    ):
         return False
     return stable_int(
         config.seed,

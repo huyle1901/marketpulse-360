@@ -42,6 +42,43 @@ def _page_views(records: list[SourceRecord]) -> list[SourceRecord]:
     ]
 
 
+def _assert_identified_sessions_keep_fresh_devices(
+    test: unittest.TestCase,
+    config: GenerationConfig,
+    records: list[SourceRecord],
+) -> int:
+    """Check identified sessions use their own fresh device; return their count.
+
+    Also checks that no device id is ever shared by two customers.
+    """
+
+    fresh_ids: dict[date, set[str]] = {}
+    owners: dict[str, set[str]] = defaultdict(set)
+    checked = 0
+    ordinals = config.profile.impressions_per_day + config.profile.customers
+    for r in _page_views(records):
+        customer_id = _customer_id(r)
+        if customer_id is None:
+            continue
+        day = r.event_time.date()
+        if day not in fresh_ids:
+            day_index = (day - config.start_date).days
+            fresh_ids[day] = {
+                stable_id(config.seed, f"anonymous-{day_index}", ordinal)
+                for ordinal in range(ordinals)
+            }
+        anonymous_id = str(r.payload["anonymous_id"])
+        test.assertTrue(
+            anonymous_id in fresh_ids[day],
+            f"{customer_id} on {day} reuses device {anonymous_id}",
+        )
+        owners[anonymous_id].add(customer_id)
+        checked += 1
+    shared = {device: ids for device, ids in owners.items() if len(ids) > 1}
+    test.assertEqual({}, shared)
+    return checked
+
+
 def _assert_attribution_matches_sessions(
     test: unittest.TestCase, records: list[SourceRecord]
 ) -> int:
@@ -253,6 +290,12 @@ class JoinOverflowTests(unittest.TestCase):
     def test_attribution_matches_sessions(self) -> None:
         _assert_attribution_matches_sessions(self, self.records)
 
+    def test_joiner_sessions_keep_fresh_devices(self) -> None:
+        checked = _assert_identified_sessions_keep_fresh_devices(
+            self, self.config, self.records
+        )
+        self.assertGreater(checked, 0)
+
     def test_overflow_dataset_validates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "overflow"
@@ -291,6 +334,12 @@ class ReturningDeviceTests(unittest.TestCase):
         self.assertGreater(later, 0)
         self.assertGreaterEqual(returning / later, 0.25)
         self.assertLessEqual(returning / later, 0.35)
+
+    def test_identified_sessions_keep_fresh_devices(self) -> None:
+        checked = _assert_identified_sessions_keep_fresh_devices(
+            self, self.config, self.records
+        )
+        self.assertGreater(checked, 1000)
 
     def test_day_zero_never_returns(self) -> None:
         impressions = self.config.profile.impressions_per_day
