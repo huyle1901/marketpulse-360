@@ -19,6 +19,16 @@
 - Device strength: mobile ×0.85, desktop ×1.15, tablet ×1.0.
 - Contracts stay `schema_version` 1; `flat` output byte-identical.
 
+## Carried from plan 1 (final review)
+
+- Extract one `_session_time(config, day_index, ordinal)` used by the impression loop, the
+  overflow loop and `_latest_purchase_touch`, and let attribution see same-day overflow clicks.
+- Seat joiners at hashed session positions after their join time, not the day's first identified
+  ordinals (otherwise every joiner's first visit lands at 07:00–07:40 Vietnam time).
+- When `created_at` gains a time of day, keep "no event before `created_at`" true for seated
+  join-day sessions.
+- Plan 5 records the scenario in the manifest for non-flat runs.
+
 ## Review Focus
 
 - Event-time order across the UTC midnight boundary on a double day (VN date spans two UTC days) — test in Task 2.
