@@ -896,6 +896,23 @@ def _is_fresh_anonymous_session(
     ) and not _is_identified(config, day_index, impression_ordinal)
 
 
+def _is_returning_session(
+    config: GenerationConfig, day_index: int, impression_ordinal: int
+) -> bool:
+    """Return whether a session reuses an earlier device instead of a fresh one."""
+
+    scenario = config.scenario
+    if day_index == 0 or scenario.returning_window_days <= 0:
+        return False
+    return stable_int(
+        config.seed,
+        "returning-device",
+        day_index,
+        impression_ordinal,
+        modulo=1_000,
+    ) < round(scenario.returning_device_share * 1_000)
+
+
 def _anonymous_id(
     config: GenerationConfig,
     masters: MasterData,
@@ -905,48 +922,40 @@ def _anonymous_id(
     """Return a fresh device id, or reuse one first seen in the return window."""
 
     scenario = config.scenario
-    if day_index > 0 and scenario.returning_window_days > 0:
-        share_per_mille = round(scenario.returning_device_share * 1_000)
-        returns = (
-            stable_int(
+    if _is_returning_session(config, day_index, impression_ordinal):
+        for attempt in range(MAX_RETURNING_CANDIDATES):
+            offset = stable_int(
                 config.seed,
-                "returning-device",
+                "returning-day",
                 day_index,
                 impression_ordinal,
-                modulo=1_000,
+                attempt,
+                modulo=min(scenario.returning_window_days, day_index),
             )
-            < share_per_mille
-        )
-        if returns:
-            for attempt in range(MAX_RETURNING_CANDIDATES):
-                offset = stable_int(
-                    config.seed,
-                    "returning-day",
-                    day_index,
-                    impression_ordinal,
-                    attempt,
-                    modulo=min(scenario.returning_window_days, day_index),
-                )
-                earlier_day = day_index - 1 - offset
-                impressions = config.profile.impressions_per_day
-                start = stable_int(
-                    config.seed,
-                    "returning-ordinal",
-                    day_index,
-                    impression_ordinal,
-                    attempt,
-                    modulo=impressions,
-                )
-                # Anonymous sessions are sparse among impressions, so scan
-                # forward (wrapping) from a hashed start to the next one.
-                for step in range(impressions):
-                    earlier_ordinal = (start + step) % impressions
-                    if _is_fresh_anonymous_session(
-                        config, masters, earlier_day, earlier_ordinal
-                    ):
-                        return _fresh_anonymous_id(
-                            config, earlier_day, earlier_ordinal
-                        )
+            earlier_day = day_index - 1 - offset
+            impressions = config.profile.impressions_per_day
+            start = stable_int(
+                config.seed,
+                "returning-ordinal",
+                day_index,
+                impression_ordinal,
+                attempt,
+                modulo=impressions,
+            )
+            # Anonymous sessions are sparse among impressions, so scan
+            # forward (wrapping) from a hashed start to the next one.
+            for step in range(impressions):
+                earlier_ordinal = (start + step) % impressions
+                # Only a session that kept its fresh id guarantees the
+                # device was really emitted on the earlier day.
+                if _is_fresh_anonymous_session(
+                    config, masters, earlier_day, earlier_ordinal
+                ) and not _is_returning_session(
+                    config, earlier_day, earlier_ordinal
+                ):
+                    return _fresh_anonymous_id(
+                        config, earlier_day, earlier_ordinal
+                    )
     return _fresh_anonymous_id(config, day_index, impression_ordinal)
 
 

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from marketpulse_mock.config import GenerationConfig, ScaleProfile, resolve_config
 from marketpulse_mock.generator import generate_dataset
+from marketpulse_mock.ids import stable_id
 from marketpulse_mock.journeys import SourceRecord, iter_day_records
 from marketpulse_mock.masters import generate_master_data
 from marketpulse_mock.models import Customer
@@ -277,26 +278,34 @@ class ReturningDeviceTests(unittest.TestCase):
             if _customer_id(r) is None and r.payload["anonymous_id"] is not None
         ]
 
-    def test_a_fifth_of_anonymous_sessions_return(self) -> None:
+    def test_returning_share_matches_target_with_real_earlier_devices(self) -> None:
         first_seen: dict[str, date] = {}
-        returning = 0
-        views = self._anonymous_views()
-        for day, anonymous_id in views:
-            if anonymous_id in first_seen and first_seen[anonymous_id] < day:
-                returning += 1
+        later = returning = 0
+        start = self.config.start_date
+        for day, anonymous_id in self._anonymous_views():
+            if day > start:
+                later += 1
+                if anonymous_id in first_seen and first_seen[anonymous_id] < day:
+                    returning += 1
             first_seen.setdefault(anonymous_id, day)
-        self.assertGreater(len(views), 0)
-        self.assertGreaterEqual(returning / len(views), 0.20)
+        self.assertGreater(later, 0)
+        self.assertGreaterEqual(returning / later, 0.25)
+        self.assertLessEqual(returning / later, 0.35)
 
     def test_day_zero_never_returns(self) -> None:
-        day_zero = self.config.start_date
-        ids_by_day: dict[date, list[str]] = defaultdict(list)
-        for day, anonymous_id in self._anonymous_views():
-            ids_by_day[day].append(anonymous_id)
-        self.assertGreater(len(ids_by_day[day_zero]), 0)
-        self.assertEqual(
-            len(ids_by_day[day_zero]), len(set(ids_by_day[day_zero]))
-        )
+        impressions = self.config.profile.impressions_per_day
+        fresh = {
+            stable_id(self.config.seed, "anonymous-0", ordinal)
+            for ordinal in range(impressions)
+        }
+        day_zero = [
+            anonymous_id
+            for day, anonymous_id in self._anonymous_views()
+            if day == self.config.start_date
+        ]
+        self.assertGreater(len(day_zero), 0)
+        self.assertTrue(set(day_zero) <= fresh)
+        self.assertEqual(len(day_zero), len(set(day_zero)))
 
     def test_determinism_with_returning_devices(self) -> None:
         def stream(seed: int) -> list[tuple[str, str, str]]:
