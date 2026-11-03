@@ -23,6 +23,21 @@ def release_events_query(namespace:str,snapshot:int,through:date)->str:
     if type(snapshot) is not int or snapshot<1 or type(through) is not date:raise ValueError('invalid release event selection')
     return f"SELECT * FROM lakehouse.`{namespace}`.customer_events VERSION AS OF {snapshot} WHERE event_date <= DATE '{through.isoformat()}'"
 
+JOURNEY_PARTITIONS=64
+"""Hash partitions the release scan is split into before streaming to the driver.
+
+Silver files are few and large, so ``toLocalIterator`` would otherwise pull a third of
+the governed history into the driver at once (the varied story world overran 2 GiB).
+"""
+
+def release_rows(frame,identity:str):
+    """Project release events, one small partition at a time."""
+    for item in frame.repartition(JOURNEY_PARTITIONS,'event_id').toLocalIterator():
+        row=item.asDict()
+        # Spark's configured UTC session returns naive Python datetimes.
+        row['event_time']=row['event_time'].replace(tzinfo=timezone.utc)
+        yield project_event(row,identity)
+
 def main() -> int:
     import psycopg
     settings=load_settings(os.environ)
@@ -47,13 +62,7 @@ def main() -> int:
             spark=create_spark_session('marketpulse-mp07-journeys')
             frame=spark.sql(release_events_query(receipt.namespace,snapshot,receipt.logical_day))
             validate_physical_schema(frame.schema,'silver.customer_events')
-            def rows():
-                for item in frame.toLocalIterator():
-                    row=item.asDict()
-                    # Spark's configured UTC session returns naive Python datetimes.
-                    row['event_time']=row['event_time'].replace(tzinfo=timezone.utc)
-                    yield project_event(row,release.identity)
-            publication=copy_journeys(client,release,snapshot,rows())
+            publication=copy_journeys(client,release,snapshot,release_rows(frame,release.identity))
             journal.publish(publication)
             print(json.dumps({'reused':False,**asdict(publication)},sort_keys=True))
         return 0
