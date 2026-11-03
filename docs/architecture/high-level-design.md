@@ -211,7 +211,8 @@ by that spend share divided by the platform's cost multiplier, so cheaper
 channels buy more impressions. Per-platform personas scale cost per impression,
 click-through and a purchase strength `m` that lifts only the late funnel
 (checkout given cart `min(0.9, 0.625·√m)`, purchase given checkout
-`min(0.9, 0.48·m)`). Sessions, returning devices and attribution share one
+`min(0.9, 0.48·m)`). In the story world the session's device scales `m` too
+(desktop ×1.15, tablet ×1.0, mobile ×0.85), for paid and non-paid sessions alike. Sessions, returning devices and attribution share one
 campaign draw. All choices remain deterministic for a seed.
 
 Story traffic also has non-paid visits: each UTC day adds a third of its paid

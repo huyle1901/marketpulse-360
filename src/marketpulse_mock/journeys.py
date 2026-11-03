@@ -251,6 +251,7 @@ def iter_day_records(
         device = ("desktop", "mobile", "tablet")[
             stable_int(config.seed, "device", day_index, ordinal, modulo=3)
         ]
+        strength = _device_strength(config, device, strength)
         source = "mobile" if device == "mobile" else "web"
         # Story payloads name the session's traffic source; flat omits it.
         source_tag: dict[str, object] = (
@@ -1315,6 +1316,15 @@ def _purchase_strength(
     ) > 1.0:
         strength *= SHOPEE_DOUBLE_DAY_STRENGTH
     return strength
+
+
+def _device_strength(
+    config: GenerationConfig, device: str, strength: float
+) -> float:
+    """Return ``strength`` scaled by the device's multiplier (flat: unchanged)."""
+
+    multipliers = config.scenario.device_strength
+    return strength if multipliers is None else strength * multipliers[device]
 
 
 def _pick_campaign(

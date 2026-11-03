@@ -1197,6 +1197,47 @@ class StoryNonPaidTrafficTests(unittest.TestCase):
             self.assertIsNotNone(r.payload["click_id"])
 
 
+class StoryDeviceConversionTests(unittest.TestCase):
+    """Devices convert differently in the story world: desktop > tablet > mobile."""
+
+    DAYS = 30
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.config = resolve_config("story-demo", 360, Path(tmp), days=cls.DAYS)
+        _, cls.records = _generate_window(cls.config)
+
+    def test_purchase_rate_orders_desktop_tablet_mobile(self) -> None:
+        device = {
+            str(r.payload["session_id"]): str(r.payload["payload"]["device_type"])
+            for r in _page_views(self.records)
+        }
+        sessions = Counter(device.values())
+        purchases = Counter(
+            device[str(r.payload["session_id"])]
+            for r in self.records
+            if r.dataset == "web_events" and r.payload["event_name"] == "purchase"
+        )
+        rate = {d: purchases[d] / sessions[d] for d in sessions}
+        self.assertEqual({"desktop", "mobile", "tablet"}, set(rate))
+        self.assertGreater(rate["desktop"], rate["tablet"])
+        self.assertGreater(rate["tablet"], rate["mobile"])
+
+    def test_device_multiplies_strength_in_story_only(self) -> None:
+        from marketpulse_mock.journeys import _device_strength
+
+        story = self.config.scenario
+        self.assertEqual({"mobile": 0.85, "desktop": 1.15, "tablet": 1.0}, dict(story.device_strength))
+        self.assertAlmostEqual(1.6 * 1.15, _device_strength(self.config, "desktop", 1.6))
+        self.assertAlmostEqual(1.6 * 0.85, _device_strength(self.config, "mobile", 1.6))
+        self.assertAlmostEqual(1.6, _device_strength(self.config, "tablet", 1.6))
+        with tempfile.TemporaryDirectory() as tmp:
+            flat = resolve_config("fixture", 360, Path(tmp))
+        for device in ("desktop", "mobile", "tablet"):
+            self.assertEqual(1.6, _device_strength(flat, device, 1.6))
+
+
 class FlatChannelHelperTests(unittest.TestCase):
     """The legacy ``flat`` scenario keeps round-robin, uniform-cost behaviour."""
 

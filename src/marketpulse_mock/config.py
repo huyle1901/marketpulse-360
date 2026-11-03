@@ -108,6 +108,10 @@ class Scenario:
     calendar (``calendar.utc_hour_weights``); False keeps the legacy fixed
     daily count and evenly spaced session times."""
 
+    device_strength: Mapping[str, float] | None = None
+    """Purchase-strength multiplier per device (``desktop``, ``mobile``,
+    ``tablet``; positive); None leaves every device's strength unchanged."""
+
     def __post_init__(self) -> None:
         if not self.platforms:
             raise ValueError("platforms must not be empty")
@@ -139,6 +143,13 @@ class Scenario:
                         f"personas for {platform} must be three positive numbers"
                     )
             _require_every_platform("personas", self.personas, self.platforms)
+        if self.device_strength is not None:
+            if set(self.device_strength) != {"desktop", "mobile", "tablet"}:
+                raise ValueError(
+                    "device_strength must name exactly desktop, mobile and tablet"
+                )
+            if any(value <= 0 for value in self.device_strength.values()):
+                raise ValueError("device_strength values must be positive")
         if self.cities is not None:
             if not self.cities:
                 raise ValueError("cities must not be empty when set")
@@ -207,6 +218,9 @@ SCENARIOS: Mapping[str, Scenario] = MappingProxyType(
                 }
             ),
             calendar_rhythm=True,
+            device_strength=MappingProxyType(
+                {"mobile": 0.85, "desktop": 1.15, "tablet": 1.0}
+            ),
         ),
     }
 )
