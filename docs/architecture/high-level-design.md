@@ -833,7 +833,7 @@ dashboard cannot block the operations reads.
 
 History preparation primitives are implemented. `ingest-files --from-date
 --to-date` pins complete daily ad/CRM inputs for one half-open window. It
-requires every date to have CRM and all three platform reports, and keeps
+requires every date to have CRM and every configured required platform report, and keeps
 shared master files and manifest lineage. Replay accepts the same UTC window,
 merges one day at a time in event-time order, and with `--resume-state` keeps a
 fail-closed cursor. The cursor is bound to manifest digest, window, Kafka cluster
