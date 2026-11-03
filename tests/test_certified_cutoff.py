@@ -43,3 +43,40 @@ class CertifiedCutoffTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class JourneyReleaseRowsTests(unittest.TestCase):
+    def test_rows_stream_from_small_hash_partitions_in_utc(self) -> None:
+        import unittest.mock
+        from datetime import datetime, timezone
+        from marketpulse_app import journey_publish
+
+        calls: list[tuple] = []
+
+        class Row:
+            def __init__(self, value: dict) -> None:
+                self.value = value
+
+            def asDict(self) -> dict:
+                return dict(self.value)
+
+        class Frame:
+            def repartition(self, count, column):
+                calls.append(("repartition", count, column))
+                return self
+
+            def toLocalIterator(self):
+                calls.append(("toLocalIterator",))
+                yield Row({"event_id": "e1", "event_time": datetime(2026, 8, 31, 1, 2, 3)})
+
+        projected = []
+        with unittest.mock.patch.object(
+            journey_publish, "project_event", lambda row, identity: projected.append((row, identity)) or row
+        ):
+            rows = list(journey_publish.release_rows(Frame(), "release-1"))
+
+        self.assertEqual(("repartition", journey_publish.JOURNEY_PARTITIONS, "event_id"), calls[0])
+        self.assertEqual(("toLocalIterator",), calls[1])
+        self.assertGreaterEqual(journey_publish.JOURNEY_PARTITIONS, 64)
+        self.assertEqual(timezone.utc, rows[0]["event_time"].tzinfo)
+        self.assertEqual("release-1", projected[0][1])

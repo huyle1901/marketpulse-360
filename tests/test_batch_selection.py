@@ -77,6 +77,31 @@ class BatchSelectionTests(unittest.TestCase):
             three = select_range_sources(partial, *window, THREE)
             self.assertEqual(12, len(three.source_files))
 
+    def _with_shopee_campaign(self, root: Path, plan: SourceArchivePlan) -> SourceArchivePlan:
+        original = next(f for f in plan.source_files if f.source_dataset == "master/campaigns")
+        with gzip.open(original.local_path, "rt", encoding="utf-8") as stream:
+            text = stream.read()
+        row = "c-shopee,shopee,S-360-00001,Shopee Traffic 1,traffic,active,2025-12-18,2026-01-16,1,VND\n"
+        content = gzip.compress((text + row).encode(), mtime=0)
+        path = root / "campaigns.csv.gz"
+        path.write_bytes(content)
+        campaigns = replace(original, local_path=path, file_sha256=hashlib.sha256(content).hexdigest(),
+                            compressed_size_bytes=len(content), row_count=original.row_count + 1)
+        return replace(plan, source_files=tuple(
+            campaigns if f is original else f for f in plan.source_files))
+
+    def test_campaigns_on_an_undeclared_platform_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            plan = self._with_shopee_campaign(
+                Path(root), self._four_platform_plan(Path(root), (DAY, date(2026, 1, 2))))
+            with self.assertRaisesRegex(ValueError, "shopee_ads.*BATCH_REQUIRED_PLATFORMS"):
+                select_range_sources(plan, DAY, date(2026, 1, 3), THREE)
+            with self.assertRaisesRegex(ValueError, "shopee_ads.*BATCH_REQUIRED_PLATFORMS"):
+                select_daily_sources(plan, BatchSelection(DAY, THREE))
+            self.assertEqual(14, len(select_range_sources(plan, DAY, date(2026, 1, 3), FOUR).source_files))
+            self.assertIn("shopee_ads", {f.source_dataset for f in
+                                         select_daily_sources(plan, BatchSelection(DAY, FOUR)).source_files})
+
     def test_row_day_requires_the_canonical_string(self) -> None:
         day = date(2026, 1, 1)
         self.assertTrue(_row_matches_day("google_ads", {"segments_date": "2026-01-01"}, "segments_date", day))

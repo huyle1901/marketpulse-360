@@ -109,6 +109,8 @@ def generate_dataset(
             "currency": "VND",
             "timezone": "UTC",
             "anomaly_rates": asdict(config.anomalies),
+            # Non-flat worlds name their scenario; flat manifests stay byte-identical.
+            **({"scenario": config.scenario.name} if config.scenario.name != "flat" else {}),
         },
         schema_versions={
             **SCHEMA_VERSIONS,

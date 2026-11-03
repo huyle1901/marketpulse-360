@@ -453,7 +453,9 @@ Shopee Ads `date` (DD/MM/YYYY, day-first) and CRM `snapshot_date` against the UT
 file partition. The range and daily window checks require only the configured
 required platforms (default google_ads, meta_ads, tiktok_ads; set via
 `BATCH_REQUIRED_PLATFORMS`, which Compose passes to batch-code, dagster-webserver,
-dagster-daemon and spark-lakehouse); undeclared reports are not required; retains shared master
+dagster-daemon and spark-lakehouse); undeclared reports are not required, but selection fails closed
+when `master/campaigns` names a platform whose report is not required (its revenue would otherwise be
+certified with no spend); retains shared master
 files and original row lineage. Preparation identities hash selected day/platforms,
 model digest and pinned Bronze snapshots. Local receipt files use exclusive atomic
 creation, immutable snapshot maps and conflict detection; PostgreSQL/Dagster
@@ -831,21 +833,25 @@ dashboard cannot block the operations reads.
 
 History preparation primitives are implemented. `ingest-files --from-date
 --to-date` pins complete daily ad/CRM inputs for one half-open window. It
-requires every date to have CRM and all three platform reports, and keeps
+requires every date to have CRM and every configured required platform report, and keeps
 shared master files and manifest lineage. Replay accepts the same UTC window,
 merges one day at a time in event-time order, and with `--resume-state` keeps a
 fail-closed cursor. The cursor is bound to manifest digest, window, Kafka cluster
 ID and DLQ choice. It records a pending batch before sending, and refuses to
 resume after an ambiguous acknowledgement. Day sealing in the generator closes
 completed partitions so a 638-day run keeps only current files open.
-`scripts/story-demo-env.sh` selects the isolated `marketpulse-story-demo`
-project, its non-conflicting ports and a 3 GiB Flink TaskManager. The
+`scripts/story-demo-env.sh` selects the varied story world, the second Compose
+project `marketpulse-story-demo-v2` (v1 ports + 100, all four ad reports required);
+`scripts/story-demo-v1-env.sh` keeps the first world's `marketpulse-story-demo`
+project for comparison. Both use non-conflicting ports and a 3 GiB Flink TaskManager. The
 TaskManager size and an explicit checkpoint restore path are Compose variables,
 with unchanged defaults.
 
 The isolated story demo is operated and measured in
 [story-demo.md](../runbooks/story-demo.md). Its release certifies 608 days, and
-impressions, clicks and spend exactly equal generator ground truth. Batch Spark
+impressions, clicks and spend exactly equal generator ground truth; an independent
+oracle (`scripts/story_demo_oracle.py`) compares governed orders and revenue with
+the consented generator files. Batch Spark
 driver memory and timeout (`BATCH_SPARK_DRIVER_MEMORY`,
 `BATCH_SPARK_TIMEOUT_SECONDS`), ClickHouse and batch-code container limits, the
 Flink TaskManager size, and a checkpoint restore path are Compose variables

@@ -77,3 +77,17 @@ class ScenarioTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ManifestScenarioTests(unittest.TestCase):
+    def test_story_manifest_names_its_scenario_and_flat_stays_silent(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            story = resolve_config("story-demo", 360, Path(root) / "story", days=1)
+            generate_dataset(story)
+            manifest = json.loads((Path(root) / "story" / "manifest.json").read_text())
+            self.assertEqual("vietnam-retail", manifest["configuration"]["scenario"])
+
+            fixture = resolve_config("fixture", 360, Path(root) / "flat")
+            generate_dataset(fixture)
+            flat = json.loads((Path(root) / "flat" / "manifest.json").read_text())
+            self.assertNotIn("scenario", flat["configuration"])
