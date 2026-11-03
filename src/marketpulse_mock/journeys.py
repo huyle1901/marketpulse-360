@@ -5,11 +5,14 @@ from __future__ import annotations
 import heapq
 import math
 from bisect import bisect_right
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta, timezone
+from functools import lru_cache
 from typing import Iterator
 
-from .config import GenerationConfig, Scenario
+from .calendar import HOURLY_WEIGHTS, VIETNAM, is_double_day, utc_hour_weights
+from .config import GenerationConfig, Scenario, impression_capacity
 from .customer_picker import CustomerPicker, is_identified
 from .ids import stable_id, stable_int
 from .models import Campaign, Customer, MasterData, Product
@@ -160,8 +163,9 @@ def iter_day_records(
     for record in _iter_email_events(config, masters, day_index, day_start):
         yield from with_anomalies(record)
 
-    impression_count = config.profile.impressions_per_day
     picker = _customer_picker(config, masters, day_index)
+    capacity = impression_capacity(config)
+    timeline = _session_timeline(config, day_index, picker)
 
     def record_impression(impression_ordinal: int) -> Campaign:
         campaign = _pick_campaign(config, masters, day_index, impression_ordinal)
@@ -263,7 +267,10 @@ def iter_day_records(
         if click_index == 0:
             funnel_score = 0
         reaches_view, reaches_cart, reaches_checkout, purchase = _funnel_steps(
-            config, campaign, funnel_score, _persona(config, campaign)[2]
+            config,
+            campaign,
+            funnel_score,
+            _purchase_strength(config, campaign, day_index, impression_ordinal),
         )
         if reaches_view:
             view_item = _event_record(
@@ -327,6 +334,7 @@ def iter_day_records(
                 customer=customer,
                 current_touch=touch,
                 purchase_time=purchase_time,
+                timeline=timeline,
             )
             if attributed_touch is None:
                 raise AssertionError("new paid touch must be attributable")
@@ -443,24 +451,14 @@ def iter_day_records(
             )
         click_index += 1
 
-    for impression_ordinal in range(impression_count):
+    # Impressions and overflow join-day sessions (ordinals >= capacity: always
+    # a forced paid session for a joiner left without one) in time order.
+    for event_time, impression_ordinal in timeline:
         campaign = record_impression(impression_ordinal)
-        if not _is_clicked(config, campaign, day_index, impression_ordinal):
+        if impression_ordinal < capacity and not _is_clicked(
+            config, campaign, day_index, impression_ordinal
+        ):
             continue
-        event_time = day_start + timedelta(
-            seconds=(impression_ordinal * 86_000) // max(1, impression_count)
-        )
-        yield from emit_session(impression_ordinal, campaign, event_time)
-
-    # Joiners beyond the day's identified sessions still visit on their join
-    # day: forced paid sessions packed into the 300 s after the last impression.
-    overflow_count = len(picker.overflow_ordinals)
-    for position, impression_ordinal in enumerate(picker.overflow_ordinals):
-        campaign = record_impression(impression_ordinal)
-        event_time = day_start + timedelta(
-            seconds=86_000,
-            milliseconds=(position * 300_000) // overflow_count,
-        )
         yield from emit_session(impression_ordinal, campaign, event_time)
 
     yield from flush_until(datetime.max.replace(tzinfo=timezone.utc))
@@ -818,27 +816,30 @@ def _latest_purchase_touch(
     customer: Customer | None,
     current_touch: PaidTouch,
     purchase_time: datetime,
+    timeline: Sequence[tuple[datetime, int]],
 ) -> PaidTouch | None:
     """Resolve last paid click, including clicks during an overlapping journey.
 
     ``picker`` must be the one that assigned the day's sessions, so the later
     clicks credited here belong to the customer who actually made them.
+    ``timeline`` is the day's ``_session_timeline``; the sessions emitted after
+    this one up to ``purchase_time``, overflow join-day sessions included, are
+    the candidates.
     """
 
     if customer is None:
         return current_touch
     touches = [current_touch]
-    impression_count = config.profile.impressions_per_day
-    day = config.start_date + timedelta(days=day_index)
-    day_start = datetime.combine(day, time.min, tzinfo=timezone.utc)
-    for candidate_ordinal in range(impression_ordinal + 1, impression_count):
-        candidate_time = day_start + timedelta(
-            seconds=(candidate_ordinal * 86_000) // max(1, impression_count)
-        )
+    capacity = impression_capacity(config)
+    start = bisect_right(timeline, (current_touch.event_time, impression_ordinal))
+    for position in range(start, len(timeline)):
+        candidate_time, candidate_ordinal = timeline[position]
         if candidate_time > purchase_time:
             break
         campaign = _pick_campaign(config, masters, day_index, candidate_ordinal)
-        if not _is_clicked(config, campaign, day_index, candidate_ordinal):
+        if candidate_ordinal < capacity and not _is_clicked(
+            config, campaign, day_index, candidate_ordinal
+        ):
             continue
         candidate_customer = picker.pick(day_index, candidate_ordinal)
         if candidate_customer != customer:
@@ -859,6 +860,210 @@ def _latest_purchase_touch(
     return last_paid_touch(touches, purchase_time)
 
 
+LEGACY_SESSION_SPAN_SECONDS = 86_000
+"""Non-calendar impressions are spaced evenly over the day's first 86,000 s."""
+
+LEGACY_OVERFLOW_SPAN_MS = 300_000
+"""Non-calendar overflow sessions share the 300 s after the last impression."""
+
+HOUR_DRAW_RESOLUTION = 1_000_000
+"""Integer scale of the hourly inverse-CDF draw."""
+
+LAST_HOUR_SECONDS = 3_480
+"""Seconds drawn in UTC hour 23 (23:00:00-23:57:59): a session plus its
+funnel (at most 62 s) ends before the 23:59:59 reports, so no day's records
+cross midnight."""
+
+
+def _utc_day(config: GenerationConfig, day_index: int) -> date:
+    return config.start_date + timedelta(days=day_index)
+
+
+@lru_cache(maxsize=128)
+def _hour_thresholds(utc_day: date) -> tuple[int, ...]:
+    """Return the cumulative per-UTC-hour draw thresholds of a calendar day."""
+
+    weights = utc_hour_weights(utc_day)
+    total = sum(weights)
+    running = 0.0
+    thresholds: list[int] = []
+    for weight in weights:
+        running += weight
+        thresholds.append(round(running / total * HOUR_DRAW_RESOLUTION))
+    thresholds[-1] = HOUR_DRAW_RESOLUTION
+    return tuple(thresholds)
+
+
+@lru_cache(maxsize=128)
+def _double_day_hours(utc_day: date) -> tuple[bool, ...]:
+    """Return, per UTC hour, whether its Vietnam date is a double day."""
+
+    start = datetime.combine(utc_day, time.min, tzinfo=timezone.utc)
+    return tuple(
+        is_double_day((start + timedelta(hours=hour)).astimezone(VIETNAM).date())
+        for hour in range(24)
+    )
+
+
+@lru_cache(maxsize=128)
+def _day_factor(utc_day: date) -> float:
+    """Return a calendar day's summed hour weights relative to a plain day."""
+
+    return sum(utc_hour_weights(utc_day)) / sum(HOURLY_WEIGHTS)
+
+
+def _day_impressions(config: GenerationConfig, day_index: int) -> int:
+    """Return the day's impression count (ordinals ``0..count-1``).
+
+    Calendar scenarios scale ``impressions_per_day`` by the day's summed
+    hourly weights relative to a plain weekday; others keep the fixed count.
+    """
+
+    base = config.profile.impressions_per_day
+    if not config.scenario.calendar_rhythm:
+        return base
+    count = round(base * _day_factor(_utc_day(config, day_index)))
+    capacity = impression_capacity(config)
+    if count > capacity:
+        raise ValueError(
+            f"day {day_index} needs {count} impressions; capacity is {capacity}"
+        )
+    return count
+
+
+def _session_hour(
+    config: GenerationConfig, day_index: int, impression_ordinal: int
+) -> int:
+    """Draw a calendar session's UTC hour by inverse CDF of the hour weights."""
+
+    draw = stable_int(
+        config.seed,
+        "impression-hour",
+        day_index,
+        impression_ordinal,
+        modulo=HOUR_DRAW_RESOLUTION,
+    )
+    return bisect_right(_hour_thresholds(_utc_day(config, day_index)), draw)
+
+
+def _session_time(
+    config: GenerationConfig,
+    day_index: int,
+    impression_ordinal: int,
+    *,
+    overflow_count: int = 0,
+) -> datetime:
+    """Return when an impression (or overflow join-day session) happens.
+
+    Calendar scenarios draw the UTC hour from ``utc_hour_weights`` and a
+    second inside it, overflow ordinals alike. Others keep the legacy
+    even spacing, with overflow sessions packed after 86,000 s; only that
+    legacy overflow packing needs the day's ``overflow_count``.
+    """
+
+    day_start = datetime.combine(
+        _utc_day(config, day_index), time.min, tzinfo=timezone.utc
+    )
+    if config.scenario.calendar_rhythm:
+        hour = _session_hour(config, day_index, impression_ordinal)
+        second = stable_int(
+            config.seed,
+            "impression-second",
+            day_index,
+            impression_ordinal,
+            modulo=LAST_HOUR_SECONDS if hour == 23 else 3_600,
+        )
+        return day_start + timedelta(hours=hour, seconds=second)
+    count = config.profile.impressions_per_day
+    if impression_ordinal < count:
+        return day_start + timedelta(
+            seconds=(impression_ordinal * LEGACY_SESSION_SPAN_SECONDS) // count
+        )
+    if overflow_count <= 0:
+        raise ValueError("a legacy overflow session needs the day's overflow_count")
+    return day_start + timedelta(
+        seconds=LEGACY_SESSION_SPAN_SECONDS,
+        milliseconds=(
+            (impression_ordinal - count) * LEGACY_OVERFLOW_SPAN_MS
+        ) // overflow_count,
+    )
+
+
+def _impression_times(
+    config: GenerationConfig, day_index: int
+) -> list[tuple[datetime, int]]:
+    """Return ``(time, ordinal)`` for the day's impressions, sorted."""
+
+    return sorted(
+        (_session_time(config, day_index, ordinal), ordinal)
+        for ordinal in range(_day_impressions(config, day_index))
+    )
+
+
+class _LegacyTimeline(Sequence[tuple[datetime, int]]):
+    """A non-calendar day's ``(time, ordinal)`` entries, computed on demand.
+
+    Legacy times rise with the ordinal and overflow sessions follow every
+    impression, so the entries are already sorted; computing them lazily keeps
+    a million-impression ``flat`` day from holding a day-sized list.
+    """
+
+    def __init__(
+        self,
+        config: GenerationConfig,
+        day_index: int,
+        overflow_ordinals: tuple[int, ...],
+    ) -> None:
+        self._config = config
+        self._day_index = day_index
+        self._count = config.profile.impressions_per_day
+        self._overflow = overflow_ordinals
+
+    def __len__(self) -> int:
+        return self._count + len(self._overflow)
+
+    def __getitem__(self, position: int) -> tuple[datetime, int]:  # type: ignore[override]
+        if not 0 <= position < len(self):
+            raise IndexError(position)
+        ordinal = (
+            position
+            if position < self._count
+            else self._overflow[position - self._count]
+        )
+        return (
+            _session_time(
+                self._config,
+                self._day_index,
+                ordinal,
+                overflow_count=len(self._overflow),
+            ),
+            ordinal,
+        )
+
+
+def _session_timeline(
+    config: GenerationConfig, day_index: int, picker: CustomerPicker
+) -> Sequence[tuple[datetime, int]]:
+    """Return the day's impressions and overflow sessions in time order.
+
+    Ties keep ascending ordinals, matching ``_impression_times``.
+    """
+
+    if not config.scenario.calendar_rhythm:
+        return _LegacyTimeline(config, day_index, picker.overflow_ordinals)
+    overflow_count = len(picker.overflow_ordinals)
+    overflow = sorted(
+        (
+            _session_time(
+                config, day_index, ordinal, overflow_count=overflow_count
+            ),
+            ordinal,
+        )
+        for ordinal in picker.overflow_ordinals
+    )
+    return list(heapq.merge(_impression_times(config, day_index), overflow))
+
+
 def _customer_picker(
     config: GenerationConfig,
     masters: MasterData,
@@ -868,7 +1073,7 @@ def _customer_picker(
 
     session_ordinals = (
         ordinal
-        for ordinal in range(config.profile.impressions_per_day)
+        for ordinal in range(_day_impressions(config, day_index))
         if _is_clicked(
             config,
             _pick_campaign(config, masters, day_index, ordinal),
@@ -915,14 +1120,14 @@ def _is_returning_session(
     """Return whether a session reuses an earlier device instead of a fresh one.
 
     Only anonymous sessions return: identified sessions, and overflow join-day
-    sessions (ordinal >= ``impressions_per_day``, always a joiner's), keep their
+    sessions (ordinal >= ``impression_capacity``, always a joiner's), keep their
     own fresh device so no device id is shared between customers.
     """
 
     scenario = config.scenario
     if day_index == 0 or scenario.returning_window_days <= 0:
         return False
-    if impression_ordinal >= config.profile.impressions_per_day or is_identified(
+    if impression_ordinal >= impression_capacity(config) or is_identified(
         config, day_index, impression_ordinal
     ):
         return False
@@ -955,7 +1160,7 @@ def _anonymous_id(
                 modulo=min(scenario.returning_window_days, day_index),
             )
             earlier_day = day_index - 1 - offset
-            impressions = config.profile.impressions_per_day
+            impressions = _day_impressions(config, earlier_day)
             start = stable_int(
                 config.seed,
                 "returning-ordinal",
@@ -1066,25 +1271,70 @@ def _campaign_cumulative_weights(
     return result
 
 
+SHOPEE_DOUBLE_DAY_BOOST = 2.0
+"""Shopee spend-share multiplier for an impression on a Vietnam double day."""
+
+SHOPEE_DOUBLE_DAY_STRENGTH = 1.5
+"""Shopee purchase-strength multiplier for a double-day session."""
+
+
+def _shopee_boost(
+    config: GenerationConfig, day_index: int, impression_ordinal: int
+) -> float:
+    """Return Shopee's spend-share boost for an impression's Vietnam date.
+
+    The Vietnam date of ``_session_time`` depends only on its UTC hour (the
+    offset is a whole seven hours), so the hour draw alone decides it.
+    """
+
+    if not config.scenario.calendar_rhythm:
+        return 1.0
+    double_hours = _double_day_hours(_utc_day(config, day_index))
+    if not any(double_hours):
+        return 1.0
+    if double_hours[_session_hour(config, day_index, impression_ordinal)]:
+        return SHOPEE_DOUBLE_DAY_BOOST
+    return 1.0
+
+
+def _purchase_strength(
+    config: GenerationConfig,
+    campaign: Campaign,
+    day_index: int,
+    impression_ordinal: int,
+) -> float:
+    """Return a session's persona strength, lifted for Shopee on double days."""
+
+    strength = _persona(config, campaign)[2]
+    if campaign.platform == "shopee" and _shopee_boost(
+        config, day_index, impression_ordinal
+    ) > 1.0:
+        strength *= SHOPEE_DOUBLE_DAY_STRENGTH
+    return strength
+
+
 def _pick_campaign(
     config: GenerationConfig,
     masters: MasterData,
     day_index: int,
     impression_ordinal: int,
-    shopee_boost: float = 1.0,
 ) -> Campaign:
     """Return the paid campaign serving an impression.
 
     ``flat`` keeps the legacy round-robin allocation. A weighted scenario draws
-    the campaign from spend weights (see ``_campaign_cumulative_weights``).
-    Every caller deciding sessions, devices or attribution must use this so
-    they agree on which campaign served an impression.
+    the campaign from spend weights (see ``_campaign_cumulative_weights``),
+    with Shopee's share boosted on the impression's double day
+    (``_shopee_boost``). Every caller deciding sessions, devices or
+    attribution must use this so they agree on which campaign served an
+    impression.
     """
 
     campaigns = masters.campaigns
     if not _is_weighted(config.scenario):
         return campaigns[impression_ordinal % len(campaigns)]
-    cumulative, total = _campaign_cumulative_weights(config, campaigns, shopee_boost)
+    cumulative, total = _campaign_cumulative_weights(
+        config, campaigns, _shopee_boost(config, day_index, impression_ordinal)
+    )
     draw = stable_int(
         config.seed,
         "impression-campaign",
@@ -1171,14 +1421,15 @@ def _event_ordinal(
 ) -> int:
     """Return the base event ordinal of a session; offsets 0-7 name its events.
 
-    Overflow join-day sessions (ordinal >= impressions_per_day) use negative
-    bases so their event ids never collide with another day's impressions.
+    Days are ``impression_capacity`` ordinals apart. Overflow join-day sessions
+    (ordinal >= that capacity) use negative bases so their event ids never
+    collide with another day's impressions.
     """
 
-    impression_count = config.profile.impressions_per_day
-    if impression_ordinal < impression_count:
-        return (day_index * impression_count + impression_ordinal) * 10
-    overflow_position = impression_ordinal - impression_count
+    capacity = impression_capacity(config)
+    if impression_ordinal < capacity:
+        return (day_index * capacity + impression_ordinal) * 10
+    overflow_position = impression_ordinal - capacity
     return -10 * (day_index * config.profile.customers + overflow_position + 1)
 
 

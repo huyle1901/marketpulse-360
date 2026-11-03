@@ -5,16 +5,28 @@ import hashlib
 import json
 import tempfile
 import unittest
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from statistics import median
 
-from marketpulse_mock.config import GenerationConfig, ScaleProfile, resolve_config
+from marketpulse_mock.calendar import HOURLY_WEIGHTS, VIETNAM, utc_hour_weights
+from marketpulse_mock.config import (
+    GenerationConfig,
+    ScaleProfile,
+    impression_capacity,
+    resolve_config,
+)
 from marketpulse_mock.generator import generate_dataset
 from marketpulse_mock.ids import stable_id
-from marketpulse_mock.journeys import SourceRecord, _customer_picker, iter_day_records
+from marketpulse_mock.journeys import (
+    SourceRecord,
+    _customer_picker,
+    _day_impressions,
+    iter_day_records,
+)
 from marketpulse_mock.masters import generate_master_data
-from marketpulse_mock.models import Customer
+from marketpulse_mock.models import Customer, MasterData
 from marketpulse_mock.validator import validate_dataset
 
 DAYS_PER_MONTH = 365.25 / 12
@@ -58,7 +70,8 @@ def _assert_identified_sessions_keep_fresh_devices(
     fresh_ids: dict[date, set[str]] = {}
     owners: dict[str, set[str]] = defaultdict(set)
     checked = 0
-    ordinals = config.profile.impressions_per_day + config.profile.customers
+    # Impression ordinals, then overflow ordinals from the fixed capacity.
+    ordinals = impression_capacity(config) + config.profile.customers
     for r in _page_views(records):
         customer_id = _customer_id(r)
         if customer_id is None:
@@ -118,11 +131,18 @@ def _assert_attribution_matches_sessions(
             if purchase_time - timedelta(days=7) <= click[0] <= purchase_time
         ]
         test.assertTrue(eligible, r.payload)
-        latest = max(eligible)
-        test.assertEqual(
-            latest[1], r.payload["payload"]["attributed_campaign_id"], r.payload
+        # Session times have one-second resolution, so a customer can click
+        # twice in the latest second; either click is then the latest.
+        latest_time = max(click[0] for click in eligible)
+        latest = {click[1:] for click in eligible if click[0] == latest_time}
+        test.assertIn(
+            (
+                r.payload["payload"]["attributed_campaign_id"],
+                r.payload["click_id"],
+            ),
+            latest,
+            r.payload,
         )
-        test.assertEqual(latest[2], r.payload["click_id"], r.payload)
         if r.payload["click_id"] != own_click[str(r.payload["session_id"])]:
             overlaps += 1
         checked += 1
@@ -365,7 +385,7 @@ class ReturningDeviceTests(unittest.TestCase):
         self.assertGreater(checked, 1000)
 
     def test_day_zero_never_returns(self) -> None:
-        impressions = self.config.profile.impressions_per_day
+        impressions = _day_impressions(self.config, 0)
         fresh = {
             stable_id(self.config.seed, "anonymous-0", ordinal)
             for ordinal in range(impressions)
@@ -601,6 +621,261 @@ class StoryChannelPersonaTests(unittest.TestCase):
         self.assertFalse(_funnel_steps(self.config, campaign, 360, 100.0)[2])
         self.assertTrue(_funnel_steps(self.config, campaign, 323, 100.0)[3])
         self.assertFalse(_funnel_steps(self.config, campaign, 324, 100.0)[3])
+
+
+def _generate_days(
+    config: GenerationConfig, masters: MasterData, day_indices: range
+) -> dict[int, list[SourceRecord]]:
+    return {
+        day_index: list(iter_day_records(config, masters, day_index))
+        for day_index in day_indices
+    }
+
+
+def _session_starts(records: list[SourceRecord]) -> dict[str, SourceRecord]:
+    """Return each session's first page view (bot probes share the session)."""
+
+    starts: dict[str, SourceRecord] = {}
+    for r in _page_views(records):
+        starts.setdefault(str(r.payload["session_id"]), r)
+    return starts
+
+
+def _sessions_by_vn_date(records: list[SourceRecord]) -> Counter[date]:
+    return Counter(
+        r.event_time.astimezone(VIETNAM).date()
+        for r in _session_starts(records).values()
+    )
+
+
+def _vendor_row(record: SourceRecord) -> tuple[tuple[str, str], tuple[int, ...]]:
+    """Normalize one vendor report to ``((date, vendor id), totals)``."""
+
+    p = record.payload
+    if record.dataset == "google_ads":
+        return (str(p["segments_date"]), str(p["campaign_id"])), (
+            int(p["impressions"]), int(p["clicks"]),
+            int(p["cost_micros"]) // 1_000_000, int(p["conversions"]),
+            int(p["conversions_value"]),
+        )
+    if record.dataset == "meta_ads":
+        return (str(p["date_start"]), str(p["campaign_id"])), (
+            int(p["impressions"]), int(p["clicks"]), int(p["spend"]),
+            int(p["actions"][0]["value"]), int(p["action_values"][0]["value"]),
+        )
+    if record.dataset == "shopee_ads":
+        day, month, year = str(p["date"]).split("/")
+        return (f"{year}-{month}-{day}", str(p["ad_id"])), (
+            int(p["impression"]), int(p["clicks"]), int(p["expense"]),
+            int(p["conversions"]), int(p["gmv"]),
+        )
+    return (str(p["stat_time_day"]), str(p["campaign_id"])), (
+        int(p["impressions"]), int(p["clicks"]), int(p["spend"]),
+        int(p["conversion"]), int(p["total_purchase_value"]),
+    )
+
+
+STORY_START = date(2025, 1, 1)
+NOVEMBER_DAYS = range(304, 334)  # UTC 2025-11-01 .. 2025-11-30
+TET_DAYS = range(403, 423)  # UTC 2026-02-08 .. 2026-02-27
+
+
+class StoryCalendarRhythmTests(unittest.TestCase):
+    """November 2025 of the full story: Vietnam-time hours, 11/11 and Shopee."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.config = resolve_config("story-demo", 360, Path(tmp))
+        cls.masters = generate_master_data(cls.config)
+        cls.days = _generate_days(cls.config, cls.masters, NOVEMBER_DAYS)
+        cls.records = [r for i in NOVEMBER_DAYS for r in cls.days[i]]
+
+    def test_day_indices_are_november(self) -> None:
+        self.assertEqual(STORY_START, self.config.start_date)
+        self.assertEqual(date(2025, 11, 1), STORY_START + timedelta(days=304))
+        self.assertEqual(date(2025, 11, 30), STORY_START + timedelta(days=333))
+
+    def test_daily_volume_follows_the_calendar(self) -> None:
+        base = self.config.profile.impressions_per_day
+        for day_index, records in self.days.items():
+            day = STORY_START + timedelta(days=day_index)
+            expected = round(
+                base * sum(utc_hour_weights(day)) / sum(HOURLY_WEIGHTS)
+            )
+            impressions = sum(
+                int(r.payload["impressions"])
+                for r in records
+                if r.dataset == "ground_truth"
+            )
+            self.assertEqual(expected, impressions, day)
+
+    def test_evening_peak_dwarfs_the_small_hours(self) -> None:
+        hours = Counter(
+            r.event_time.astimezone(VIETNAM).hour
+            for r in _session_starts(self.records).values()
+        )
+        evening = hours[20] + hours[21]
+        night = hours[2] + hours[3]
+        self.assertGreater(night, 0)
+        self.assertGreaterEqual(evening, 4 * night, (evening, night))
+
+    def test_double_day_lifts_its_vietnam_date(self) -> None:
+        sessions = _sessions_by_vn_date(self.records)
+        singles_day = date(2025, 11, 11)
+        around = [
+            sessions[date(2025, 11, d)] for d in range(4, 19) if d != 11
+        ]
+        self.assertGreaterEqual(
+            sessions[singles_day], 1.5 * median(around),
+            (sessions[singles_day], median(around)),
+        )
+
+    def test_shopee_spend_share_peaks_on_the_double_day(self) -> None:
+        # Ground truth is per UTC day; UTC 11/11 holds VN 11/11 07:00-23:59,
+        # the bulk of the double day's weight, while UTC 11/12 holds none of it.
+        def share(day: date) -> float:
+            spend: dict[str, int] = defaultdict(int)
+            for r in self.days[(day - STORY_START).days]:
+                if r.dataset == "ground_truth":
+                    spend[str(r.payload["platform"])] += int(r.payload["spend_minor"])
+            return spend["shopee"] / sum(spend.values())
+
+        self.assertGreater(share(date(2025, 11, 11)), share(date(2025, 11, 12)))
+
+    def test_records_stay_ordered_inside_their_utc_day(self) -> None:
+        for day_index, records in self.days.items():
+            day = STORY_START + timedelta(days=day_index)
+            last: dict[str, datetime] = {}
+            for r in records:
+                self.assertEqual(day, r.event_time.date(), (r.dataset, r.event_time))
+                previous = last.get(r.dataset)
+                if previous is not None:
+                    self.assertLessEqual(previous, r.event_time, (day, r.dataset))
+                last[r.dataset] = r.event_time
+
+    def test_sessions_end_before_the_daily_reports(self) -> None:
+        # Hour 23 draws only 23:00:00-23:57:59, so a funnel (<= 62 s) never
+        # passes the 23:59:59 vendor reports or the UTC midnight.
+        starts = [r.event_time.time() for r in _session_starts(self.records).values()]
+        self.assertTrue(any(t.hour == 23 for t in starts))
+        self.assertLessEqual(max(starts), datetime(2025, 1, 1, 23, 57, 59).time())
+
+    def test_vendor_reports_equal_ground_truth_per_utc_day(self) -> None:
+        vendor_id = {c.campaign_id: c.platform_campaign_id for c in self.masters.campaigns}
+        for day_index, records in self.days.items():
+            truth = {
+                (str(r.payload["date"]), vendor_id[str(r.payload["campaign_id"])]): (
+                    int(r.payload["impressions"]), int(r.payload["clicks"]),
+                    int(r.payload["spend_minor"]), int(r.payload["orders"]),
+                    int(r.payload["gross_revenue_minor"]),
+                )
+                for r in records
+                if r.dataset == "ground_truth"
+            }
+            reports = dict(
+                _vendor_row(r) for r in records if r.dataset.endswith("_ads")
+            )
+            self.assertEqual(16, len(truth), day_index)
+            self.assertEqual(truth, reports, day_index)
+
+    def test_anomalies_are_still_scheduled(self) -> None:
+        replayable = [
+            r for r in self.records
+            if r.dataset in ("web_events", "orders", "email_events")
+        ]
+        event_ids = Counter(str(r.payload["event_id"]) for r in replayable)
+        duplicates = sum(count - 1 for count in event_ids.values())
+        # Every second late event is also a duplicate; count each event once.
+        late = len(
+            {str(r.payload["event_id"]) for r in replayable if r.payload.get("is_late")}
+        )
+        bots = sum(
+            bool(r.payload["payload"].get("is_bot")) for r in _page_views(self.records)
+        )
+        refunds = sum(
+            r.dataset == "orders" and r.payload["event_name"] == "order_refunded"
+            for r in self.records
+        )
+        invalid = sum(r.dataset == "quality_cases" for r in self.records)
+        for name, count in (
+            ("duplicates", duplicates), ("late", late), ("bots", bots),
+            ("refunds", refunds), ("invalid", invalid),
+        ):
+            with self.subTest(name):
+                self.assertGreater(count, 0)
+        # Rates follow the defaults (0.5 % duplicates, 1 % late) on any volume.
+        self.assertAlmostEqual(duplicates / len(event_ids), 0.005, delta=0.001)
+        self.assertAlmostEqual(late / len(event_ids), 0.01, delta=0.002)
+
+    def test_session_and_event_ids_are_unique(self) -> None:
+        session_days: dict[str, date] = {}
+        for r in _page_views(self.records):
+            session_id = str(r.payload["session_id"])
+            day = session_days.setdefault(session_id, r.event_time.date())
+            self.assertEqual(day, r.event_time.date(), session_id)
+        payloads: dict[str, dict[str, object]] = {}
+        for r in self.records:
+            event_id = r.payload.get("event_id")
+            if isinstance(event_id, str):
+                first = payloads.setdefault(event_id, r.payload)
+                self.assertEqual(first, r.payload, event_id)
+        self.assertGreater(len(session_days), 5_000)
+
+    def test_joiners_first_sessions_spread_over_vietnam_hours(self) -> None:
+        window = {STORY_START + timedelta(days=i) for i in NOVEMBER_DAYS}
+        joiners = {
+            c.customer_id: c.created_at.date()
+            for c in self.masters.customers
+            if c.created_at.date() in window
+        }
+        first_hours: dict[str, int] = {}
+        for r in _session_starts(self.records).values():
+            customer_id = _customer_id(r)
+            if customer_id in joiners and r.event_time.date() == joiners[customer_id]:
+                first_hours.setdefault(
+                    customer_id, r.event_time.astimezone(VIETNAM).hour
+                )
+        self.assertEqual(set(joiners), set(first_hours))
+        self.assertGreaterEqual(len(set(first_hours.values())), 12, first_hours)
+
+    def test_same_seed_gives_identical_records(self) -> None:
+        def stream(records: list[SourceRecord]) -> list[tuple[str, str, str]]:
+            return [
+                (r.dataset, r.event_time.isoformat(), str(r.payload)) for r in records
+            ]
+
+        again = list(iter_day_records(self.config, self.masters, 314))
+        self.assertEqual(stream(self.days[314]), stream(again))
+        with tempfile.TemporaryDirectory() as tmp:
+            other = resolve_config("story-demo", 361, Path(tmp))
+        other_day = list(iter_day_records(other, generate_master_data(other), 314))
+        self.assertNotEqual(stream(self.days[314]), stream(other_day))
+
+
+class StoryTetDipTests(unittest.TestCase):
+    """Tết 2026: eve through the fourth day dips below its surrounding weeks."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.config = resolve_config("story-demo", 360, Path(tmp))
+        masters = generate_master_data(cls.config)
+        days = _generate_days(cls.config, masters, TET_DAYS)
+        cls.sessions = _sessions_by_vn_date([r for i in TET_DAYS for r in days[i]])
+
+    def test_tet_eve_is_day_index_411(self) -> None:
+        self.assertEqual(date(2026, 2, 16), STORY_START + timedelta(days=411))
+
+    def test_tet_days_fall_below_their_surroundings(self) -> None:
+        tet = [date(2026, 2, 16) + timedelta(days=n) for n in range(5)]
+        around = [
+            self.sessions[tet[0] - timedelta(days=n)] for n in range(1, 8)
+        ] + [self.sessions[tet[-1] + timedelta(days=n)] for n in range(1, 8)]
+        baseline = median(around)
+        for day in tet:
+            with self.subTest(day.isoformat()):
+                self.assertLess(self.sessions[day], 0.7 * baseline)
 
 
 class FlatChannelHelperTests(unittest.TestCase):

@@ -102,6 +102,11 @@ class Scenario:
     """``(cost, ctr, strength)`` multipliers per platform (three positive
     floats; exactly the ``platforms``); None keeps every platform identical."""
 
+    calendar_rhythm: bool = False
+    """Size each UTC day and draw session times from the Vietnam retail
+    calendar (``calendar.utc_hour_weights``); False keeps the legacy fixed
+    daily count and evenly spaced session times."""
+
     def __post_init__(self) -> None:
         if not self.platforms:
             raise ValueError("platforms must not be empty")
@@ -200,6 +205,7 @@ SCENARIOS: Mapping[str, Scenario] = MappingProxyType(
                     "shopee": (1.0, 1.1, 1.6),
                 }
             ),
+            calendar_rhythm=True,
         ),
     }
 )
@@ -278,6 +284,24 @@ class GenerationConfig:
     @property
     def scenario(self) -> Scenario:
         return SCENARIOS[self.profile.scenario]
+
+
+CALENDAR_CAPACITY_FACTOR = 3
+"""Impression ordinals reserved per day for calendar scenarios, as a multiple
+of ``impressions_per_day``; the largest daily factor is about 2.07."""
+
+
+def impression_capacity(config: GenerationConfig) -> int:
+    """Return the fixed per-day impression ordinal space.
+
+    It bounds every day's impression count, is the stride of event ordinals
+    and is the first overflow (join-day) ordinal.
+    """
+
+    base = config.profile.impressions_per_day
+    if config.scenario.calendar_rhythm:
+        return base * CALENDAR_CAPACITY_FACTOR
+    return base
 
 
 def resolve_config(

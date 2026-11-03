@@ -193,8 +193,16 @@ in-window joiner has a join-day session, and about 30 % of anonymous sessions
 return on a device seen in the previous 60 days (identified sessions always keep
 their own device). When a day has more joiners than identified sessions, the
 extra joiners get overflow join-day sessions, each with its own paid impression
-and click, so impressions and spend on heavy join days can exceed
-`impressions_per_day`. A shortened run (`resolve_config(days=N)`, used by tests)
+and click, so impressions and spend on heavy join days can exceed the day's
+impression count. Story traffic follows a Vietnam-time (UTC+7) retail calendar:
+each UTC day's impression count is `impressions_per_day` scaled by its summed
+hourly weights, each the weight of the Vietnam hour times the multiplier of that
+hour's Vietnam date (weekend ×1.15, double days such as 11/11 ×1.8, Black Friday
+×1.6, the ten days before Tết ×1.4, Tết eve to the fourth day ×0.5), and every
+session's time, overflow sessions included, is drawn from those hourly weights
+and ends before the 23:59:59 daily reports, so a day's records never cross UTC
+midnight. On double days Shopee's spend share doubles and its purchase strength
+rises ×1.5. `flat` keeps a fixed count and evenly spaced sessions. A shortened run (`resolve_config(days=N)`, used by tests)
 is the first N days of the full story: join dates and campaign flights keep the
 full profile's length. Story campaigns span Google, Meta, TikTok and Shopee:
 spend splits by platform (30/28/24/18) and, within a platform, by objective
