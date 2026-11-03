@@ -240,8 +240,12 @@ class WidenedSourceContractTests(unittest.TestCase):
         cls.orders = load_contract_schema(contract_dir, SOURCE_TOPIC_CONTRACTS["orders"])
 
     def test_fixture_and_organic_web_events_validate(self) -> None:
+        # Fixture (flat) web events carry no traffic_source; it is optional.
+        for event_name in ("page_view", "purchase"):
+            row = _first_fixture_row("web_events", event_name)
+            self.assertNotIn("traffic_source", row["payload"])
+            self.assertEqual([], _schema_errors(row, self.web))
         page_view = _first_fixture_row("web_events", "page_view")
-        self.assertEqual([], _schema_errors(page_view, self.web))
         for source in ("organic", "direct", "email"):
             with self.subTest(source):
                 self.assertEqual(
@@ -277,6 +281,14 @@ class WidenedSourceContractTests(unittest.TestCase):
         bad = copy.deepcopy(order)
         bad["payload"]["traffic_source"] = "social"
         self.assertNotEqual([], _schema_errors(bad, self.orders))
+        bad = copy.deepcopy(page_view)
+        bad["payload"]["traffic_source"] = "social"
+        self.assertNotEqual([], _schema_errors(bad, self.web))
+        for source in ("paid", "organic", "direct", "email"):
+            with self.subTest(source):
+                good = copy.deepcopy(page_view)
+                good["payload"]["traffic_source"] = source
+                self.assertEqual([], _schema_errors(good, self.web))
         for schema in (self.web, self.orders):
             self.assertEqual({"const": 1}, schema["properties"]["schema_version"])
 

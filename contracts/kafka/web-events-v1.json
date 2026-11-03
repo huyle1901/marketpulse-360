@@ -19,7 +19,7 @@
     "click_id": {"type": ["string", "null"]},
     "consent_analytics": {"type": "boolean"},
     "is_late": {"type": "boolean"},
-    "payload": {"type": "object"}
+    "payload": {"type": "object", "properties": {"traffic_source": {"enum": ["paid", "organic", "direct", "email"]}}}
   },
   "additionalProperties": false
 }

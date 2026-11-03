@@ -233,10 +233,11 @@ campaign-free, so funnels that bucket web events by their own `campaign_id`
 count the whole non-paid session as unattributed and never show a campaign
 purchase without its checkout. The web and order contracts therefore stay `v1`
 but widen `campaign_id`, `platform_campaign_id` and `click_id` (and the order
-payload's `attributed_platform`/`attributed_campaign_id`) to nullable strings;
-the Flink parser accepts null campaign fields only when the payload's
-`traffic_source` is organic, direct or email, and campaign metrics skip events
-without a campaign key.
+payload's `attributed_platform`/`attributed_campaign_id`) to nullable strings,
+and both constrain the optional payload `traffic_source` to `paid`, `organic`,
+`direct` or `email`; the Flink parser accepts null campaign fields only when the
+payload's `traffic_source` is organic, direct or email, and campaign metrics
+skip events without a campaign key.
 
 Mock source data is not application operational data. User accounts, saved segments,
 alert rules, annotations, and platform configuration created through the future
