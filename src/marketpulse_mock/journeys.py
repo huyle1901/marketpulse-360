@@ -10,20 +10,22 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta, timezone
 from operator import itemgetter
-from typing import Iterator
+from typing import Iterator, Literal
 
 from .config import (
     GenerationConfig,
     Scenario,
-    first_non_paid_ordinal,
+    first_email_ordinal,
     impression_capacity,
 )
 from .customer_picker import CustomerPicker, is_identified
+from .email_schedule import EmailSchedule, EmailType, message_events
 from .ids import stable_id, stable_int
 from .models import Campaign, Customer, MasterData, Product
 from .session_timing import (
     _day_impressions,
     _double_day_hours,
+    _email_timeline,
     _non_paid_timeline,
     _session_hour,
     _session_timeline,
@@ -181,7 +183,6 @@ def iter_day_records(
         yield from with_anomalies(record)
 
     capacity = impression_capacity(config)
-    first_visit = first_non_paid_ordinal(config)
     # Calendar scenarios precompute (and cache) the day's paid decisions, which
     # non-paid attribution on later days reuses; ``flat`` keeps the lazy path.
     paid_day = (
@@ -189,10 +190,13 @@ def iter_day_records(
         if config.scenario.calendar_rhythm
         else None
     )
+    # The day's sessions as ``(time, ordinal, kind)`` in time order; ordinals
+    # are unique across kinds, so ties never reach the kind.
+    sessions: Iterable[tuple[datetime, int, SessionKind]]
     if paid_day is None:
         picker = _customer_picker(config, masters, day_index)
         timeline = _session_timeline(config, day_index, picker)
-        sessions: Iterable[tuple[datetime, int]] = timeline
+        sessions = _with_kind(timeline, "paid")
     else:
         picker, timeline = paid_day.picker, paid_day.timeline
         visits = _non_paid_timeline(
@@ -200,7 +204,17 @@ def iter_day_records(
             day_index,
             _non_paid_count(len(paid_day.session_ordinals)),
         )
-        sessions = heapq.merge(timeline, visits)
+        emails = (
+            _email_timeline(config, masters, day_index)
+            if config.scenario.email_lifecycle
+            else ()
+        )
+        sessions = heapq.merge(
+            _with_kind(timeline, "paid"),
+            _with_kind(visits, "visit"),
+            _with_kind(emails, "email"),
+        )
+    email_first = first_email_ordinal(config)
 
     def record_impression(impression_ordinal: int) -> Campaign:
         campaign = (
@@ -221,14 +235,19 @@ def iter_day_records(
         event_time: datetime,
         traffic_source: str,
         strength: float,
+        *,
+        kind: SessionKind,
+        customer: Customer | None = None,
     ) -> Iterator[SourceRecord]:
         """Generate one session and its funnel, orders and quality cases.
 
         A paid session has its ``campaign`` and a click; a non-paid one
-        (``campaign`` None: organic, direct, later email) has neither, adds
+        (``campaign`` None: organic, direct or email) has neither, adds
         nothing to campaign aggregates and credits its order (the order
         events only, never its web events) to the customer's latest paid
         click in the window, if any. ``strength`` scales the late funnel.
+        ``kind`` picks the session's id scope; ``customer`` (an email
+        session's recipient) overrides the day picker's choice.
         """
 
         nonlocal click_index, order_index
@@ -246,11 +265,12 @@ def iter_day_records(
                 platform=campaign.platform,
                 event_time=event_time,
             )
-        id_scope, event_ordinal = _event_id_scope(config, day_index, ordinal)
+        id_scope, event_ordinal = _event_id_scope(config, day_index, ordinal, kind)
         yield from flush_until(event_time)
         session_id = stable_id(config.seed, f"session-{day_index}", ordinal)
         anonymous_id = _anonymous_id(config, masters, day_index, ordinal)
-        customer = picker.pick(day_index, ordinal)
+        if customer is None:
+            customer = picker.pick(day_index, ordinal)
         product = _select_product(config, masters.products, day_index, ordinal)
         device = ("desktop", "mobile", "tablet")[
             stable_int(config.seed, "device", day_index, ordinal, modulo=3)
@@ -493,17 +513,29 @@ def iter_day_records(
             )
         click_index += 1
 
-    # Impressions, overflow join-day sessions (ordinals >= capacity: always a
-    # forced paid session for a joiner left without one) and, for calendar
-    # scenarios, non-paid visits (ordinals >= first_visit), in time order.
-    for event_time, ordinal in sessions:
-        if ordinal >= first_visit:
+    # Impressions and overflow join-day sessions (``paid``; ordinals >=
+    # capacity are a forced paid session for a joiner left without one) and,
+    # for calendar scenarios, organic/direct ``visit`` and ``email`` sessions.
+    for event_time, ordinal, kind in sessions:
+        if kind == "visit":
             yield from emit_session(
                 ordinal,
                 None,
                 event_time,
                 _non_paid_source(config, day_index, ordinal),
                 NON_PAID_STRENGTH,
+                kind=kind,
+            )
+            continue
+        if kind == "email":
+            yield from emit_session(
+                ordinal,
+                None,
+                event_time,
+                "email",
+                EMAIL_STRENGTH,
+                kind=kind,
+                customer=masters.customers[ordinal - email_first],
             )
             continue
         campaign = record_impression(ordinal)
@@ -520,6 +552,7 @@ def iter_day_records(
             event_time,
             "paid",
             _purchase_strength(config, campaign, day_index, ordinal),
+            kind=kind,
         )
 
     yield from flush_until(datetime.max.replace(tzinfo=timezone.utc))
@@ -558,17 +591,31 @@ def _iter_crm_snapshots(
     day: date,
     day_start: datetime,
 ) -> Iterator[SourceRecord]:
-    email_ordinals = {
-        customer.customer_id: ordinal
-        for ordinal, customer in _email_audience(masters, day)
-    }
+    if config.scenario.email_lifecycle:
+        schedule = EmailSchedule.build(config, masters)
+
+        def unsubscribed(customer: Customer) -> bool:
+            # Snapshots sit at day start, so an unsubscribe shows the next day.
+            unsubscribed_on = schedule.unsubscribed_on(customer.customer_id)
+            return unsubscribed_on is not None and unsubscribed_on < day
+
+    else:
+        email_ordinals = {
+            customer.customer_id: ordinal
+            for ordinal, customer in _email_audience(masters, day)
+        }
+
+        def unsubscribed(customer: Customer) -> bool:
+            email_ordinal = email_ordinals.get(customer.customer_id)
+            return email_ordinal is not None and _email_unsubscribed_before(
+                config, email_ordinal, day_index
+            )
+
     for ordinal, customer in enumerate(masters.customers):
         if customer.created_at.date() > day:
             continue
-        email_ordinal = email_ordinals.get(customer.customer_id)
-        consent_marketing = customer.consent_marketing and not (
-            email_ordinal is not None
-            and _email_unsubscribed_before(config, email_ordinal, day_index)
+        consent_marketing = customer.consent_marketing and not unsubscribed(
+            customer
         )
         yield SourceRecord(
             dataset="crm",
@@ -595,11 +642,12 @@ def _iter_email_events(
     day_start: datetime,
 ) -> Iterator[SourceRecord]:
     day = day_start.date()
+    if config.scenario.email_lifecycle:
+        yield from _iter_lifecycle_email_events(config, masters, day_index, day)
+        return
     for ordinal, customer in _email_audience(masters, day):
         if _email_unsubscribed_before(config, ordinal, day_index):
             continue
-        message_id = stable_id(config.seed, f"email-{day_index}", ordinal)
-        session_id = stable_id(config.seed, f"email-session-{day_index}", ordinal)
         event_time = day_start + timedelta(hours=8, seconds=ordinal * 10)
         event_names = ["email_sent", "email_delivered"]
         score = stable_int(config.seed, "email", day_index, ordinal, modulo=100)
@@ -610,34 +658,107 @@ def _iter_email_events(
         if score == 0:
             event_names.append("email_unsubscribed")
         for event_offset, event_name in enumerate(event_names):
-            yield SourceRecord(
-                dataset="email_events",
-                event_time=event_time + timedelta(seconds=event_offset),
-                payload=_envelope(
-                    event_id=stable_id(
-                        config.seed,
-                        f"email-event-{day_index}-{ordinal}",
-                        event_offset,
-                    ),
-                    event_name=event_name,
-                    event_time=event_time + timedelta(seconds=event_offset),
-                    source="email",
-                    customer=customer,
-                    anonymous_id=None,
-                    session_id=session_id,
-                    campaign=None,
-                    click_id=None,
-                    payload={
-                        "message_id": message_id,
-                        "lifecycle_campaign_id": f"LC-{day_index + 1:04d}",
-                        "destination_url": (
-                            "https://shop.marketpulse.example.test/email"
-                            if event_name == "email_clicked"
-                            else None
-                        ),
-                    },
-                ),
+            yield _email_record(
+                config,
+                day_index,
+                ordinal,
+                event_offset,
+                event_name,
+                event_time + timedelta(seconds=event_offset),
+                customer,
             )
+
+
+def _iter_lifecycle_email_events(
+    config: GenerationConfig,
+    masters: MasterData,
+    day_index: int,
+    day: date,
+) -> Iterator[SourceRecord]:
+    """Yield the story day's scheduled email events in event-time order.
+
+    Ties (none occur within a message) break by customer ordinal, then by the
+    event's position in its message.
+    """
+
+    events = sorted(
+        (event_time, send.ordinal, event_offset, event_name, send)
+        for send in EmailSchedule.build(config, masters).sends_on(day)
+        for event_offset, (event_name, event_time) in enumerate(
+            message_events(config.seed, day, send)
+        )
+    )
+    for event_time, ordinal, event_offset, event_name, send in events:
+        yield _email_record(
+            config,
+            day_index,
+            ordinal,
+            event_offset,
+            event_name,
+            event_time,
+            send.customer,
+            send.email_type,
+            day,
+        )
+
+
+def _email_record(
+    config: GenerationConfig,
+    day_index: int,
+    ordinal: int,
+    event_offset: int,
+    event_name: str,
+    event_time: datetime,
+    customer: Customer,
+    email_type: EmailType | None = None,
+    send_day: date | None = None,
+) -> SourceRecord:
+    """Build one email event; its message is ``(day_index, ordinal)``.
+
+    A story email names its lifecycle ``email_type`` and campaign
+    ``LC-<type>-<yyyymmdd>`` of its ``send_day``, which it must be given; the
+    legacy flat email has neither.
+    """
+
+    type_tag: dict[str, object] = {}
+    if email_type is None:
+        lifecycle_campaign_id = f"LC-{day_index + 1:04d}"
+    elif send_day is None:
+        raise ValueError("a typed email needs its send_day")
+    else:
+        type_tag["email_type"] = email_type
+        lifecycle_campaign_id = f"LC-{email_type}-{send_day:%Y%m%d}"
+    return SourceRecord(
+        dataset="email_events",
+        event_time=event_time,
+        payload=_envelope(
+            event_id=stable_id(
+                config.seed,
+                f"email-event-{day_index}-{ordinal}",
+                event_offset,
+            ),
+            event_name=event_name,
+            event_time=event_time,
+            source="email",
+            customer=customer,
+            anonymous_id=None,
+            session_id=stable_id(
+                config.seed, f"email-session-{day_index}", ordinal
+            ),
+            campaign=None,
+            click_id=None,
+            payload={
+                "message_id": stable_id(config.seed, f"email-{day_index}", ordinal),
+                "lifecycle_campaign_id": lifecycle_campaign_id,
+                **type_tag,
+                "destination_url": (
+                    "https://shop.marketpulse.example.test/email"
+                    if event_name == "email_clicked"
+                    else None
+                ),
+            },
+        ),
+    )
 
 
 def _email_audience(
@@ -936,6 +1057,23 @@ def _latest_purchase_touch(
 
 NON_PAID_STRENGTH = 0.8
 """Purchase strength of an organic or direct visit (neutral persona x 0.8)."""
+
+EMAIL_STRENGTH = 1.2
+"""Purchase strength of an email-referred visit (neutral persona x 1.2)."""
+
+SessionKind = Literal["paid", "visit", "email"]
+"""A day's session kinds: paid (impressions and overflow join-day sessions),
+organic/direct ``visit`` and email-referred ``email``."""
+
+
+def _with_kind(
+    entries: Iterable[tuple[datetime, int]], kind: SessionKind
+) -> Iterator[tuple[datetime, int, SessionKind]]:
+    """Tag a sorted ``(time, ordinal)`` timeline with its session kind."""
+
+    for event_time, ordinal in entries:
+        yield event_time, ordinal, kind
+
 
 ORGANIC_PERCENT = 60
 """Share (percent) of non-paid visits that are organic; the rest are direct."""
@@ -1460,19 +1598,19 @@ def _event_ordinal(
 
 
 def _event_id_scope(
-    config: GenerationConfig, day_index: int, ordinal: int
+    config: GenerationConfig, day_index: int, ordinal: int, kind: SessionKind
 ) -> tuple[str, int]:
     """Return a session's event-id scope and base ordinal (offsets 0-7 follow).
 
     Paid and overflow sessions keep ``_event_ordinal`` in the unscoped id
-    space. Non-paid sessions (``ordinal >= first_non_paid_ordinal``) hash
-    their ordinal under a per-day ``-visit-<day>`` scope, so their ids never
-    meet another day's or another session's.
+    space. Organic/direct visits hash their ordinal under a per-day
+    ``-visit-<day>`` scope and email visits under ``-email-<day>``, so their
+    ids never meet another day's, another kind's or another session's.
     """
 
-    if ordinal >= first_non_paid_ordinal(config):
-        return f"-visit-{day_index}", ordinal * 10
-    return "", _event_ordinal(config, day_index, ordinal)
+    if kind == "paid":
+        return "", _event_ordinal(config, day_index, ordinal)
+    return f"-{kind}-{day_index}", ordinal * 10
 
 
 def _select_product(

@@ -30,7 +30,7 @@ def _cte(session:Analytics,publication:Any|None) -> str:
     hashed="lower(hex(SHA256(concat({identity:String},'|',p.profile_key))))"
     crm=f"(SELECT customer_id,consent_analytics,consent_marketing,toUInt8(1) AS matched FROM {database}.customers) c"
     if publication:
-        detail=f'''LEFT JOIN (SELECT profile_ref,count() AS detail_event_count,uniqExact(session_id) AS detail_session_count,
+        detail=f'''LEFT JOIN (SELECT profile_ref,count() AS detail_event_count,uniqExactIf(session_id,source!='email') AS detail_session_count,
             countIf(event_name='order_created') AS detail_order_count,
             sumIf(toInt128(gross_amount_minor),event_name='order_created') AS detail_gross,
             sumIf(toInt128(refund_amount_minor),event_name='order_refunded') AS detail_refund,

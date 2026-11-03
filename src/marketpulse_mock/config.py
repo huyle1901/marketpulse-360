@@ -112,6 +112,11 @@ class Scenario:
     """Purchase-strength multiplier per device (``desktop``, ``mobile``,
     ``tablet``; positive); None leaves every device's strength unchanged."""
 
+    email_lifecycle: bool = False
+    """Email every marketing-consented customer from their join date until
+    they unsubscribe (welcome, promo and newsletter sends, see
+    ``email_schedule``); False keeps the legacy fixed 2 % email list."""
+
     def __post_init__(self) -> None:
         if not self.platforms:
             raise ValueError("platforms must not be empty")
@@ -167,6 +172,9 @@ class Scenario:
             raise ValueError("returning_device_share must be between 0 and 1")
         if self.returning_window_days < 0:
             raise ValueError("returning_window_days must not be negative")
+        if self.email_lifecycle and not self.calendar_rhythm:
+            # Email-referred visits are drawn only on the calendar branch.
+            raise ValueError("email_lifecycle requires calendar_rhythm")
 
 
 def _require_every_platform(
@@ -221,6 +229,7 @@ SCENARIOS: Mapping[str, Scenario] = MappingProxyType(
             device_strength=MappingProxyType(
                 {"mobile": 0.85, "desktop": 1.15, "tablet": 1.0}
             ),
+            email_lifecycle=True,
         ),
     }
 )
@@ -328,6 +337,24 @@ def first_non_paid_ordinal(config: GenerationConfig) -> int:
     """
 
     return impression_capacity(config) + config.profile.customers
+
+
+def first_email_ordinal(config: GenerationConfig) -> int:
+    """Return the first ordinal of a day's email-referred sessions.
+
+    A day has at most ``impression_capacity + customers`` paid sessions and
+    adds a third of them as non-paid visits, so reserving that whole span
+    after ``first_non_paid_ordinal`` keeps every non-paid ordinal below this
+    one on any day. An email session's ordinal is this plus its recipient's
+    index in ``MasterData.customers`` (one email per customer per day), so
+    email ordinals fill ``[first_email_ordinal, first_email_ordinal + customers)``.
+    """
+
+    return (
+        first_non_paid_ordinal(config)
+        + impression_capacity(config)
+        + config.profile.customers
+    )
 
 
 def resolve_config(

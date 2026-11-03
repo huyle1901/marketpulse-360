@@ -47,6 +47,15 @@ class LifecycleQueryTests(unittest.TestCase):
         self.assertTrue(all('activation_eligible' in sql and 'toStartOfMonth(event_date)' in sql for sql,p in filtered))
         self.assertTrue(all(p['activity_month']==date(2026,1,1) for sql,p in filtered))
 
+    def test_detail_session_count_excludes_email_messages_like_gold(self):
+        service,calls=self.service()
+        service.profiles()
+        details=[sql for sql,p in calls if 'detail_session_count' in sql and 'uniqExact' in sql]
+        self.assertTrue(details)
+        for sql in details:
+            self.assertIn("uniqExactIf(session_id,source!='email') AS detail_session_count",sql)
+            self.assertNotIn('uniqExact(session_id)',sql)
+
     def test_missing_conflicting_and_denied_timeline_states(self):
         service,_=self.service(missing=True)
         self.assertEqual(service.profiles()['status'],'unavailable')

@@ -19,7 +19,13 @@
     "click_id": {"type": ["string", "null"]},
     "consent_analytics": {"type": "boolean"},
     "is_late": {"type": "boolean"},
-    "payload": {"type": "object", "required": ["message_id", "lifecycle_campaign_id", "destination_url"]}
+    "payload": {
+      "type": "object",
+      "required": ["message_id", "lifecycle_campaign_id", "destination_url"],
+      "properties": {
+        "email_type": {"enum": ["welcome", "newsletter", "promo"]}
+      }
+    }
   },
   "additionalProperties": false
 }

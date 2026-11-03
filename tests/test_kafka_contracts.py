@@ -238,6 +238,26 @@ class WidenedSourceContractTests(unittest.TestCase):
         contract_dir = Path("contracts/kafka")
         cls.web = load_contract_schema(contract_dir, SOURCE_TOPIC_CONTRACTS["web_events"])
         cls.orders = load_contract_schema(contract_dir, SOURCE_TOPIC_CONTRACTS["orders"])
+        cls.email = load_contract_schema(
+            contract_dir, SOURCE_TOPIC_CONTRACTS["email_events"]
+        )
+
+    def test_email_type_is_optional_and_restricted(self) -> None:
+        row = _first_fixture_row("email_events", "email_sent")
+        self.assertNotIn("email_type", row["payload"])
+        self.assertEqual([], _schema_errors(row, self.email))
+        for email_type in ("welcome", "newsletter", "promo"):
+            with self.subTest(email_type):
+                typed = copy.deepcopy(row)
+                typed["payload"]["email_type"] = email_type
+                self.assertEqual([], _schema_errors(typed, self.email))
+        bad = copy.deepcopy(row)
+        bad["payload"]["email_type"] = "survey"
+        self.assertNotEqual([], _schema_errors(bad, self.email))
+        self.assertEqual({"const": 1}, self.email["properties"]["schema_version"])
+        self.assertNotIn(
+            "email_type", self.email["properties"]["payload"]["required"]
+        )
 
     def test_fixture_and_organic_web_events_validate(self) -> None:
         # Fixture (flat) web events carry no traffic_source; it is optional.

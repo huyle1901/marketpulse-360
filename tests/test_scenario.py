@@ -65,6 +65,11 @@ class ScenarioTests(unittest.TestCase):
             with self.subTest(overrides), self.assertRaises(ValueError):
                 Scenario("bad", **overrides)
 
+    def test_email_lifecycle_requires_calendar_rhythm(self) -> None:
+        with self.assertRaisesRegex(ValueError, "email_lifecycle requires calendar_rhythm"):
+            Scenario("bad", email_lifecycle=True)
+        self.assertTrue(Scenario("ok", calendar_rhythm=True, email_lifecycle=True).email_lifecycle)
+
     def test_profile_rejects_unknown_scenario(self) -> None:
         with self.assertRaisesRegex(ValueError, "unknown scenario"):
             ScaleProfile("odd", 1, 1, 3, 1, 1, 1, "atlantis")

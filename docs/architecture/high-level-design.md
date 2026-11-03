@@ -222,12 +222,20 @@ sessions (overflow included) as organic or direct visits, so they are a quarter
 of the day's non-email sessions, split 60/40 by a stable hash. They take
 customers from the same day picker, use fresh devices, are timed by the same
 hourly weights, convert at purchase strength 0.8 and have no campaign, click,
-bot probe or quality case. Every story web and order payload carries
-`traffic_source` (`paid`, `organic` or `direct`; `email` is reserved for
-email-referred visits); `flat` never emits it. A non-paid order credits the
-same customer's latest non-bot paid click in the previous 7 days up to the
-purchase, campaign aggregate and vendor conversions included, and is otherwise
-unattributed. Only the order events (`order_created`, `order_refunded`) carry
+bot probe or quality case. Each story `email_clicked` also starts one
+email-referred visit by the email's recipient, 0–2 h after the click (so
+before 14:00 UTC of the click's day), on a fresh device with the normal funnel
+at purchase strength 1.2 (device multiplier applied) and no campaign, click,
+bot probe or quality case; its web session is new, not the email message's
+`session_id`. The day's session list tags every entry with its kind (`paid`,
+`visit` or `email`); email visits take ordinals from `first_email_ordinal`
+(one per customer, above every non-paid ordinal) and event ids under a
+`-email-<day>` scope (organic/direct use `-visit-<day>`). Every story web and
+order payload carries `traffic_source` (`paid`, `organic`, `direct` or
+`email`); `flat` never emits it. A non-paid (organic, direct or email) order
+credits the same customer's latest non-bot paid click in the previous 7 days up
+to the purchase, campaign aggregate and vendor conversions included, and is
+otherwise unattributed; the email itself is never credited. Only the order events (`order_created`, `order_refunded`) carry
 that credited click: the session's web events, its `purchase` included, stay
 campaign-free, so funnels that bucket web events by their own `campaign_id`
 count the whole non-paid session as unattributed and never show a campaign
@@ -238,6 +246,31 @@ and both constrain the optional payload `traffic_source` to `paid`, `organic`,
 `direct` or `email`; the Flink parser accepts null campaign fields only when the
 payload's `traffic_source` is organic, direct or email, and campaign metrics
 skip events without a campaign key.
+
+Story email follows a lifecycle programme (`email_schedule`): every
+marketing-consented customer is in the audience from their join date until they
+unsubscribe. A customer who joins inside the window gets a `welcome` on the join
+day; the audience gets a `promo` on Vietnam sale days (double days and the three
+days before Tết) and a `newsletter` on other Vietnam Tuesdays, at most one email
+per customer per day (welcome > promo > newsletter). Open and click rates of
+delivered emails are welcome 55 %/12 %, newsletter 28 %/2.5 % and promo
+32 %/4.5 % (a click is always an open), and 0.5 % of delivered emails
+unsubscribe, which ends the customer's sends and turns `consent_marketing`
+false from the next day's CRM snapshot. Sends go out 08:00–10:00 Vietnam time
+(01:00–03:00 UTC); delivery follows within 30 s, an open within 8 h, a click
+within 30 min of the open and an unsubscribe within 5 min of the message's last
+event, so every email event stays inside its UTC day, and each day's email
+events are emitted in event-time order. The schedule is computed once per window
+by walking each customer's sends, so generation stays linear in days. Every
+story email event's payload carries an `email_type` (optional in the v1 contract),
+which is `welcome`, `newsletter` or `promo` (the contract allows only those
+values), and a `lifecycle_campaign_id` of `LC-<type>-<yyyymmdd>` for the send's
+UTC date. The validator rejects any other `email_type`, a campaign id that
+does not name the event's type and UTC day, and a typed message clicked without
+being opened. A scenario cannot set `email_lifecycle` without
+`calendar_rhythm`, because email-referred visits exist only on the calendar
+branch. `flat` keeps the legacy fixed list of 2 % of consented customers,
+without `email_type`.
 
 Mock source data is not application operational data. User accounts, saved segments,
 alert rules, annotations, and platform configuration created through the future
@@ -323,7 +356,10 @@ Payload-conflict detection compares the clean logical hash together with this
 recovered click ID using a null-safe struct; different paid-touch identities are
 reported as conflicts even when the clean v1 envelopes are otherwise identical.
 Gold exposes funnel, first/last/linear attribution, Customer 360, cohort retention, and campaign
-performance tables. Evidence records both MP-03 source totals and consent-governed
+performance tables. Customer 360 `session_count` counts a profile's distinct site
+sessions (web, mobile and commerce); email messages carry their own `session_id`
+but are not sessions, so email events add to `event_count` only. The MP-08
+detail check counts sessions the same way. Evidence records both MP-03 source totals and consent-governed
 Gold totals, because those layers intentionally answer different questions.
 Gross revenue counts only `order_created`; refund amounts count only
 `order_refunded`. Refund payloads retain the original order gross as context, so

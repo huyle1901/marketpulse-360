@@ -22,14 +22,18 @@ anyone. A lifecycle programme should grow with the customer base and mix email t
    (today's guarantee stays).
 4. **Email-referred visits**: each `email_clicked` starts a site session within 0–2 hours with
    `traffic_source = email`, no ad click, the customer's identity, and the normal funnel at
-   1.2× purchase probability; these orders stay unattributed under the paid-click policy.
-5. **UI**: no change required; the Email page's monthly chart now grows. A per-type breakdown is
-   a later, separate change (needs an API field).
+   1.2× purchase probability. The email itself is never credited with these orders; an earlier
+   non-bot paid click within 7 days may be (last-paid-click policy).
+5. **UI**: the Email page's monthly chart adds a Recipients line (distinct customers emailed,
+   already in the API) beside sends, because sends follow the send calendar and jump on promo
+   days while recipients show the audience growing. A per-type breakdown is a later, separate
+   change (needs an API field).
 
 ## Resolved after builder review
 
 - **Volume** *(my call)*: rates follow typical e-commerce benchmarks instead of the first draft,
-  so email-referred visits stay a minority of traffic (about a fifth on promo days):
+  so email-referred visits stay a minority of traffic (about 6 % of sessions on early-2025 promo
+  days and about 8 % across all story promo days, growing with the audience):
   welcome open 55 % / click 12 %, newsletter 28 % / 2.5 %, promo 32 % / 4.5 %.
 - **Consent** (answered): consent rules do not change; "honoured" means an unsubscribe stops
   later sends and shows as `consent_marketing = false` in the next CRM snapshot. No new
