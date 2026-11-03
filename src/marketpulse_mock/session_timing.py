@@ -11,7 +11,7 @@ from itertools import chain
 from typing import Iterator
 
 from .calendar import HOURLY_WEIGHTS, VIETNAM, is_double_day, utc_hour_weights
-from .config import GenerationConfig, impression_capacity
+from .config import GenerationConfig, first_non_paid_ordinal, impression_capacity
 from .customer_picker import CustomerPicker
 from .ids import stable_int
 
@@ -88,18 +88,47 @@ def _day_impressions(config: GenerationConfig, day_index: int) -> int:
 
 
 def _session_hour(
-    config: GenerationConfig, day_index: int, impression_ordinal: int
+    config: GenerationConfig,
+    day_index: int,
+    ordinal: int,
+    namespace: str = "impression",
 ) -> int:
-    """Draw a calendar session's UTC hour by inverse CDF of the hour weights."""
+    """Draw a calendar session's UTC hour by inverse CDF of the hour weights.
+
+    ``namespace`` keeps independent draws for each kind of session:
+    ``impression`` for paid (and overflow) ordinals, ``visit`` for non-paid.
+    """
 
     draw = stable_int(
         config.seed,
-        "impression-hour",
+        f"{namespace}-hour",
         day_index,
-        impression_ordinal,
+        ordinal,
         modulo=HOUR_DRAW_RESOLUTION,
     )
     return bisect_right(_hour_thresholds(_utc_day(config, day_index)), draw)
+
+
+def _drawn_time(
+    config: GenerationConfig, day_index: int, ordinal: int, namespace: str
+) -> datetime:
+    """Return a calendar session time: a drawn UTC hour and a second inside it.
+
+    UTC hour 23 draws only its first ``LAST_HOUR_SECONDS``.
+    """
+
+    hour = _session_hour(config, day_index, ordinal, namespace)
+    second = stable_int(
+        config.seed,
+        f"{namespace}-second",
+        day_index,
+        ordinal,
+        modulo=LAST_HOUR_SECONDS if hour == 23 else 3_600,
+    )
+    day_start = datetime.combine(
+        _utc_day(config, day_index), time.min, tzinfo=timezone.utc
+    )
+    return day_start + timedelta(hours=hour, seconds=second)
 
 
 def _session_time(
@@ -117,19 +146,11 @@ def _session_time(
     legacy overflow packing needs the day's ``overflow_count``.
     """
 
+    if config.scenario.calendar_rhythm:
+        return _drawn_time(config, day_index, impression_ordinal, "impression")
     day_start = datetime.combine(
         _utc_day(config, day_index), time.min, tzinfo=timezone.utc
     )
-    if config.scenario.calendar_rhythm:
-        hour = _session_hour(config, day_index, impression_ordinal)
-        second = stable_int(
-            config.seed,
-            "impression-second",
-            day_index,
-            impression_ordinal,
-            modulo=LAST_HOUR_SECONDS if hour == 23 else 3_600,
-        )
-        return day_start + timedelta(hours=hour, seconds=second)
     return day_start + _legacy_offset(
         impression_ordinal, config.profile.impressions_per_day, overflow_count
     )
@@ -236,3 +257,22 @@ def _session_timeline(
         for ordinal in picker.overflow_ordinals
     )
     return list(heapq.merge(_impression_times(config, day_index), overflow))
+
+
+def _non_paid_timeline(
+    config: GenerationConfig, day_index: int, count: int
+) -> list[tuple[datetime, int]]:
+    """Return ``(time, ordinal)`` for the day's ``count`` non-paid sessions, sorted.
+
+    Ordinals start at ``first_non_paid_ordinal``; times are drawn like paid
+    sessions' under the ``visit`` namespace. Only calendar scenarios have
+    non-paid sessions.
+    """
+
+    if count and not config.scenario.calendar_rhythm:
+        raise ValueError("only calendar scenarios have non-paid sessions")
+    first = first_non_paid_ordinal(config)
+    return sorted(
+        (_drawn_time(config, day_index, ordinal, "visit"), ordinal)
+        for ordinal in range(first, first + count)
+    )

@@ -14,9 +14,9 @@
     "customer_id": {"type": ["string", "null"]},
     "anonymous_id": {"type": ["string", "null"]},
     "session_id": {"type": "string"},
-    "campaign_id": {"type": "string"},
-    "platform_campaign_id": {"type": "string"},
-    "click_id": {"type": "string"},
+    "campaign_id": {"type": ["string", "null"]},
+    "platform_campaign_id": {"type": ["string", "null"]},
+    "click_id": {"type": ["string", "null"]},
     "consent_analytics": {"type": "boolean"},
     "is_late": {"type": "boolean"},
     "payload": {"type": "object"}

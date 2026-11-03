@@ -257,6 +257,23 @@ class DatasetValidatorTests(unittest.TestCase):
                     report.errors,
                 )
 
+    def test_paid_order_without_attribution_is_detected(self) -> None:
+        # Only a non-paid (organic, direct, email) order may be unattributed.
+        def mutate(row: dict[str, object]) -> None:
+            payload = row["payload"]
+            assert isinstance(payload, dict)
+            payload["attributed_campaign_id"] = None
+
+        self._mutate_first_json_record("orders", mutate, event_name="order_created")
+
+        report = validate_dataset(self.root)
+
+        self.assertFalse(report.valid)
+        self.assertTrue(
+            any("paid order without attribution" in error for error in report.errors),
+            report.errors,
+        )
+
     def _mutate_first_json_record(
         self,
         dataset: str,

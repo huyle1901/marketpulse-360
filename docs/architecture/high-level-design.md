@@ -189,7 +189,7 @@ Each generator profile carries a frozen scenario. `flat` (used by `fixture`,
 byte-identical output; `vietnam-retail` (used by `story-demo`) adds weighted
 Vietnamese cities, customers who join over time, and returning devices. Story
 customers act only from their join date with tenure-weighted activity, every
-in-window joiner has a join-day session, and about 30 % of anonymous sessions
+in-window joiner has a join-day session, and about 30 % of anonymous paid sessions
 return on a device seen in the previous 60 days (identified sessions always keep
 their own device). When a day has more joiners than identified sessions, the
 extra joiners get overflow join-day sessions, each with its own paid impression
@@ -213,6 +213,21 @@ click-through and a purchase strength `m` that lifts only the late funnel
 (checkout given cart `min(0.9, 0.625·√m)`, purchase given checkout
 `min(0.9, 0.48·m)`). Sessions, returning devices and attribution share one
 campaign draw. All choices remain deterministic for a seed.
+
+Story traffic also has non-paid visits: each UTC day adds a third of its paid
+sessions (overflow included) as organic or direct visits, so they are a quarter of
+the day's non-email sessions, split 60/40 by a stable hash. They take customers from
+the same day picker, use fresh devices, are timed by the same hourly weights,
+convert at purchase strength 0.8 and have no campaign, click, bot probe or quality
+case. Every story web and order payload carries `traffic_source` (`paid`, `organic`
+or `direct`; `email` is reserved for email-referred visits); `flat` never emits it.
+A non-paid order credits the same customer's latest paid click in the previous 7
+days up to the purchase, campaign aggregate and vendor conversions included, and is
+otherwise unattributed. The web and order contracts therefore stay `v1` but widen
+`campaign_id`, `platform_campaign_id` and `click_id` (and the order payload's
+`attributed_platform`/`attributed_campaign_id`) to nullable strings; the Flink
+parser accepts null campaign fields only when the payload's `traffic_source` is
+organic, direct or email, and campaign metrics skip events without a campaign key.
 
 Mock source data is not application operational data. User accounts, saved segments,
 alert rules, annotations, and platform configuration created through the future

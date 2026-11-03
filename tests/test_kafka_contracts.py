@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import copy
+import gzip
 import json
 import unittest
 from pathlib import Path
 
+from marketpulse_mock.flink_smoke_verify import _schema_errors
 from marketpulse_mock.kafka_contracts import (
     ALL_TOPIC_CONTRACTS,
     FLINK_TOPIC_CONTRACTS,
@@ -199,6 +202,83 @@ class KafkaContractTests(unittest.TestCase):
             },
             set(dlq["properties"]["reason_code"]["enum"]),
         )
+
+
+FIXTURE = Path("data/mock/fixtures/seed-360")
+
+
+def _first_fixture_row(dataset: str, event_name: str) -> dict[str, object]:
+    for path in sorted((FIXTURE / dataset).glob("date=*/*.jsonl.gz")):
+        with gzip.open(path, "rt", encoding="utf-8") as stream:
+            for line in stream:
+                row = json.loads(line)
+                if row["event_name"] == event_name:
+                    return row
+    raise AssertionError(f"no {event_name} in the {dataset} fixture")
+
+
+def _non_paid(row: dict[str, object], traffic_source: str) -> dict[str, object]:
+    """Return ``row`` as a non-paid visit: no campaign, no click."""
+
+    value = copy.deepcopy(row)
+    value["campaign_id"] = None
+    value["platform_campaign_id"] = None
+    value["click_id"] = None
+    payload = value["payload"]
+    assert isinstance(payload, dict)
+    payload["traffic_source"] = traffic_source
+    return value
+
+
+class WidenedSourceContractTests(unittest.TestCase):
+    """v1 web and order contracts accept non-paid visits without a campaign."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        contract_dir = Path("contracts/kafka")
+        cls.web = load_contract_schema(contract_dir, SOURCE_TOPIC_CONTRACTS["web_events"])
+        cls.orders = load_contract_schema(contract_dir, SOURCE_TOPIC_CONTRACTS["orders"])
+
+    def test_fixture_and_organic_web_events_validate(self) -> None:
+        page_view = _first_fixture_row("web_events", "page_view")
+        self.assertEqual([], _schema_errors(page_view, self.web))
+        for source in ("organic", "direct", "email"):
+            with self.subTest(source):
+                self.assertEqual(
+                    [], _schema_errors(_non_paid(page_view, source), self.web)
+                )
+
+    def test_fixture_and_unattributed_organic_orders_validate(self) -> None:
+        order = _first_fixture_row("orders", "order_created")
+        self.assertEqual([], _schema_errors(order, self.orders))
+        organic = _non_paid(order, "organic")
+        payload = organic["payload"]
+        assert isinstance(payload, dict)
+        payload["attributed_platform"] = None
+        payload["attributed_campaign_id"] = None
+        self.assertEqual([], _schema_errors(organic, self.orders))
+        paid = copy.deepcopy(order)
+        paid["payload"]["traffic_source"] = "paid"
+        self.assertEqual([], _schema_errors(paid, self.orders))
+
+    def test_widened_fields_stay_typed(self) -> None:
+        page_view = _first_fixture_row("web_events", "page_view")
+        for field in ("campaign_id", "platform_campaign_id", "click_id"):
+            with self.subTest(field):
+                bad = copy.deepcopy(page_view)
+                bad[field] = 7
+                self.assertNotEqual([], _schema_errors(bad, self.web))
+        order = _first_fixture_row("orders", "order_created")
+        for field in ("attributed_platform", "attributed_campaign_id"):
+            with self.subTest(field):
+                bad = copy.deepcopy(order)
+                bad["payload"][field] = 7
+                self.assertNotEqual([], _schema_errors(bad, self.orders))
+        bad = copy.deepcopy(order)
+        bad["payload"]["traffic_source"] = "social"
+        self.assertNotEqual([], _schema_errors(bad, self.orders))
+        for schema in (self.web, self.orders):
+            self.assertEqual({"const": 1}, schema["properties"]["schema_version"])
 
 
 if __name__ == "__main__":

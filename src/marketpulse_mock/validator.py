@@ -457,12 +457,18 @@ class _SemanticState:
                 payload.get("attributed_campaign_id"),
                 row.get("click_id"),
             )
-            key = (_event_day(row), str(payload.get("attributed_campaign_id", "")))
+        # A non-paid order without a creditable paid click has a null
+        # attributed campaign and is in no campaign's ground truth.
+        if attributed is None:
+            if payload.get("traffic_source") in (None, "paid"):
+                self.errors.append(f"paid order without attribution: {path}")
+            return
+        key = (_event_day(row), str(attributed))
+        if row.get("event_name") == "order_created":
             metrics = self.order_metrics.setdefault(key, [0, 0, 0])
             metrics[0] += 1
             metrics[1] += gross_amount
         elif row.get("event_name") == "order_refunded":
-            key = (_event_day(row), str(payload.get("attributed_campaign_id", "")))
             metrics = self.order_metrics.setdefault(key, [0, 0, 0])
             metrics[2] += refund_amount
 

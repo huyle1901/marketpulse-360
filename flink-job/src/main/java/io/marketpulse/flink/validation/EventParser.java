@@ -22,6 +22,7 @@ public final class EventParser implements Serializable {
             "schema_version", "customer_id", "anonymous_id", "session_id",
             "campaign_id", "platform_campaign_id", "click_id", "consent_analytics",
             "payload", "is_late");
+    private static final Set<String> NON_PAID_SOURCES = Set.of("organic", "direct", "email");
     private static final Map<String, TopicRule> RULES = Map.of(
             "marketing.raw.web-events.v1",
             new TopicRule(Set.of("web", "mobile"), Set.of(
@@ -130,21 +131,25 @@ public final class EventParser implements Serializable {
 
     private static boolean hasValidPayload(String topic, ObjectNode object) {
         JsonNode payload = object.get("payload");
+        boolean nonPaid = isNonPaid(payload);
+        boolean hasCampaign = nonBlank(nullableText(object.get("campaign_id")));
         if (topic.endsWith("web-events.v1")) {
-            return nonBlank(nullableText(object.get("campaign_id")));
+            return hasCampaign || nonPaid;
         }
         if (topic.endsWith("order-events.v1")) {
-            return nonBlank(nullableText(object.get("campaign_id")))
+            boolean attributed = hasCampaign
+                    && textField(payload, "attributed_platform")
+                    && textField(payload, "attributed_campaign_id");
+            boolean unattributed = nonPaid
+                    && nullableTextField(payload, "attributed_platform")
+                    && nullableTextField(payload, "attributed_campaign_id");
+            return (attributed || unattributed)
                     && payload.hasNonNull("order_id") && payload.get("order_id").isTextual()
                     && payload.has("items") && payload.get("items").isArray()
                     && integral(payload, "gross_amount_minor")
                     && integral(payload, "refund_amount_minor")
                     && payload.hasNonNull("currency") && payload.get("currency").isTextual()
-                    && "VND".equals(payload.get("currency").textValue())
-                    && payload.hasNonNull("attributed_platform")
-                    && payload.get("attributed_platform").isTextual()
-                    && payload.hasNonNull("attributed_campaign_id")
-                    && payload.get("attributed_campaign_id").isTextual();
+                    && "VND".equals(payload.get("currency").textValue());
         }
         return nonBlank(nullableText(object.get("customer_id")))
                 && payload.hasNonNull("message_id") && payload.get("message_id").isTextual()
@@ -153,6 +158,24 @@ public final class EventParser implements Serializable {
                 && payload.has("destination_url")
                 && (payload.get("destination_url").isNull()
                     || payload.get("destination_url").isTextual());
+    }
+
+    /**
+     * Organic, direct and email visits have no campaign or click; such web and
+     * order events may carry null campaign fields. Paid (or unlabelled) events
+     * still need a campaign.
+     */
+    private static boolean isNonPaid(JsonNode payload) {
+        JsonNode source = payload.get("traffic_source");
+        return source != null && source.isTextual() && NON_PAID_SOURCES.contains(source.textValue());
+    }
+
+    private static boolean textField(JsonNode object, String field) {
+        return object.hasNonNull(field) && object.get(field).isTextual();
+    }
+
+    private static boolean nullableTextField(JsonNode object, String field) {
+        return object.has(field) && (object.get(field).isNull() || object.get(field).isTextual());
     }
 
     private static boolean textual(ObjectNode object, String field) {

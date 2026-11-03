@@ -4,7 +4,9 @@ import gzip
 import hashlib
 import json
 import tempfile
+import math
 import unittest
+from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -14,6 +16,7 @@ from marketpulse_mock.calendar import HOURLY_WEIGHTS, VIETNAM, utc_hour_weights
 from marketpulse_mock.config import (
     GenerationConfig,
     ScaleProfile,
+    first_non_paid_ordinal,
     impression_capacity,
     resolve_config,
 )
@@ -57,6 +60,22 @@ def _page_views(records: list[SourceRecord]) -> list[SourceRecord]:
     ]
 
 
+def _traffic_source(record: SourceRecord) -> object:
+    payload = record.payload["payload"]
+    assert isinstance(payload, dict)
+    return payload.get("traffic_source")
+
+
+def _non_paid_sessions_per_day(records: list[SourceRecord]) -> Counter[date]:
+    """Count the organic and direct sessions starting on each UTC day."""
+
+    return Counter(
+        r.event_time.date()
+        for r in _session_starts(records).values()
+        if _traffic_source(r) in ("organic", "direct")
+    )
+
+
 def _assert_identified_sessions_keep_fresh_devices(
     test: unittest.TestCase,
     config: GenerationConfig,
@@ -70,8 +89,10 @@ def _assert_identified_sessions_keep_fresh_devices(
     fresh_ids: dict[date, set[str]] = {}
     owners: dict[str, set[str]] = defaultdict(set)
     checked = 0
-    # Impression ordinals, then overflow ordinals from the fixed capacity.
+    # Impression ordinals, then overflow ordinals from the fixed capacity,
+    # then the day's non-paid ordinals.
     ordinals = impression_capacity(config) + config.profile.customers
+    non_paid = _non_paid_sessions_per_day(records)
     for r in _page_views(records):
         customer_id = _customer_id(r)
         if customer_id is None:
@@ -79,9 +100,10 @@ def _assert_identified_sessions_keep_fresh_devices(
         day = r.event_time.date()
         if day not in fresh_ids:
             day_index = (day - config.start_date).days
+            first = first_non_paid_ordinal(config)
             fresh_ids[day] = {
                 stable_id(config.seed, f"anonymous-{day_index}", ordinal)
-                for ordinal in range(ordinals)
+                for ordinal in (*range(ordinals), *range(first, first + non_paid[day]))
             }
         anonymous_id = str(r.payload["anonymous_id"])
         test.assertTrue(
@@ -98,20 +120,28 @@ def _assert_identified_sessions_keep_fresh_devices(
 def _assert_attribution_matches_sessions(
     test: unittest.TestCase, records: list[SourceRecord]
 ) -> int:
-    """Check every order against the generated clicks; return overlap count."""
+    """Check every order against the generated paid clicks; return overlap count.
 
-    clicks: dict[tuple[str, date], list[tuple[datetime, str, str]]] = defaultdict(
-        list
-    )
-    own_click: dict[str, str] = {}
+    Paid orders and non-paid orders alike credit the customer's latest paid
+    click in the 7 days up to the purchase; a non-paid order with no such
+    click (or no customer) is unattributed.
+    """
+
+    clicks: dict[str, list[tuple[datetime, str, str]]] = defaultdict(list)
+    own_click: dict[str, object] = {}
+    session_source: dict[str, object] = {}
     for r in _page_views(records):
-        own_click[str(r.payload["session_id"])] = str(r.payload["click_id"])
+        session_id = str(r.payload["session_id"])
+        own_click[session_id] = r.payload["click_id"]
+        session_source.setdefault(session_id, _traffic_source(r))
         customer_id = _customer_id(r)
         if customer_id is None or r.payload["click_id"] is None:
             continue
-        clicks[(customer_id, r.event_time.date())].append(
+        clicks[customer_id].append(
             (r.event_time, str(r.payload["campaign_id"]), str(r.payload["click_id"]))
         )
+    for customer_clicks in clicks.values():
+        customer_clicks.sort()
     purchase_times = {
         r.payload["payload"]["order_id"]: r.event_time
         for r in records
@@ -122,18 +152,33 @@ def _assert_attribution_matches_sessions(
         if r.dataset != "orders" or r.payload["event_name"] != "order_created":
             continue
         customer_id = _customer_id(r)
+        session_id = str(r.payload["session_id"])
+        paid = session_source[session_id] in (None, "paid")
         if customer_id is None:
+            if not paid:
+                test.assertIsNone(r.payload["click_id"], r.payload)
+                test.assertIsNone(
+                    r.payload["payload"]["attributed_campaign_id"], r.payload
+                )
             continue
         purchase_time = purchase_times[r.payload["payload"]["order_id"]]
-        eligible = [
-            click
-            for click in clicks[(customer_id, purchase_time.date())]
-            if purchase_time - timedelta(days=7) <= click[0] <= purchase_time
+        customer_clicks = clicks[customer_id]
+        eligible = customer_clicks[
+            bisect_left(customer_clicks, (purchase_time - timedelta(days=7),)):
+            bisect_right(customer_clicks, (purchase_time, "\uffff"))
         ]
+        if not paid and not eligible:
+            test.assertIsNone(r.payload["campaign_id"], r.payload)
+            test.assertIsNone(r.payload["click_id"], r.payload)
+            test.assertIsNone(
+                r.payload["payload"]["attributed_campaign_id"], r.payload
+            )
+            checked += 1
+            continue
         test.assertTrue(eligible, r.payload)
         # Session times have one-second resolution, so a customer can click
         # twice in the latest second; either click is then the latest.
-        latest_time = max(click[0] for click in eligible)
+        latest_time = eligible[-1][0]
         latest = {click[1:] for click in eligible if click[0] == latest_time}
         test.assertIn(
             (
@@ -143,7 +188,7 @@ def _assert_attribution_matches_sessions(
             latest,
             r.payload,
         )
-        if r.payload["click_id"] != own_click[str(r.payload["session_id"])]:
+        if paid and r.payload["click_id"] != own_click[session_id]:
             overlaps += 1
         checked += 1
     test.assertGreater(checked, 0)
@@ -358,10 +403,13 @@ class ReturningDeviceTests(unittest.TestCase):
         _, cls.records = _generate_window(cls.config)
 
     def _anonymous_views(self) -> list[tuple[date, str]]:
+        # Only paid sessions return; organic and direct visits keep fresh ids.
         return [
             (r.event_time.date(), str(r.payload["anonymous_id"]))
             for r in _page_views(self.records)
-            if _customer_id(r) is None and r.payload["anonymous_id"] is not None
+            if _customer_id(r) is None
+            and r.payload["anonymous_id"] is not None
+            and r.payload["click_id"] is not None
         ]
 
     def test_returning_share_matches_target_with_real_earlier_devices(self) -> None:
@@ -526,7 +574,7 @@ class StoryChannelPersonaTests(unittest.TestCase):
             if r.dataset != "web_events":
                 continue
             session_id = str(r.payload["session_id"])
-            if r.payload["event_name"] == "page_view":
+            if r.payload["event_name"] == "page_view" and r.payload["campaign_id"]:
                 session_platform.setdefault(
                     session_id, campaign_platform[str(r.payload["campaign_id"])]
                 )
@@ -879,6 +927,274 @@ class StoryTetDipTests(unittest.TestCase):
         for day in tet:
             with self.subTest(day.isoformat()):
                 self.assertLess(self.sessions[day], 0.7 * baseline)
+
+
+NON_PAID_SOURCES = ("organic", "direct")
+
+
+class StoryNonPaidTrafficTests(unittest.TestCase):
+    """Organic and direct visits: a quarter of sessions, no campaign, no click."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.config = resolve_config("story-demo", 360, Path(tmp), days=30)
+        cls.customers, cls.records = _generate_window(cls.config)
+        cls.starts = _session_starts(cls.records)
+        cls.sources = {
+            session_id: _traffic_source(r) for session_id, r in cls.starts.items()
+        }
+
+    def _non_paid(self, record: SourceRecord) -> bool:
+        return self.sources[str(record.payload["session_id"])] in NON_PAID_SOURCES
+
+    def test_organic_and_direct_are_a_quarter_of_sessions(self) -> None:
+        counts = Counter(self.sources.values())
+        # Email-referred visits arrive with plan 4; all sessions are non-email.
+        self.assertEqual({"paid", "organic", "direct"}, set(counts))
+        non_paid = counts["organic"] + counts["direct"]
+        share = non_paid / sum(counts.values())
+        self.assertGreaterEqual(share, 0.22, counts)
+        self.assertLessEqual(share, 0.28, counts)
+        self.assertAlmostEqual(counts["organic"] / non_paid, 0.6, delta=0.03)
+
+    def test_each_day_adds_a_third_of_its_paid_sessions(self) -> None:
+        paid: Counter[date] = Counter()
+        for r in self.records:
+            if r.dataset == "ground_truth":
+                paid[date.fromisoformat(str(r.payload["date"]))] += int(
+                    r.payload["sessions"]
+                )
+        paid_starts = Counter(
+            r.event_time.date()
+            for r in self.starts.values()
+            if _traffic_source(r) == "paid"
+        )
+        self.assertEqual(paid, paid_starts)
+        non_paid = _non_paid_sessions_per_day(self.records)
+        self.assertEqual(30, len(paid))
+        for day, sessions in paid.items():
+            self.assertEqual(round(sessions / 3), non_paid[day], day)
+
+    def test_non_paid_sessions_carry_no_campaign_or_click(self) -> None:
+        paid_clicks = {
+            str(r.payload["click_id"])
+            for r in self.starts.values()
+            if _traffic_source(r) == "paid"
+        }
+        checked = 0
+        for r in self.records:
+            if r.dataset not in ("web_events", "orders"):
+                continue
+            session_source = self.sources[str(r.payload["session_id"])]
+            self.assertEqual(session_source, _traffic_source(r), r.payload)
+            if session_source == "paid":
+                self.assertIsNotNone(r.payload["campaign_id"], r.payload)
+                self.assertIsNotNone(r.payload["click_id"], r.payload)
+                continue
+            checked += 1
+            if r.payload["event_name"] in ("purchase", "order_created", "order_refunded"):
+                # An order may credit an earlier paid click, never its own.
+                click_id = r.payload["click_id"]
+                self.assertTrue(click_id is None or click_id in paid_clicks, r.payload)
+                self.assertEqual(click_id is None, r.payload["campaign_id"] is None)
+                continue
+            for field in ("campaign_id", "platform_campaign_id", "click_id"):
+                self.assertIsNone(r.payload[field], (field, r.payload))
+            self.assertFalse(r.payload["payload"].get("is_bot"), r.payload)
+            if r.payload["event_name"] == "page_view":
+                self.assertEqual(
+                    "https://shop.marketpulse.example.test/",
+                    r.payload["payload"]["page_url"],
+                )
+        self.assertGreater(checked, 1_000)
+
+    def test_non_paid_orders_credit_the_latest_paid_click_in_seven_days(self) -> None:
+        _assert_attribution_matches_sessions(self, self.records)
+        orders = [
+            r
+            for r in self.records
+            if r.dataset == "orders"
+            and r.payload["event_name"] == "order_created"
+            and self._non_paid(r)
+        ]
+        click_days = {
+            str(r.payload["click_id"]): r.event_time.date()
+            for r in self.starts.values()
+            if _traffic_source(r) == "paid"
+        }
+        attributed = [r for r in orders if r.payload["click_id"] is not None]
+        unattributed = [r for r in orders if r.payload["click_id"] is None]
+        anonymous = [r for r in unattributed if r.payload["customer_id"] is None]
+        earlier_day = [
+            r
+            for r in attributed
+            if click_days[str(r.payload["click_id"])] < r.event_time.date()
+        ]
+        for group in (attributed, unattributed, anonymous, earlier_day):
+            self.assertGreater(len(group), 0, (len(attributed), len(unattributed)))
+        vendor_id = {
+            c.campaign_id: (c.platform, c.platform_campaign_id)
+            for c in generate_master_data(self.config).campaigns
+        }
+        for r in attributed:
+            payload = r.payload["payload"]
+            platform, platform_campaign_id = vendor_id[str(payload["attributed_campaign_id"])]
+            self.assertEqual(payload["attributed_campaign_id"], r.payload["campaign_id"])
+            self.assertEqual(platform, payload["attributed_platform"])
+            self.assertEqual(platform_campaign_id, r.payload["platform_campaign_id"])
+        for r in unattributed:
+            payload = r.payload["payload"]
+            self.assertIsNone(payload["attributed_platform"])
+            self.assertIsNone(payload["attributed_campaign_id"])
+            self.assertIsNone(r.payload["campaign_id"])
+            self.assertIsNone(r.payload["platform_campaign_id"])
+        created = {str(r.payload["payload"]["order_id"]): r for r in orders}
+        purchases = {
+            str(r.payload["payload"]["order_id"]): r
+            for r in self.records
+            if r.dataset == "web_events" and r.payload["event_name"] == "purchase"
+        }
+        refunds = [
+            r for r in self.records
+            if r.dataset == "orders" and r.payload["event_name"] == "order_refunded"
+            and self._non_paid(r)
+        ]
+        self.assertGreater(len(refunds), 0)
+        for order_id, order in created.items():
+            purchase = purchases[order_id]
+            for field in ("campaign_id", "platform_campaign_id", "click_id"):
+                self.assertEqual(order.payload[field], purchase.payload[field])
+        for refund in refunds:
+            order = created[str(refund.payload["payload"]["order_id"])]
+            for field in ("campaign_id", "platform_campaign_id", "click_id"):
+                self.assertEqual(order.payload[field], refund.payload[field])
+            for field in ("attributed_platform", "attributed_campaign_id"):
+                self.assertEqual(
+                    order.payload["payload"][field], refund.payload["payload"][field]
+                )
+
+    def test_ground_truth_counts_paid_sessions_and_attributed_orders(self) -> None:
+        truth: dict[tuple[str, str], list[int]] = defaultdict(lambda: [0, 0, 0, 0])
+        for r in self.records:
+            if r.dataset == "ground_truth":
+                truth[(str(r.payload["date"]), str(r.payload["campaign_id"]))] = [
+                    int(r.payload["clicks"]), int(r.payload["sessions"]),
+                    int(r.payload["orders"]), int(r.payload["gross_revenue_minor"]),
+                ]
+        events: dict[tuple[str, str], list[int]] = defaultdict(lambda: [0, 0, 0, 0])
+        for r in self.starts.values():
+            if _traffic_source(r) == "paid":
+                key = (r.event_time.date().isoformat(), str(r.payload["campaign_id"]))
+                events[key][0] += 1
+                events[key][1] += 1
+        created = {
+            str(r.payload["event_id"]): r
+            for r in self.records
+            if r.dataset == "orders" and r.payload["event_name"] == "order_created"
+        }
+        for r in created.values():
+            campaign_id = r.payload["payload"]["attributed_campaign_id"]
+            if campaign_id is not None:
+                key = (r.event_time.date().isoformat(), str(campaign_id))
+                events[key][2] += 1
+                events[key][3] += int(r.payload["payload"]["gross_amount_minor"])
+        self.assertEqual(
+            {k: v for k, v in truth.items() if any(v)},
+            {k: v for k, v in events.items() if any(v)},
+        )
+
+    def test_non_paid_visits_use_fresh_unique_ids(self) -> None:
+        session_days: dict[str, set[date]] = defaultdict(set)
+        for r in self.records:
+            if r.dataset == "web_events":
+                session_days[str(r.payload["session_id"])].add(r.event_time.date())
+        self.assertEqual({1}, {len(days) for days in session_days.values()})
+        devices: dict[str, set[str]] = defaultdict(set)
+        for session_id, r in self.starts.items():
+            devices[str(r.payload["anonymous_id"])].add(session_id)
+        non_paid = [r for r in self.starts.values() if self._non_paid(r)]
+        for r in non_paid:
+            self.assertEqual(
+                {str(r.payload["session_id"])}, devices[str(r.payload["anonymous_id"])]
+            )
+        identified = sum(r.payload["customer_id"] is not None for r in non_paid)
+        self.assertAlmostEqual(identified / len(non_paid), 0.7, delta=0.03)
+        event_ids = [
+            str(r.payload["event_id"])
+            for r in self.records
+            if r.dataset in ("web_events", "orders")
+        ]
+        payloads: dict[str, dict[str, object]] = {}
+        for r in self.records:
+            if r.dataset in ("web_events", "orders"):
+                first = payloads.setdefault(str(r.payload["event_id"]), r.payload)
+                self.assertEqual(first, r.payload)
+        # Duplicate anomalies repeat an event with its id and payload.
+        self.assertGreater(len(event_ids), len(payloads))
+        # Order ids are unique across sessions and days.
+        created_by_order: dict[str, set[str]] = defaultdict(set)
+        for r in self.records:
+            if r.dataset == "orders" and r.payload["event_name"] == "order_created":
+                created_by_order[str(r.payload["payload"]["order_id"])].add(
+                    str(r.payload["event_id"])
+                )
+        self.assertEqual({1}, {len(ids) for ids in created_by_order.values()})
+
+    def test_non_paid_visits_convert_at_four_fifths_strength(self) -> None:
+        stages: dict[str, set[str]] = defaultdict(set)
+        for r in self.records:
+            if r.dataset == "web_events" and self._non_paid(r):
+                stages[str(r.payload["session_id"])].add(str(r.payload["event_name"]))
+        purchases = sum("purchase" in names for names in stages.values())
+        # Story funnel at strength 0.8: purchase cut-off per 1,000 scores.
+        cutoff = round(
+            400 * min(0.9, 0.625 * math.sqrt(0.8)) * min(0.9, 0.48 * 0.8)
+        )
+        self.assertEqual(86, cutoff)
+        self.assertGreater(len(stages), 2_000)
+        self.assertAlmostEqual(purchases / len(stages), cutoff / 1_000, delta=0.015)
+
+    def test_non_paid_visits_follow_the_vietnam_day(self) -> None:
+        starts = [r for r in self.starts.values() if self._non_paid(r)]
+        hours = Counter(r.event_time.astimezone(VIETNAM).hour for r in starts)
+        self.assertGreater(hours[2] + hours[3], 0)
+        self.assertGreaterEqual(hours[20] + hours[21], 4 * (hours[2] + hours[3]))
+        self.assertLessEqual(
+            max(r.event_time.time() for r in starts),
+            datetime(2025, 1, 1, 23, 57, 59).time(),
+        )
+
+    def test_days_generate_independently(self) -> None:
+        masters = generate_master_data(self.config)
+        day = list(iter_day_records(self.config, masters, 12))
+        start = self.config.start_date + timedelta(days=12)
+        expected = [
+            r for r in self.records
+            if r.dataset != "crm" and r.event_time.date() == start
+            or r.dataset == "crm" and r.payload["snapshot_date"] == start.isoformat()
+        ]
+        self.assertEqual(
+            [(r.dataset, r.event_time, r.payload) for r in expected],
+            [(r.dataset, r.event_time, r.payload) for r in day],
+        )
+
+    def test_story_window_with_non_paid_visits_validates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "story"
+            generate_dataset(resolve_config("story-demo", 360, root, days=9))
+            report = validate_dataset(root)
+        self.assertTrue(report.valid, report.errors[:5])
+
+    def test_flat_has_no_traffic_source_or_non_paid_visits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = resolve_config("fixture", 360, Path(tmp))
+        _, records = _generate_window(config)
+        web_and_orders = [r for r in records if r.dataset in ("web_events", "orders")]
+        self.assertGreater(len(web_and_orders), 0)
+        for r in web_and_orders:
+            self.assertNotIn("traffic_source", r.payload["payload"])
+            self.assertIsNotNone(r.payload["click_id"])
 
 
 class FlatChannelHelperTests(unittest.TestCase):

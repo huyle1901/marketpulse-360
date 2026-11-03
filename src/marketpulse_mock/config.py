@@ -79,7 +79,8 @@ class Scenario:
     ``1 / (1 + months / tenure_months)``; None picks customers uniformly."""
 
     returning_device_share: float = 0.0
-    """Share (0-1) of anonymous sessions that reuse an earlier device."""
+    """Share (0-1) of anonymous paid sessions that reuse an earlier device;
+    organic and direct visits always use a fresh one."""
 
     returning_window_days: int = 0
     """How many previous days (>= 0) a returning device is drawn from;
@@ -302,6 +303,17 @@ def impression_capacity(config: GenerationConfig) -> int:
     if config.scenario.calendar_rhythm:
         return base * CALENDAR_CAPACITY_FACTOR
     return base
+
+
+def first_non_paid_ordinal(config: GenerationConfig) -> int:
+    """Return the first ordinal of a day's non-paid (organic, direct) sessions.
+
+    Impression ordinals fill ``[0, impression_capacity)`` and overflow
+    join-day ordinals ``[impression_capacity, impression_capacity + customers)``;
+    non-paid ordinals follow both, so no session shares an ordinal.
+    """
+
+    return impression_capacity(config) + config.profile.customers
 
 
 def resolve_config(
