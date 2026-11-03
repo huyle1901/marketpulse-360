@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta, timezone
 from functools import lru_cache
+from itertools import chain
 from typing import Iterator
 
 from .calendar import HOURLY_WEIGHTS, VIETNAM, is_double_day, utc_hour_weights
@@ -974,14 +975,27 @@ def _session_time(
             modulo=LAST_HOUR_SECONDS if hour == 23 else 3_600,
         )
         return day_start + timedelta(hours=hour, seconds=second)
-    count = config.profile.impressions_per_day
+    return day_start + _legacy_offset(
+        impression_ordinal, config.profile.impressions_per_day, overflow_count
+    )
+
+
+def _legacy_offset(
+    impression_ordinal: int, count: int, overflow_count: int
+) -> timedelta:
+    """Return a non-calendar session's offset from midnight.
+
+    Impressions are spaced evenly over 86,000 s; overflow sessions share the
+    300 s after them, which needs the day's ``overflow_count``.
+    """
+
     if impression_ordinal < count:
-        return day_start + timedelta(
+        return timedelta(
             seconds=(impression_ordinal * LEGACY_SESSION_SPAN_SECONDS) // count
         )
     if overflow_count <= 0:
         raise ValueError("a legacy overflow session needs the day's overflow_count")
-    return day_start + timedelta(
+    return timedelta(
         seconds=LEGACY_SESSION_SPAN_SECONDS,
         milliseconds=(
             (impression_ordinal - count) * LEGACY_OVERFLOW_SPAN_MS
@@ -1005,7 +1019,9 @@ class _LegacyTimeline(Sequence[tuple[datetime, int]]):
 
     Legacy times rise with the ordinal and overflow sessions follow every
     impression, so the entries are already sorted; computing them lazily keeps
-    a million-impression ``flat`` day from holding a day-sized list.
+    a million-impression ``flat`` day from holding a day-sized list. Entries
+    equal ``_session_time``; the day's constants are computed once because
+    attribution reads millions of entries on a ``benchmark`` day.
     """
 
     def __init__(
@@ -1014,29 +1030,32 @@ class _LegacyTimeline(Sequence[tuple[datetime, int]]):
         day_index: int,
         overflow_ordinals: tuple[int, ...],
     ) -> None:
-        self._config = config
-        self._day_index = day_index
+        self._day_start = datetime.combine(
+            _utc_day(config, day_index), time.min, tzinfo=timezone.utc
+        )
         self._count = config.profile.impressions_per_day
         self._overflow = overflow_ordinals
+        self._overflow_count = len(overflow_ordinals)
+        self._length = self._count + self._overflow_count
 
     def __len__(self) -> int:
-        return self._count + len(self._overflow)
+        return self._length
+
+    def __iter__(self) -> Iterator[tuple[datetime, int]]:
+        day_start, count, overflow_count = (
+            self._day_start, self._count, self._overflow_count
+        )
+        for ordinal in chain(range(count), self._overflow):
+            yield day_start + _legacy_offset(ordinal, count, overflow_count), ordinal
 
     def __getitem__(self, position: int) -> tuple[datetime, int]:  # type: ignore[override]
-        if not 0 <= position < len(self):
+        if not 0 <= position < self._length:
             raise IndexError(position)
-        ordinal = (
-            position
-            if position < self._count
-            else self._overflow[position - self._count]
-        )
+        count = self._count
+        ordinal = position if position < count else self._overflow[position - count]
         return (
-            _session_time(
-                self._config,
-                self._day_index,
-                ordinal,
-                overflow_count=len(self._overflow),
-            ),
+            self._day_start
+            + _legacy_offset(ordinal, count, self._overflow_count),
             ordinal,
         )
 
