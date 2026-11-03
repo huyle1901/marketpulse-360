@@ -13,6 +13,8 @@ from typing import Iterator
 
 
 REPLAYABLE_DATASETS = {"web_events", "orders", "email_events"}
+NON_PAID_TRAFFIC_SOURCES = frozenset({"organic", "direct", "email"})
+"""Story traffic sources whose web events carry no campaign or click."""
 EXPECTED_SCHEMA_VERSIONS = {
     "master/customers": 1,
     "master/products": 1,
@@ -395,6 +397,11 @@ class _SemanticState:
         if not isinstance(payload, dict):
             self.errors.append(f"invalid payload object: {path}")
             return
+        non_paid = payload.get("traffic_source") in NON_PAID_TRAFFIC_SOURCES
+        if non_paid and (
+            row.get("campaign_id") is not None or row.get("click_id") is not None
+        ):
+            self.errors.append(f"non-paid web event with campaign or click: {path}")
         session_id = str(row.get("session_id", ""))
         event_name = str(row.get("event_name", ""))
         stage = {
@@ -417,13 +424,14 @@ class _SemanticState:
         if product_id is not None and str(product_id) not in self.master.product_ids:
             self.errors.append(f"unknown product_id {product_id}: {path}")
         if row.get("event_name") == "purchase":
+            # A non-paid purchase stays campaign-free while its order names
+            # the credited click, so only paid purchases match the click.
             order_id = str(payload.get("order_id", ""))
             self.purchases[order_id] = (
                 int(payload.get("amount_minor", -1)),
                 row.get("customer_id"),
                 row.get("session_id"),
-                row.get("campaign_id"),
-                row.get("click_id"),
+                *(() if non_paid else (row.get("campaign_id"), row.get("click_id"))),
             )
 
     def _observe_order(self, path: str, row: dict[str, object]) -> None:
@@ -450,19 +458,29 @@ class _SemanticState:
             )
         if row.get("event_name") == "order_created":
             order_id = str(payload.get("order_id", ""))
+            non_paid = payload.get("traffic_source") in NON_PAID_TRAFFIC_SOURCES
             self.orders[order_id] = (
                 int(payload.get("gross_amount_minor", -1)),
                 row.get("customer_id"),
                 row.get("session_id"),
-                payload.get("attributed_campaign_id"),
-                row.get("click_id"),
+                *(
+                    ()
+                    if non_paid
+                    else (payload.get("attributed_campaign_id"), row.get("click_id"))
+                ),
             )
-            key = (_event_day(row), str(payload.get("attributed_campaign_id", "")))
+        # A non-paid order without a creditable paid click has a null
+        # attributed campaign and is in no campaign's ground truth.
+        if attributed is None:
+            if payload.get("traffic_source") in (None, "paid"):
+                self.errors.append(f"paid order without attribution: {path}")
+            return
+        key = (_event_day(row), str(attributed))
+        if row.get("event_name") == "order_created":
             metrics = self.order_metrics.setdefault(key, [0, 0, 0])
             metrics[0] += 1
             metrics[1] += gross_amount
         elif row.get("event_name") == "order_refunded":
-            key = (_event_day(row), str(payload.get("attributed_campaign_id", "")))
             metrics = self.order_metrics.setdefault(key, [0, 0, 0])
             metrics[2] += refund_amount
 

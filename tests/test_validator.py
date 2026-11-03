@@ -257,17 +257,98 @@ class DatasetValidatorTests(unittest.TestCase):
                     report.errors,
                 )
 
+    def test_paid_order_without_attribution_is_detected(self) -> None:
+        # Only a non-paid (organic, direct, email) order may be unattributed.
+        def mutate(row: dict[str, object]) -> None:
+            payload = row["payload"]
+            assert isinstance(payload, dict)
+            payload["attributed_campaign_id"] = None
+
+        self._mutate_first_json_record("orders", mutate, event_name="order_created")
+
+        report = validate_dataset(self.root)
+
+        self.assertFalse(report.valid)
+        self.assertTrue(
+            any("paid order without attribution" in error for error in report.errors),
+            report.errors,
+        )
+
+    def test_paid_purchase_must_carry_its_order_click(self) -> None:
+        # A paid session's web purchase and order name the same click.
+        def mutate(row: dict[str, object]) -> None:
+            for field in ("campaign_id", "platform_campaign_id", "click_id"):
+                row[field] = None
+
+        self._mutate_first_json_record("web_events", mutate, event_name="purchase")
+
+        report = validate_dataset(self.root)
+
+        self.assertFalse(report.valid)
+        self.assertTrue(
+            any("purchase/order mismatch" in error for error in report.errors),
+            report.errors,
+        )
+
+    def test_non_paid_purchase_stays_campaign_free_while_its_order_is_credited(
+        self,
+    ) -> None:
+        root = Path(self.temporary_directory.name) / "story"
+        generate_dataset(resolve_config("story-demo", 360, root, days=3))
+        credited = 0
+        for target in (root / "orders").rglob("*.jsonl.gz"):
+            with gzip.open(target, "rt", encoding="utf-8") as stream:
+                for line in stream:
+                    row = json.loads(line)
+                    payload = row["payload"]
+                    credited += int(
+                        payload.get("traffic_source") in ("organic", "direct")
+                        and payload["attributed_campaign_id"] is not None
+                    )
+        self.assertGreater(credited, 0)
+
+        report = validate_dataset(root)
+
+        self.assertTrue(report.valid, report.errors[:5])
+
+    def test_non_paid_web_event_with_a_campaign_is_detected(self) -> None:
+        self.root = Path(self.temporary_directory.name) / "story"
+        generate_dataset(resolve_config("story-demo", 360, self.root, days=1))
+        truth = next((self.root / "ground_truth").rglob("*.jsonl.gz"))
+        with gzip.open(truth, "rt", encoding="utf-8") as stream:
+            campaign_id = json.loads(stream.readline())["campaign_id"]
+
+        def mutate(row: dict[str, object]) -> None:
+            row["campaign_id"] = campaign_id
+
+        self._mutate_first_json_record(
+            "web_events",
+            mutate,
+            match=lambda row: row["payload"].get("traffic_source") == "organic",
+        )
+
+        report = validate_dataset(self.root)
+
+        self.assertFalse(report.valid)
+        self.assertTrue(
+            any("non-paid web event with campaign" in error for error in report.errors),
+            report.errors,
+        )
+
     def _mutate_first_json_record(
         self,
         dataset: str,
         mutate: Callable[[dict[str, object]], None],
         event_name: str | None = None,
+        match: Callable[[dict[str, object]], bool] | None = None,
     ) -> None:
         target = next((self.root / dataset).rglob("*.jsonl.gz"))
         with gzip.open(target, "rt", encoding="utf-8") as stream:
             rows = [json.loads(line) for line in stream]
         for row in rows:
-            if event_name is None or row.get("event_name") == event_name:
+            if (event_name is None or row.get("event_name") == event_name) and (
+                match is None or match(row)
+            ):
                 mutate(row)
                 break
         else:

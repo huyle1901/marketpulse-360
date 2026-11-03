@@ -9,7 +9,7 @@ from itertools import accumulate
 from types import MappingProxyType
 from typing import Iterable, Mapping
 
-from .config import GenerationConfig
+from .config import GenerationConfig, impression_capacity
 from .ids import stable_int
 from .models import Customer
 
@@ -57,7 +57,7 @@ class CustomerPicker:
     by tenure, and the day's ``joiners`` take the first identified sessions in
     order. Joiners left over
     once those sessions run out own the overflow ordinals, which start at
-    ``impressions_per_day``.
+    ``impression_capacity(config)``.
     """
 
     config: GenerationConfig
@@ -113,7 +113,7 @@ class CustomerPicker:
                 if next_joiner is None:
                     break
         overflow: list[int] = []
-        first_overflow = config.profile.impressions_per_day
+        first_overflow = impression_capacity(config)
         while next_joiner is not None:
             ordinal = first_overflow + len(overflow)
             joiner_sessions[ordinal] = next_joiner

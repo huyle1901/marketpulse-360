@@ -79,7 +79,8 @@ class Scenario:
     ``1 / (1 + months / tenure_months)``; None picks customers uniformly."""
 
     returning_device_share: float = 0.0
-    """Share (0-1) of anonymous sessions that reuse an earlier device."""
+    """Share (0-1) of anonymous paid sessions that reuse an earlier device;
+    organic and direct visits always use a fresh one."""
 
     returning_window_days: int = 0
     """How many previous days (>= 0) a returning device is drawn from;
@@ -101,6 +102,15 @@ class Scenario:
     personas: Mapping[str, tuple[float, float, float]] | None = None
     """``(cost, ctr, strength)`` multipliers per platform (three positive
     floats; exactly the ``platforms``); None keeps every platform identical."""
+
+    calendar_rhythm: bool = False
+    """Size each UTC day and draw session times from the Vietnam retail
+    calendar (``calendar.utc_hour_weights``); False keeps the legacy fixed
+    daily count and evenly spaced session times."""
+
+    device_strength: Mapping[str, float] | None = None
+    """Purchase-strength multiplier per device (``desktop``, ``mobile``,
+    ``tablet``; positive); None leaves every device's strength unchanged."""
 
     def __post_init__(self) -> None:
         if not self.platforms:
@@ -133,6 +143,13 @@ class Scenario:
                         f"personas for {platform} must be three positive numbers"
                     )
             _require_every_platform("personas", self.personas, self.platforms)
+        if self.device_strength is not None:
+            if set(self.device_strength) != {"desktop", "mobile", "tablet"}:
+                raise ValueError(
+                    "device_strength must name exactly desktop, mobile and tablet"
+                )
+            if any(value <= 0 for value in self.device_strength.values()):
+                raise ValueError("device_strength values must be positive")
         if self.cities is not None:
             if not self.cities:
                 raise ValueError("cities must not be empty when set")
@@ -199,6 +216,10 @@ SCENARIOS: Mapping[str, Scenario] = MappingProxyType(
                     "tiktok": (0.6, 1.6, 0.5),
                     "shopee": (1.0, 1.1, 1.6),
                 }
+            ),
+            calendar_rhythm=True,
+            device_strength=MappingProxyType(
+                {"mobile": 0.85, "desktop": 1.15, "tablet": 1.0}
             ),
         ),
     }
@@ -278,6 +299,35 @@ class GenerationConfig:
     @property
     def scenario(self) -> Scenario:
         return SCENARIOS[self.profile.scenario]
+
+
+CALENDAR_CAPACITY_FACTOR = 3
+"""Impression ordinals reserved per day for calendar scenarios, as a multiple
+of ``impressions_per_day``; the largest daily factor is about 2.07."""
+
+
+def impression_capacity(config: GenerationConfig) -> int:
+    """Return the fixed per-day impression ordinal space.
+
+    It bounds every day's impression count, is the stride of event ordinals
+    and is the first overflow (join-day) ordinal.
+    """
+
+    base = config.profile.impressions_per_day
+    if config.scenario.calendar_rhythm:
+        return base * CALENDAR_CAPACITY_FACTOR
+    return base
+
+
+def first_non_paid_ordinal(config: GenerationConfig) -> int:
+    """Return the first ordinal of a day's non-paid (organic, direct) sessions.
+
+    Impression ordinals fill ``[0, impression_capacity)`` and overflow
+    join-day ordinals ``[impression_capacity, impression_capacity + customers)``;
+    non-paid ordinals follow both, so no session shares an ordinal.
+    """
+
+    return impression_capacity(config) + config.profile.customers
 
 
 def resolve_config(

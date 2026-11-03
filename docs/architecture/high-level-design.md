@@ -189,22 +189,55 @@ Each generator profile carries a frozen scenario. `flat` (used by `fixture`,
 byte-identical output; `vietnam-retail` (used by `story-demo`) adds weighted
 Vietnamese cities, customers who join over time, and returning devices. Story
 customers act only from their join date with tenure-weighted activity, every
-in-window joiner has a join-day session, and about 30 % of anonymous sessions
+in-window joiner has a join-day session, and about 30 % of anonymous paid sessions
 return on a device seen in the previous 60 days (identified sessions always keep
 their own device). When a day has more joiners than identified sessions, the
 extra joiners get overflow join-day sessions, each with its own paid impression
-and click, so impressions and spend on heavy join days can exceed
-`impressions_per_day`. A shortened run (`resolve_config(days=N)`, used by tests)
-is the first N days of the full story: join dates and campaign flights keep the
-full profile's length. Story campaigns span Google, Meta, TikTok and Shopee:
-spend splits by platform (30/28/24/18) and, within a platform, by objective
-(conversions 1.3, traffic 1.0, awareness 0.7); each impression's campaign is drawn
-by that spend share divided by the platform's cost multiplier, so cheaper
-channels buy more impressions. Per-platform personas scale cost per impression,
-click-through and a purchase strength `m` that lifts only the late funnel
-(checkout given cart `min(0.9, 0.625·√m)`, purchase given checkout
-`min(0.9, 0.48·m)`). Sessions, returning devices and attribution share one
-campaign draw. All choices remain deterministic for a seed.
+and click, so impressions and spend on heavy join days can exceed the day's
+impression count. Story traffic follows a Vietnam-time (UTC+7) retail calendar:
+each UTC day's impression count is `impressions_per_day` scaled by its summed
+hourly weights, each the weight of the Vietnam hour times the multiplier of that
+hour's Vietnam date (weekend ×1.15, double days such as 11/11 ×1.8, Black Friday
+×1.6, the ten days before Tết ×1.4, Tết eve to the fourth day ×0.5), and every
+session's time, overflow sessions included, is drawn from those hourly weights
+and ends before the 23:59:59 daily reports, so a day's records never cross UTC
+midnight. On double days Shopee's spend share doubles and its purchase strength
+rises ×1.5. `flat` keeps a fixed count and evenly spaced sessions. A shortened
+run (`resolve_config(days=N)`, used by tests) is the first N days of the full
+story: join dates and campaign flights keep the full profile's length. Story
+campaigns span Google, Meta, TikTok and Shopee: spend splits by platform
+(30/28/24/18) and, within a platform, by objective (conversions 1.3, traffic
+1.0, awareness 0.7); each impression's campaign is drawn by that spend share
+divided by the platform's cost multiplier, so cheaper channels buy more
+impressions. Per-platform personas scale cost per impression, click-through and
+a purchase strength `m` that lifts only the late funnel (checkout given cart
+`min(0.9, 0.625·√m)`, purchase given checkout `min(0.9, 0.48·m)`). In the story
+world the session's device scales `m` too (desktop ×1.15, tablet ×1.0, mobile
+×0.85), for paid and non-paid sessions alike. Sessions, returning devices and
+attribution share one campaign draw. All choices remain deterministic for a
+seed.
+
+Story traffic also has non-paid visits: each UTC day adds a third of its paid
+sessions (overflow included) as organic or direct visits, so they are a quarter
+of the day's non-email sessions, split 60/40 by a stable hash. They take
+customers from the same day picker, use fresh devices, are timed by the same
+hourly weights, convert at purchase strength 0.8 and have no campaign, click,
+bot probe or quality case. Every story web and order payload carries
+`traffic_source` (`paid`, `organic` or `direct`; `email` is reserved for
+email-referred visits); `flat` never emits it. A non-paid order credits the
+same customer's latest non-bot paid click in the previous 7 days up to the
+purchase, campaign aggregate and vendor conversions included, and is otherwise
+unattributed. Only the order events (`order_created`, `order_refunded`) carry
+that credited click: the session's web events, its `purchase` included, stay
+campaign-free, so funnels that bucket web events by their own `campaign_id`
+count the whole non-paid session as unattributed and never show a campaign
+purchase without its checkout. The web and order contracts therefore stay `v1`
+but widen `campaign_id`, `platform_campaign_id` and `click_id` (and the order
+payload's `attributed_platform`/`attributed_campaign_id`) to nullable strings,
+and both constrain the optional payload `traffic_source` to `paid`, `organic`,
+`direct` or `email`; the Flink parser accepts null campaign fields only when the
+payload's `traffic_source` is organic, direct or email, and campaign metrics
+skip events without a campaign key.
 
 Mock source data is not application operational data. User accounts, saved segments,
 alert rules, annotations, and platform configuration created through the future

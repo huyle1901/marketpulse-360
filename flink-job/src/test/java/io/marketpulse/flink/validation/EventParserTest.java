@@ -67,6 +67,101 @@ class EventParserTest {
     }
 
     @Test
+    void acceptsNonPaidWebEventsWithoutCampaign() throws Exception {
+        for (String trafficSource : new String[] {"organic", "direct", "email"}) {
+            ObjectNode value = withoutCampaign((ObjectNode) MAPPER.readTree(resource("web.json")));
+            ((ObjectNode) value.get("payload")).put("traffic_source", trafficSource);
+
+            var result = parser.parse(
+                    rawBytes("marketing.raw.web-events.v1", MAPPER.writeValueAsBytes(value)), DETECTED_AT);
+
+            assertTrue(result.valid(), trafficSource);
+            assertNull(result.event().campaignId());
+            assertNull(result.event().clickId());
+            assertNull(result.event().campaignKey());
+        }
+    }
+
+    @Test
+    void acceptsNonPaidWebPurchaseWithoutCampaign() throws Exception {
+        // The order carries the credited click; the session's purchase does not.
+        ObjectNode value = withoutCampaign((ObjectNode) MAPPER.readTree(resource("web.json")));
+        value.put("event_name", "purchase");
+        ObjectNode payload = (ObjectNode) value.get("payload");
+        payload.put("order_id", "d2127506-099e-5a21-99ee-90646e812316");
+        payload.put("amount_minor", 1958000);
+        payload.put("currency", "VND");
+        payload.put("traffic_source", "organic");
+
+        var result = parser.parse(
+                rawBytes("marketing.raw.web-events.v1", MAPPER.writeValueAsBytes(value)), DETECTED_AT);
+
+        assertTrue(result.valid());
+        assertEquals("purchase", result.event().eventName());
+        assertNull(result.event().campaignId());
+        assertNull(result.event().clickId());
+        assertNull(result.event().campaignKey());
+    }
+
+    @Test
+    void rejectsPaidOrUnlabelledWebEventsWithoutCampaign() throws Exception {
+        assertMutation("web.json", node -> {
+            withoutCampaign(node);
+            ((ObjectNode) node.get("payload")).put("traffic_source", "paid");
+        }, "INVALID_PAYLOAD");
+        assertMutation("web.json", EventParserTest::withoutCampaign, "INVALID_PAYLOAD");
+        assertMutation("web.json", node -> {
+            node.put("campaign_id", " ");
+            ((ObjectNode) node.get("payload")).put("traffic_source", "paid");
+        }, "INVALID_PAYLOAD");
+        assertMutation("web.json", node -> {
+            withoutCampaign(node);
+            ((ObjectNode) node.get("payload")).put("traffic_source", "social");
+        }, "INVALID_PAYLOAD");
+    }
+
+    @Test
+    void acceptsUnattributedNonPaidOrders() throws Exception {
+        ObjectNode value = withoutCampaign((ObjectNode) MAPPER.readTree(resource("order.json")));
+        ObjectNode payload = (ObjectNode) value.get("payload");
+        payload.put("traffic_source", "organic");
+        payload.putNull("attributed_platform");
+        payload.putNull("attributed_campaign_id");
+
+        var result = parser.parse(
+                rawBytes("marketing.raw.order-events.v1", MAPPER.writeValueAsBytes(value)), DETECTED_AT);
+
+        assertTrue(result.valid());
+        assertNull(result.event().campaignId());
+        assertTrue(result.event().payload().get("attributed_campaign_id").isNull());
+    }
+
+    @Test
+    void rejectsPaidOrdersWithoutAttribution() throws Exception {
+        assertMutation("order.json", node -> {
+            ObjectNode payload = (ObjectNode) node.get("payload");
+            payload.put("traffic_source", "paid");
+            payload.putNull("attributed_campaign_id");
+        }, "INVALID_PAYLOAD", "marketing.raw.order-events.v1");
+        assertMutation("order.json", node -> {
+            withoutCampaign(node);
+            ((ObjectNode) node.get("payload")).put("traffic_source", "paid");
+        }, "INVALID_PAYLOAD", "marketing.raw.order-events.v1");
+        assertMutation("order.json", node -> {
+            ObjectNode payload = (ObjectNode) node.get("payload");
+            payload.put("traffic_source", "direct");
+            payload.put("attributed_platform", 7);
+        }, "INVALID_PAYLOAD", "marketing.raw.order-events.v1");
+    }
+
+    private static ObjectNode withoutCampaign(ObjectNode node) {
+        node.putNull("campaign_id");
+        node.putNull("platform_campaign_id");
+        node.putNull("click_id");
+        return node;
+    }
+
+    @Test
     void invalidRawBytesProduceDeterministicDlqOutputWithoutAssumingUtf8() {
         byte[] bytes = {(byte) 0xff, (byte) 0xfe};
         var first = parser.parse(rawBytes("marketing.raw.web-events.v1", bytes), DETECTED_AT).invalid();
