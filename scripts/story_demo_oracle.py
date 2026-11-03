@@ -17,6 +17,7 @@ import argparse
 import csv
 import gzip
 import json
+import os
 from collections import defaultdict
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field, fields
@@ -153,6 +154,31 @@ def _month(timestamp: str) -> str:
 def ground_truth_totals(root: Path, *, through: date | None = None) -> Totals:
     """Raw totals from the generator files, days ``<= through`` when given."""
 
+    return _file_totals(root, through, consented_only=False)
+
+
+def governed_totals(root: Path, *, through: date | None = None) -> Totals:
+    """Totals under the release's governance, computed from the files alone.
+
+    Silver drops events whose ``consent_analytics`` is false (CONSENT_DENIED); bot
+    exclusion applies to web/app events only and late events stay eligible, so for
+    commerce the governed orders are exactly the consented ones.
+    """
+
+    return _file_totals(root, through, consented_only=True)
+
+
+def consent_denied_orders(root: Path, *, through: date | None = None) -> int:
+    """Distinct orders whose order event withholds analytics consent."""
+
+    denied: set[str] = set()
+    for event in _unique_events(root, "orders", through):
+        if event["event_name"] == "order_created" and event["consent_analytics"] is not True:
+            denied.add(event["payload"]["order_id"])
+    return len(denied)
+
+
+def _file_totals(root: Path, through: date | None, *, consented_only: bool) -> Totals:
     impressions: Measure = defaultdict(int)
     clicks: Measure = defaultdict(int)
     spend: Measure = defaultdict(int)
@@ -172,6 +198,8 @@ def ground_truth_totals(root: Path, *, through: date | None = None) -> Totals:
     created: set[str] = set()
     refunded: set[str] = set()
     for event in _unique_events(root, "orders", through):
+        if consented_only and event["consent_analytics"] is not True:
+            continue
         payload = event["payload"]
         order_id = payload["order_id"]
         month = (_month(event["event_time"]),)
@@ -269,25 +297,31 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--clickhouse", required=True, help="host:port of the ClickHouse HTTP port")
-    parser.add_argument("--database", help="certified release database (default: newest release)")
+    parser.add_argument("--database", help="certified release database (default: the active publication)")
     parser.add_argument("--through", type=date.fromisoformat, required=True)
-    parser.add_argument("--user", default="default")
+    parser.add_argument("--user", default="marketpulse")
     parser.add_argument("--password-file", type=Path)
     args = parser.parse_args()
 
     import clickhouse_connect
 
     host, port = args.clickhouse.rsplit(":", 1)
-    password = args.password_file.read_text().strip() if args.password_file else ""
+    # The password comes from a file or the environment, never the command line.
+    password = args.password_file.read_text().strip() if args.password_file else os.environ.get("CLICKHOUSE_PASSWORD", "")
     client = clickhouse_connect.get_client(host=host, port=int(port), username=args.user, password=password)
-    database = args.database or client.query(
-        "SELECT name FROM system.databases WHERE name LIKE 'marketpulse_release_%' "
-        "ORDER BY name DESC LIMIT 1"
-    ).result_rows[0][0]
+    if args.database:
+        database = args.database
+    else:
+        from marketpulse_batch.publication import resolve_active
+
+        database = resolve_active(client).database
 
     truth = ground_truth_totals(args.root, through=args.through)
+    governed = governed_totals(args.root, through=args.through)
     certified = certified_totals(client, database)
-    checks = compare(truth, certified)
+    denied = consent_denied_orders(args.root, through=args.through)
+    reason = f"CONSENT_DENIED: {denied:,} orders without analytics consent are not certified"
+    checks = compare(truth, certified, governed=governed, reasons=dict.fromkeys(GOVERNED, reason))
     print(f"Release database: {database}\n")
     print(markdown(checks))
     missing = uncompared(truth, certified)

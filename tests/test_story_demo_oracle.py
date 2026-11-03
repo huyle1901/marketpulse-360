@@ -132,5 +132,18 @@ class GroundTruthTests(unittest.TestCase):
         self.assertLess(sum(first_day.orders.values()), sum(full.orders.values()))
 
 
+    def test_governed_totals_drop_only_consent_denied_orders(self) -> None:
+        root = ROOT / "data" / "mock" / "fixtures" / "seed-360"
+        raw = oracle.ground_truth_totals(root)
+        governed = oracle.governed_totals(root)
+        denied = oracle.consent_denied_orders(root)
+
+        self.assertGreater(denied, 0)
+        self.assertEqual(sum(raw.orders.values()) - denied, sum(governed.orders.values()))
+        self.assertLess(sum(governed.gross_minor.values()), sum(raw.gross_minor.values()))
+        self.assertEqual(sum(governed.gross_minor.values()), sum(governed.city_gross_minor.values()))
+        # Ungoverned measures are the generator's ground truth either way.
+        self.assertEqual(raw.spend_minor, governed.spend_minor)
+
 if __name__ == "__main__":
     unittest.main()
