@@ -90,10 +90,14 @@ class _DailyCampaignAggregate:
         )
 
 
+ATTRIBUTION_WINDOW_DAYS = 7
+"""Days a paid click stays creditable to a later purchase."""
+
+
 def last_paid_touch(
     touches: tuple[PaidTouch, ...] | list[PaidTouch],
     purchase_time: datetime,
-    window_days: int = 7,
+    window_days: int = ATTRIBUTION_WINDOW_DAYS,
 ) -> PaidTouch | None:
     """Return the latest non-future paid click within the attribution window."""
 
@@ -301,10 +305,7 @@ def iter_day_records(
                 ),
                 "device_type": device,
                 "market": "VN",
-                "is_bot": paid
-                and _is_scheduled(
-                    click_index, config.anomalies.bot_session, forced_index=0
-                ),
+                "is_bot": paid and _is_bot_click(config, click_index),
             },
         )
         enqueue(page_view)
@@ -931,10 +932,6 @@ NON_PAID_STRENGTH = 0.8
 ORGANIC_PERCENT = 60
 """Share (percent) of non-paid visits that are organic; the rest are direct."""
 
-ATTRIBUTION_WINDOW_DAYS = 7
-"""Days a paid click stays creditable (``last_paid_touch``'s default window)."""
-
-
 def _non_paid_count(paid_sessions: int) -> int:
     """Return a day's organic plus direct visits: a quarter of all its sessions.
 
@@ -960,8 +957,9 @@ class _PaidDay:
 
     ``campaigns`` maps every impression and overflow ordinal to its campaign;
     ``session_ordinals`` are the clicked impressions plus overflow sessions;
-    ``touches`` maps a customer id to that customer's paid sessions as
-    ``(time, ordinal)``, sorted like ``timeline``.
+    ``touches`` maps a customer id to that customer's creditable paid
+    sessions as ``(time, ordinal)``, sorted like ``timeline``: bot sessions
+    are left out, as Gold skips them when it credits orders.
     """
 
     picker: CustomerPicker
@@ -1011,8 +1009,11 @@ def _paid_day(
     session_ordinals = frozenset((*clicked, *picker.overflow_ordinals))
     timeline = _session_timeline(config, day_index, picker)
     touches: dict[str, list[tuple[datetime, int]]] = {}
-    for entry in timeline:
-        if entry[1] not in session_ordinals:
+    paid_entries = (entry for entry in timeline if entry[1] in session_ordinals)
+    # The emitter numbers paid sessions in timeline order; that click index
+    # decides which sessions are bots.
+    for click_index, entry in enumerate(paid_entries):
+        if _is_bot_click(config, click_index):
             continue
         customer = picker.pick(day_index, entry[1])
         if customer is not None:
@@ -1041,7 +1042,7 @@ def _non_paid_purchase_touch(
     """Return the customer's latest paid click in the window, or None.
 
     A non-paid visit has no click of its own, so its order credits the same
-    customer's latest paid click at or before ``purchase_time`` within
+    customer's latest non-bot paid click at or before ``purchase_time`` within
     ``ATTRIBUTION_WINDOW_DAYS`` (the same day included). Clicks in the same
     second resolve to the lowest ordinal. Anonymous visits are unattributed.
     """
@@ -1505,6 +1506,12 @@ def _click_id(
     }[platform]
     value = stable_id(seed, f"click-{day_index}", impression_ordinal).replace("-", "")
     return f"{prefix}-{value}"
+
+
+def _is_bot_click(config: GenerationConfig, click_index: int) -> bool:
+    """Return whether the day's ``click_index``-th paid session is a bot."""
+
+    return _is_scheduled(click_index, config.anomalies.bot_session, forced_index=0)
 
 
 def _is_scheduled(index: int, rate: float, forced_index: int) -> bool:

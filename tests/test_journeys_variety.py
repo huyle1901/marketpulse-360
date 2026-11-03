@@ -123,11 +123,13 @@ def _assert_attribution_matches_sessions(
     """Check every order against the generated paid clicks; return overlap count.
 
     Paid orders and non-paid orders alike credit the customer's latest paid
-    click in the 7 days up to the purchase; a non-paid order with no such
-    click (or no customer) is unattributed.
+    click in the 7 days up to the purchase (a non-paid order skips bot
+    sessions' clicks); a non-paid order with no such click (or no customer)
+    is unattributed.
     """
 
     clicks: dict[str, list[tuple[datetime, str, str]]] = defaultdict(list)
+    bot_clicks: set[str] = set()
     own_click: dict[str, object] = {}
     session_source: dict[str, object] = {}
     for r in _page_views(records):
@@ -137,6 +139,8 @@ def _assert_attribution_matches_sessions(
         customer_id = _customer_id(r)
         if customer_id is None or r.payload["click_id"] is None:
             continue
+        if r.payload["payload"]["is_bot"]:
+            bot_clicks.add(str(r.payload["click_id"]))
         clicks[customer_id].append(
             (r.event_time, str(r.payload["campaign_id"]), str(r.payload["click_id"]))
         )
@@ -167,6 +171,8 @@ def _assert_attribution_matches_sessions(
             bisect_left(customer_clicks, (purchase_time - timedelta(days=7),)):
             bisect_right(customer_clicks, (purchase_time, "\uffff"))
         ]
+        if not paid:
+            eligible = [click for click in eligible if click[2] not in bot_clicks]
         if not paid and not eligible:
             test.assertIsNone(r.payload["campaign_id"], r.payload)
             test.assertIsNone(r.payload["click_id"], r.payload)
@@ -1171,6 +1177,9 @@ class StoryNonPaidTrafficTests(unittest.TestCase):
             )
         self.assertGreater(purchases, 1_000)
 
+    def test_non_paid_orders_never_credit_a_bot_click(self) -> None:
+        self.assertGreater(_assert_no_order_credits_a_bot_click(self, self.records), 0)
+
     def test_ground_truth_counts_paid_sessions_and_attributed_orders(self) -> None:
         truth: dict[tuple[str, str], list[int]] = defaultdict(lambda: [0, 0, 0, 0])
         for r in self.records:
@@ -1292,6 +1301,59 @@ class StoryNonPaidTrafficTests(unittest.TestCase):
         for r in web_and_orders:
             self.assertNotIn("traffic_source", r.payload["payload"])
             self.assertIsNotNone(r.payload["click_id"])
+
+
+def _assert_no_order_credits_a_bot_click(
+    test: unittest.TestCase, records: list[SourceRecord]
+) -> int:
+    """Check no non-paid order credits a bot session's click; return credited count.
+
+    Gold ``_unique_touches`` skips bot sessions, so the generator's credit
+    must skip them too.
+    """
+
+    starts = _session_starts(records)
+    bot_clicks = {
+        str(r.payload["click_id"])
+        for r in _page_views(records)
+        if r.payload["payload"]["is_bot"]
+    }
+    credited = 0
+    for r in records:
+        if r.dataset != "orders" or r.payload["event_name"] != "order_created":
+            continue
+        if _traffic_source(starts[str(r.payload["session_id"])]) == "paid":
+            continue
+        click_id = r.payload["click_id"]
+        if click_id is None:
+            continue
+        credited += 1
+        test.assertNotIn(click_id, bot_clicks, r.payload)
+    return credited
+
+
+class StoryBotTouchTests(unittest.TestCase):
+    """Non-paid orders never credit a bot session's click."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from dataclasses import replace
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config = resolve_config("story-demo", 360, Path(tmp), days=14)
+        # Frequent bots make a bot click the latest touch of some customer.
+        cls.config = replace(config, anomalies=replace(config.anomalies, bot_session=0.25))
+        _, cls.records = _generate_window(cls.config)
+
+    def test_non_paid_orders_skip_bot_clicks(self) -> None:
+        bot_sessions = sum(
+            1 for r in _session_starts(self.records).values() if r.payload["payload"]["is_bot"]
+        )
+        self.assertGreater(bot_sessions, 100)
+        self.assertGreater(_assert_no_order_credits_a_bot_click(self, self.records), 0)
+
+    def test_non_paid_orders_credit_the_latest_non_bot_click(self) -> None:
+        _assert_attribution_matches_sessions(self, self.records)
 
 
 class StoryDeviceConversionTests(unittest.TestCase):

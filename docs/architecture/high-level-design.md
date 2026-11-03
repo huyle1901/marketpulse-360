@@ -225,7 +225,7 @@ hourly weights, convert at purchase strength 0.8 and have no campaign, click,
 bot probe or quality case. Every story web and order payload carries
 `traffic_source` (`paid`, `organic` or `direct`; `email` is reserved for
 email-referred visits); `flat` never emits it. A non-paid order credits the
-same customer's latest paid click in the previous 7 days up to the
+same customer's latest non-bot paid click in the previous 7 days up to the
 purchase, campaign aggregate and vendor conversions included, and is otherwise
 unattributed. Only the order events (`order_created`, `order_refunded`) carry
 that credited click: the session's web events, its `purchase` included, stay
