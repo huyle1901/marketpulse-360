@@ -74,7 +74,10 @@
   --input: #d5dce6;
   --ring: #533afd;
   --shadow-card: none;
-  /* Channel order validated on #ffffff: Google, Meta, TikTok, unattributed, brand. */
+  /* Channel colours follow the channel; Google, Meta, TikTok, Shopee and unattributed validated together
+     (--pairs all) on the light card #ffffff. The four hues pass every check (worst CVD 9.7, normal 16.3).
+     Unattributed grey is intentionally neutral: below the chroma floor and 2.56:1 on #ffffff (relief: it is always labelled). */
+  --channel-google: #2a78d6; --channel-meta: #e8622c; --channel-tiktok: #17a06f; --channel-shopee: #b8348a; --channel-unattributed: #94a3b8;
   --chart-1: #2a78d6;
   --chart-2: #eb6834;
   --chart-3: #1baf7a;
@@ -119,7 +122,10 @@
   --border: #1e2c44;
   --input: #2a3a55;
   --ring: #7c6cff;
-  /* Channel order validated on #111d31 (lightness band, chroma, CVD, contrast). */
+  /* Channel colours validated together (--pairs all) on the dark card #111d31. The four hues pass; worst CVD
+     pair is 7.6 (WARN band, deutan Shopee-vs-TikTok), normal-vision floor 18.4. Unattributed grey #5c6c6c is
+     3.07:1 on #111d31 (was #5b6678 at 2.91:1); it stays below the chroma floor by design, as a neutral. */
+  --channel-google: #3b82f6; --channel-meta: #c9480c; --channel-tiktok: #26ad84; --channel-shopee: #d04aa5; --channel-unattributed: #5c6c6c;
   --chart-1: #3b82f6;
   --chart-2: #e8590c;
   --chart-3: #0f9f7a;

@@ -42,6 +42,20 @@ class ApiBoundaryTests(unittest.TestCase):
         self.assertEqual(self.client(unavailable=True).put('/api/v1/campaign-settings/a',json=self.body()).json()['code'],'no_published_release')
         self.assertEqual(self.client().put('/api/v1/campaign-settings/a',json=self.body()|{'currency':'USD'}).status_code,422)
 
+    def test_shopee_filter_on_three_platform_release_is_empty_not_an_error(self):
+        store = SimpleNamespace(settings=lambda: [], rules=lambda: [], alerts=lambda: [])
+        class Session:
+            def pin(self):
+                return self
+            def dashboard(self, filters, settings):
+                known = {'google', 'meta', 'tiktok'}
+                return {'rows': [] if filters.platform not in known else [{'platform': filters.platform}]}
+        client = TestClient(create_app(Session(), store, access=TrustedTestAccess()))
+        query = '?from_date=2026-01-01&to_date=2026-01-03&platform='
+        shopee = client.get('/api/v1/dashboard' + query + 'shopee')
+        self.assertEqual((shopee.status_code, shopee.json()['rows']), (200, []))
+        self.assertEqual(client.get('/api/v1/dashboard' + query + 'lazada').status_code, 422)
+
     def test_malformed_rule_threshold_is_input_error(self):
         response=self.client().post('/api/v1/alert-rules',json={'campaign_id':'a','kind':'refund_share','threshold':'abc'})
         self.assertEqual(response.status_code,422)

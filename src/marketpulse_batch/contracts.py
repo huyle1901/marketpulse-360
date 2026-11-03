@@ -8,7 +8,18 @@ from dataclasses import dataclass
 from datetime import date
 from types import MappingProxyType
 
-REPORT_PLATFORMS = ("google_ads", "meta_ads", "tiktok_ads")
+REPORT_PLATFORMS = ("google_ads", "meta_ads", "tiktok_ads", "shopee_ads")
+DEFAULT_REQUIRED_PLATFORMS = ("google_ads", "meta_ads", "tiktok_ads")
+
+
+def parse_required_platforms(value: str | None) -> tuple[str, ...]:
+    """Parse BATCH_REQUIRED_PLATFORMS; unset or blank means the default stack."""
+    if value is None or not value.strip():
+        return DEFAULT_REQUIRED_PLATFORMS
+    platforms = tuple(part.strip() for part in value.split(","))
+    if any(p not in REPORT_PLATFORMS for p in platforms) or len(platforms) != len(set(platforms)):
+        raise ValueError("BATCH_REQUIRED_PLATFORMS must list distinct supported platforms")
+    return platforms
 
 
 def validate_digest(value: str, name: str) -> None:
@@ -36,7 +47,7 @@ def snapshot_map(value: Mapping[str, int], layer: str) -> Mapping[str, int]:
 @dataclass(frozen=True, slots=True)
 class BatchSelection:
     logical_day: date
-    required_platforms: tuple[str, ...] = REPORT_PLATFORMS
+    required_platforms: tuple[str, ...] = DEFAULT_REQUIRED_PLATFORMS
 
     def __post_init__(self) -> None:
         if type(self.logical_day) is not date:
@@ -57,7 +68,7 @@ class PreparationReceipt:
     output_snapshots: Mapping[str, int]
     namespace: str
     proof_digest: str
-    required_platforms: tuple[str, ...] = REPORT_PLATFORMS
+    required_platforms: tuple[str, ...] = DEFAULT_REQUIRED_PLATFORMS
 
     def __post_init__(self) -> None:
         for name in ("identity", "model_digest", "proof_digest"):

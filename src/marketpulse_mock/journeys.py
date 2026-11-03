@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import heapq
+import math
+from bisect import bisect_right
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Iterator
 
-from .config import GenerationConfig
+from .config import GenerationConfig, Scenario
 from .customer_picker import CustomerPicker, is_identified
 from .ids import stable_id, stable_int
 from .models import Campaign, Customer, MasterData, Product
@@ -162,15 +164,11 @@ def iter_day_records(
     picker = _customer_picker(config, masters, day_index)
 
     def record_impression(impression_ordinal: int) -> Campaign:
-        campaign = _impression_campaign(masters, impression_ordinal)
+        campaign = _pick_campaign(config, masters, day_index, impression_ordinal)
         aggregate = aggregates[campaign.campaign_id]
         aggregate.impressions += 1
-        aggregate.spend_minor += 100 + stable_int(
-            config.seed,
-            "impression-cost",
-            day_index,
-            impression_ordinal,
-            modulo=901,
+        aggregate.spend_minor += _impression_cost(
+            config, campaign, day_index, impression_ordinal
         )
         return campaign
 
@@ -264,7 +262,10 @@ def iter_day_records(
         )
         if click_index == 0:
             funnel_score = 0
-        if funnel_score < 850:
+        reaches_view, reaches_cart, reaches_checkout, purchase = _funnel_steps(
+            config, campaign, funnel_score, _persona(config, campaign)[2]
+        )
+        if reaches_view:
             view_item = _event_record(
                 config=config,
                 ordinal=event_ordinal + 2,
@@ -281,7 +282,7 @@ def iter_day_records(
             )
             enqueue(view_item)
 
-        if funnel_score < 400:
+        if reaches_cart:
             add_to_cart = _event_record(
                 config=config,
                 ordinal=event_ordinal + 3,
@@ -298,7 +299,7 @@ def iter_day_records(
             )
             enqueue(add_to_cart)
 
-        if funnel_score < 250:
+        if reaches_checkout:
             checkout = _event_record(
                 config=config,
                 ordinal=event_ordinal + 4,
@@ -315,7 +316,6 @@ def iter_day_records(
             )
             enqueue(checkout)
 
-        purchase = funnel_score < 120
         if purchase:
             purchase_time = event_time + timedelta(seconds=60)
             attributed_touch = _latest_purchase_touch(
@@ -789,6 +789,16 @@ def _vendor_report_payload(
                 }
             ],
         }
+    if campaign.platform == "shopee":
+        return {
+            "date": f"{truth.day:%d/%m/%Y}",
+            "ad_id": campaign.platform_campaign_id,
+            "impression": truth.impressions,
+            "clicks": truth.clicks,
+            "expense": truth.spend_minor,
+            "conversions": truth.orders,
+            "gmv": truth.gross_revenue_minor,
+        }
     return {
         "stat_time_day": day,
         **common,
@@ -827,7 +837,7 @@ def _latest_purchase_touch(
         )
         if candidate_time > purchase_time:
             break
-        campaign = _impression_campaign(masters, candidate_ordinal)
+        campaign = _pick_campaign(config, masters, day_index, candidate_ordinal)
         if not _is_clicked(config, campaign, day_index, candidate_ordinal):
             continue
         candidate_customer = picker.pick(day_index, candidate_ordinal)
@@ -860,7 +870,10 @@ def _customer_picker(
         ordinal
         for ordinal in range(config.profile.impressions_per_day)
         if _is_clicked(
-            config, _impression_campaign(masters, ordinal), day_index, ordinal
+            config,
+            _pick_campaign(config, masters, day_index, ordinal),
+            day_index,
+            ordinal,
         )
     )
     return CustomerPicker.for_day(
@@ -890,7 +903,7 @@ def _is_fresh_anonymous_session(
 
     return _is_clicked(
         config,
-        _impression_campaign(masters, impression_ordinal),
+        _pick_campaign(config, masters, day_index, impression_ordinal),
         day_index,
         impression_ordinal,
     ) and not is_identified(config, day_index, impression_ordinal)
@@ -968,10 +981,175 @@ def _anonymous_id(
     return _fresh_anonymous_id(config, day_index, impression_ordinal)
 
 
-def _impression_campaign(masters: MasterData, impression_ordinal: int) -> Campaign:
-    """Return the paid campaign serving an impression (round-robin allocation)."""
+NEUTRAL_PERSONA = (1.0, 1.0, 1.0)
+"""``(cost, ctr, strength)`` multipliers of a platform without a persona."""
 
-    return masters.campaigns[impression_ordinal % len(masters.campaigns)]
+CAMPAIGN_WEIGHT_RESOLUTION = 1_000_000
+"""Total integer weight the impression draw splits between campaigns."""
+
+_CAMPAIGN_WEIGHT_CACHE: dict[
+    tuple[str, tuple[Campaign, ...], float], tuple[tuple[int, ...], int]
+] = {}
+_CAMPAIGN_WEIGHT_CACHE_SIZE = 64
+
+
+def _is_weighted(scenario: Scenario) -> bool:
+    """Return whether impressions follow spend weights instead of round-robin."""
+
+    return not (
+        scenario.platform_spend_share is None
+        and scenario.objective_spend_weight is None
+        and scenario.personas is None
+    )
+
+
+def _persona(
+    config: GenerationConfig, campaign: Campaign
+) -> tuple[float, float, float]:
+    """Return the ``(cost, ctr, strength)`` multipliers of a campaign's platform."""
+
+    personas = config.scenario.personas
+    return NEUTRAL_PERSONA if personas is None else personas[campaign.platform]
+
+
+def _campaign_cumulative_weights(
+    config: GenerationConfig,
+    campaigns: tuple[Campaign, ...],
+    shopee_boost: float,
+) -> tuple[tuple[int, ...], int]:
+    """Return cumulative integer impression weights and their total (cached).
+
+    A platform's spend share (Shopee's times ``shopee_boost``) is split between
+    its campaigns by objective weight; dividing by the platform's cost
+    multiplier turns that spend into impressions, so spend follows the shares.
+    """
+
+    scenario = config.scenario
+    key = (scenario.name, campaigns, shopee_boost)
+    cached = _CAMPAIGN_WEIGHT_CACHE.get(key)
+    if cached is not None:
+        return cached
+    objective_weights = scenario.objective_spend_weight or {}
+
+    def objective_weight(campaign: Campaign) -> float:
+        return objective_weights.get(campaign.objective, 1.0)
+
+    platform_objective_totals: dict[str, float] = {}
+    for campaign in campaigns:
+        platform_objective_totals[campaign.platform] = platform_objective_totals.get(
+            campaign.platform, 0.0
+        ) + objective_weight(campaign)
+    spend_shares = scenario.platform_spend_share
+    raw: list[float] = []
+    for campaign in campaigns:
+        platform_share = (
+            1.0 if spend_shares is None else float(spend_shares[campaign.platform])
+        )
+        if campaign.platform == "shopee":
+            platform_share *= shopee_boost
+        spend = (
+            platform_share
+            * objective_weight(campaign)
+            / platform_objective_totals[campaign.platform]
+        )
+        raw.append(spend / _persona(config, campaign)[0])
+    scale = CAMPAIGN_WEIGHT_RESOLUTION / sum(raw)
+    cumulative: list[int] = []
+    running = 0
+    for weight in raw:
+        running += max(1, round(weight * scale))
+        cumulative.append(running)
+    result = (tuple(cumulative), running)
+    if len(_CAMPAIGN_WEIGHT_CACHE) >= _CAMPAIGN_WEIGHT_CACHE_SIZE:
+        _CAMPAIGN_WEIGHT_CACHE.clear()
+    _CAMPAIGN_WEIGHT_CACHE[key] = result
+    return result
+
+
+def _pick_campaign(
+    config: GenerationConfig,
+    masters: MasterData,
+    day_index: int,
+    impression_ordinal: int,
+    shopee_boost: float = 1.0,
+) -> Campaign:
+    """Return the paid campaign serving an impression.
+
+    ``flat`` keeps the legacy round-robin allocation. A weighted scenario draws
+    the campaign from spend weights (see ``_campaign_cumulative_weights``).
+    Every caller deciding sessions, devices or attribution must use this so
+    they agree on which campaign served an impression.
+    """
+
+    campaigns = masters.campaigns
+    if not _is_weighted(config.scenario):
+        return campaigns[impression_ordinal % len(campaigns)]
+    cumulative, total = _campaign_cumulative_weights(config, campaigns, shopee_boost)
+    draw = stable_int(
+        config.seed,
+        "impression-campaign",
+        day_index,
+        impression_ordinal,
+        modulo=total,
+    )
+    return campaigns[bisect_right(cumulative, draw)]
+
+
+def _impression_cost(
+    config: GenerationConfig,
+    campaign: Campaign,
+    day_index: int,
+    impression_ordinal: int,
+) -> int:
+    """Return one impression's cost: 100-1,000 minor units times the cost persona."""
+
+    base = 100 + stable_int(
+        config.seed,
+        "impression-cost",
+        day_index,
+        impression_ordinal,
+        modulo=901,
+    )
+    if config.scenario.personas is None:
+        return base
+    return round(base * _persona(config, campaign)[0])
+
+
+LEGACY_FUNNEL_CUTOFFS = (850, 400, 250, 120)
+"""Per-1,000 ``funnel_score`` cut-offs for view, cart, checkout, purchase."""
+
+MAX_LATE_FUNNEL_RATE = 0.9
+
+
+def _funnel_steps(
+    config: GenerationConfig,
+    campaign: Campaign,
+    score: int,
+    strength: float,
+) -> tuple[bool, bool, bool, bool]:
+    """Return which of view, cart, checkout and purchase a session reaches.
+
+    ``score`` is the session's 0-999 funnel score. Without personas (``flat``)
+    the legacy cut-offs apply and ``strength`` is ignored. Otherwise view and
+    cart keep their cut-offs while checkout|cart = min(0.9, 0.625 * sqrt(m))
+    and purchase|checkout = min(0.9, 0.48 * m) for ``m = strength``; the
+    stages stay nested because all four compare the same score.
+    """
+
+    view_cutoff, cart_cutoff, checkout_cutoff, purchase_cutoff = (
+        LEGACY_FUNNEL_CUTOFFS
+    )
+    if config.scenario.personas is not None:
+        checkout_rate = min(MAX_LATE_FUNNEL_RATE, 0.625 * math.sqrt(strength))
+        purchase_rate = min(MAX_LATE_FUNNEL_RATE, 0.48 * strength)
+        checkout_cutoff = round(cart_cutoff * checkout_rate)
+        purchase_cutoff = round(cart_cutoff * checkout_rate * purchase_rate)
+    return (
+        score < view_cutoff,
+        score < cart_cutoff,
+        score < checkout_cutoff,
+        score < purchase_cutoff,
+    )
 
 
 def _is_clicked(
@@ -983,7 +1161,7 @@ def _is_clicked(
     click_score = stable_int(
         config.seed, "click", day_index, impression_ordinal, modulo=1_000
     )
-    return click_score < _click_threshold(campaign)
+    return click_score < _click_threshold(config, campaign)
 
 
 def _event_ordinal(
@@ -1020,10 +1198,13 @@ def _select_product(
     return products[index]
 
 
-def _click_threshold(campaign: Campaign) -> int:
-    return {"awareness": 45, "traffic": 90, "conversions": 70}[
-        campaign.objective
-    ]
+def _click_threshold(config: GenerationConfig, campaign: Campaign) -> int:
+    """Return the per-1,000 click cut-off: objective base times the CTR persona."""
+
+    base = {"awareness": 45, "traffic": 90, "conversions": 70}[campaign.objective]
+    if config.scenario.personas is None:
+        return base
+    return min(999, round(base * _persona(config, campaign)[1]))
 
 
 def _click_id(
@@ -1032,9 +1213,12 @@ def _click_id(
     day_index: int,
     impression_ordinal: int,
 ) -> str:
-    prefix = {"google": "gclid", "meta": "fbclid", "tiktok": "ttclid"}[
-        platform
-    ]
+    prefix = {
+        "google": "gclid",
+        "meta": "fbclid",
+        "tiktok": "ttclid",
+        "shopee": "shpclid",
+    }[platform]
     value = stable_id(seed, f"click-{day_index}", impression_ordinal).replace("-", "")
     return f"{prefix}-{value}"
 

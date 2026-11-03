@@ -39,6 +39,10 @@ def code(value: str | None, length: int) -> None:
         raise ValueError("invalid currency/market code")
 
 
+# Single source of truth for platform filters; dbt accepted_domains.sql lists the same set.
+PLATFORMS = frozenset({"google", "meta", "tiktok", "shopee"})
+
+
 @dataclass(frozen=True, slots=True)
 class DashboardFilter:
     from_date: date
@@ -51,7 +55,7 @@ class DashboardFilter:
 
     def __post_init__(self) -> None:
         read_interval(self.from_date, self.to_date)
-        if self.platform is not None and self.platform not in {"google", "meta", "tiktok"}:
+        if self.platform is not None and self.platform not in PLATFORMS:
             raise ValueError("unsupported platform")
         if self.objective is not None and self.objective not in {"awareness", "traffic", "conversions"}:
             raise ValueError("unsupported objective")

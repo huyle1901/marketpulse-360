@@ -18,6 +18,8 @@ from .models import Ad, Campaign, Customer, MasterData, Product
 from .writers import DatasetWriter, FileStat
 
 
+# Datasets only some scenarios emit; flat output must stay byte-identical.
+OPTIONAL_SCHEMA_VERSIONS = {"shopee_ads": 1}
 SCHEMA_VERSIONS = {
     "master/customers": 1,
     "master/products": 1,
@@ -108,7 +110,14 @@ def generate_dataset(
             "timezone": "UTC",
             "anomaly_rates": asdict(config.anomalies),
         },
-        schema_versions=dict(SCHEMA_VERSIONS),
+        schema_versions={
+            **SCHEMA_VERSIONS,
+            **{
+                name: version
+                for name, version in OPTIONAL_SCHEMA_VERSIONS.items()
+                if name in datasets
+            },
+        },
         datasets=datasets,
         anomalies=anomaly_counts,
         totals=totals,

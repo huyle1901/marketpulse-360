@@ -14,6 +14,12 @@ class AppContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 DashboardFilter(date(2026, 1, 1), date(2026, 1, 3), **kwargs)
 
+    def test_shopee_is_accepted_and_unknown_platforms_are_rejected(self):
+        for platform in ("google", "meta", "tiktok", "shopee"):
+            self.assertEqual(platform, DashboardFilter(date(2026, 1, 1), date(2026, 1, 3), platform=platform).platform)
+        with self.assertRaisesRegex(ValueError, "unsupported platform"):
+            DashboardFilter(date(2026, 1, 1), date(2026, 1, 3), platform="lazada")
+
     def test_historical_read_does_not_expand_budget_write_period(self):
         self.assertEqual(date(2025, 1, 1), DashboardFilter(date(2025, 1, 1), date(2026, 9, 1)).from_date)
         with self.assertRaises(ValueError):

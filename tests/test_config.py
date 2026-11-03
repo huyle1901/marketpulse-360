@@ -9,6 +9,7 @@ from pathlib import Path
 from marketpulse_mock.config import (
     DEFAULT_ANOMALY_RATES,
     PROFILES,
+    GenerationConfig,
     ScaleProfile,
     resolve_config,
 )
@@ -21,7 +22,7 @@ class ScaleProfileTests(unittest.TestCase):
             "smoke": (3, 2_000, 12, 200, 10_000, 50_000),
             "demo": (14, 50_000, 30, 1_000, 150_000, 100_000),
             "benchmark": (30, 250_000, 60, 5_000, 1_000_000, 250_000),
-            "story-demo": (638, 3_000, 12, 100, 4_000, 50_000),
+            "story-demo": (638, 3_000, 16, 100, 4_000, 50_000),
         }
 
         actual = {
@@ -55,14 +56,21 @@ class ScaleProfileTests(unittest.TestCase):
             )
 
     def test_campaign_count_must_cover_platforms_evenly(self) -> None:
+        profile = ScaleProfile(
+            name="invalid",
+            days=1,
+            customers=1,
+            campaigns=4,
+            products=1,
+            impressions_per_day=1,
+            rows_per_file=1,
+        )
         with self.assertRaisesRegex(ValueError, "campaigns must be divisible by 3"):
-            ScaleProfile(
-                name="invalid",
-                days=1,
-                customers=1,
-                campaigns=4,
-                products=1,
-                impressions_per_day=1,
+            GenerationConfig(
+                profile=profile,
+                seed=1,
+                output_dir=Path("data/generated/x"),
+                start_date=date(2026, 1, 1),
                 rows_per_file=1,
             )
 

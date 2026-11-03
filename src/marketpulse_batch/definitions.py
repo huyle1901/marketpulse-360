@@ -14,6 +14,7 @@ from dagster import (
 )
 from dagster_dbt import DbtCliResource, DagsterDbtTranslator, dbt_assets
 
+from .contracts import parse_required_platforms
 from .settings import load_settings
 from .resources import run_spark_operation, clickhouse_client
 from .contracts import BatchSelection, PreparationReceipt
@@ -79,7 +80,7 @@ def _rebuild(context):
 
 def _selection(context):
     return BatchSelection(date.fromisoformat(context.partition_key),
-                          tuple(os.environ.get("BATCH_REQUIRED_PLATFORMS", "google_ads,meta_ads,tiktok_ads").split(",")))
+                          parse_required_platforms(os.environ.get("BATCH_REQUIRED_PLATFORMS")))
 
 
 def _source(context, datasets, daily=True):

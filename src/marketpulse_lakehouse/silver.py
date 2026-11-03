@@ -790,6 +790,76 @@ def _action_value(items: object, field: str) -> Decimal:
     return total
 
 
+VENDOR_DATASETS: Mapping[str, str] = {
+    "google_ads": "google",
+    "meta_ads": "meta",
+    "tiktok_ads": "tiktok",
+    "shopee_ads": "shopee",
+}
+
+
+@dataclass(frozen=True)
+class VendorSpend:
+    spend_date: date
+    platform: str
+    platform_campaign_id: str
+    impressions: int
+    clicks: int
+    conversions: int
+    spend_minor: int
+    conversion_value_minor: int
+
+
+def parse_vendor_spend(dataset: str, payload: Mapping[str, object]) -> VendorSpend:
+    """Parse one vendor report row; the only place that knows vendor field names."""
+    platform = VENDOR_DATASETS.get(dataset)
+    if platform is None:
+        raise ValueError(f"unsupported ad spend dataset: {dataset}")
+    if platform == "google":
+        spend_date = date.fromisoformat(str(payload.get("segments_date")))
+        campaign_id = _required_string(payload.get("campaign_id"), "campaign_id")
+        impressions = _integer_text(payload.get("impressions"), "impressions")
+        clicks = _integer_text(payload.get("clicks"), "clicks")
+        conversions = _integer_text(payload.get("conversions"), "conversions")
+        spend_minor = _half_up(payload.get("cost_micros"), "cost_micros", Decimal(1_000_000))
+        value = _half_up(payload.get("conversions_value"), "conversions_value")
+    elif platform == "meta":
+        spend_date = date.fromisoformat(str(payload.get("date_start")))
+        if str(payload.get("date_stop")) != spend_date.isoformat():
+            raise ValueError("Meta report spans multiple dates")
+        campaign_id = _required_string(payload.get("campaign_id"), "campaign_id")
+        impressions = _integer_text(payload.get("impressions"), "impressions")
+        clicks = _integer_text(payload.get("clicks"), "clicks")
+        conversions = _half_up(_action_value(payload.get("actions"), "actions"), "actions")
+        spend_minor = _half_up(payload.get("spend"), "spend")
+        value = _half_up(
+            _action_value(payload.get("action_values"), "action_values"), "action_values"
+        )
+    elif platform == "tiktok":
+        spend_date = date.fromisoformat(str(payload.get("stat_time_day")))
+        campaign_id = _required_string(payload.get("campaign_id"), "campaign_id")
+        impressions = _integer_text(payload.get("impressions"), "impressions")
+        clicks = _integer_text(payload.get("clicks"), "clicks")
+        conversions = _integer_text(payload.get("conversion"), "conversion")
+        spend_minor = _half_up(payload.get("spend"), "spend")
+        value = _half_up(payload.get("total_purchase_value"), "total_purchase_value")
+    else:
+        try:
+            spend_date = datetime.strptime(str(payload.get("date")), "%d/%m/%Y").date()
+        except ValueError as error:
+            raise ValueError("date must be DD/MM/YYYY") from error
+        campaign_id = _required_string(payload.get("ad_id"), "ad_id")
+        impressions = _integer_text(payload.get("impression"), "impression")
+        clicks = _integer_text(payload.get("clicks"), "clicks")
+        conversions = _integer_text(payload.get("conversions"), "conversions")
+        spend_minor = _half_up(payload.get("expense"), "expense")
+        value = _half_up(payload.get("gmv"), "gmv")
+    return VendorSpend(
+        spend_date, platform, campaign_id, impressions, clicks,
+        conversions, spend_minor, value,
+    )
+
+
 def build_ad_spend_daily(
     source_rows: Iterable[Mapping[str, object]],
     campaigns: Sequence[Mapping[str, object]],
@@ -806,49 +876,19 @@ def build_ad_spend_daily(
         if key in mapping:
             raise ValueError(f"duplicate platform_campaign_id: {key[1]}")
         mapping[key] = campaign
-    dataset_platform = {
-        "google_ads": "google",
-        "meta_ads": "meta",
-        "tiktok_ads": "tiktok",
-    }
     output: dict[str, dict[str, object]] = {}
     for source in source_rows:
         dataset = source.get("source_dataset")
-        if dataset not in dataset_platform:
+        if dataset not in VENDOR_DATASETS:
             continue
-        platform = dataset_platform[str(dataset)]
-        payload = _source_payload(source)
-        platform_campaign_id = _required_string(payload.get("campaign_id"), "campaign_id")
+        vendor = parse_vendor_spend(str(dataset), _source_payload(source))
+        platform = vendor.platform
+        platform_campaign_id = vendor.platform_campaign_id
+        spend_date = vendor.spend_date
         campaign = mapping.get((platform, platform_campaign_id))
         if campaign is None:
             raise ValueError(
                 f"ad spend has no campaign mapping: {platform}:{platform_campaign_id}"
-            )
-        if platform == "google":
-            spend_date = date.fromisoformat(str(payload.get("segments_date")))
-            conversions = _integer_text(payload.get("conversions"), "conversions")
-            spend_minor = _half_up(
-                payload.get("cost_micros"), "cost_micros", Decimal(1_000_000)
-            )
-            conversion_value = _half_up(
-                payload.get("conversions_value"), "conversions_value"
-            )
-        elif platform == "meta":
-            spend_date = date.fromisoformat(str(payload.get("date_start")))
-            if str(payload.get("date_stop")) != spend_date.isoformat():
-                raise ValueError("Meta report spans multiple dates")
-            conversions = _half_up(_action_value(payload.get("actions"), "actions"), "actions")
-            spend_minor = _half_up(payload.get("spend"), "spend")
-            conversion_value = _half_up(
-                _action_value(payload.get("action_values"), "action_values"),
-                "action_values",
-            )
-        else:
-            spend_date = date.fromisoformat(str(payload.get("stat_time_day")))
-            conversions = _integer_text(payload.get("conversion"), "conversion")
-            spend_minor = _half_up(payload.get("spend"), "spend")
-            conversion_value = _half_up(
-                payload.get("total_purchase_value"), "total_purchase_value"
             )
         campaign_id = _required_string(campaign.get("campaign_id"), "campaign_id")
         spend_key = _digest([spend_date.isoformat(), campaign_id, platform])
@@ -863,11 +903,11 @@ def build_ad_spend_daily(
             "campaign_id": campaign_id,
             "platform": platform,
             "platform_campaign_id": platform_campaign_id,
-            "impressions": _integer_text(payload.get("impressions"), "impressions"),
-            "clicks": _integer_text(payload.get("clicks"), "clicks"),
-            "conversions": conversions,
-            "spend_minor": spend_minor,
-            "conversion_value_minor": conversion_value,
+            "impressions": vendor.impressions,
+            "clicks": vendor.clicks,
+            "conversions": vendor.conversions,
+            "spend_minor": vendor.spend_minor,
+            "conversion_value_minor": vendor.conversion_value_minor,
             "currency": "VND",
             "source_file": source_file,
             "source_row_number": row_number,
@@ -1411,43 +1451,22 @@ def _build_dimension_frames(spark: Any, source: Any) -> dict[str, Any]:
         dataset = str(value.get("source_dataset"))
         payload = _source_payload(value)
         source_file, row_number = _row_lineage(value)
-        platform = {"google_ads": "google", "meta_ads": "meta", "tiktok_ads": "tiktok"}[dataset]
-        platform_campaign_id = _required_string(payload.get("campaign_id"), "campaign_id")
-        if platform == "google":
-            spend_date = date.fromisoformat(str(payload.get("segments_date")))
-            conversions = _integer_text(payload.get("conversions"), "conversions")
-            spend_minor = _half_up(payload.get("cost_micros"), "cost_micros", Decimal(1_000_000))
-            conversion_value = _half_up(payload.get("conversions_value"), "conversions_value")
-        elif platform == "meta":
-            spend_date = date.fromisoformat(str(payload.get("date_start")))
-            if str(payload.get("date_stop")) != spend_date.isoformat():
-                raise ValueError("Meta report spans multiple dates")
-            conversions = _half_up(_action_value(payload.get("actions"), "actions"), "actions")
-            spend_minor = _half_up(payload.get("spend"), "spend")
-            conversion_value = _half_up(
-                _action_value(payload.get("action_values"), "action_values"),
-                "action_values",
-            )
-        else:
-            spend_date = date.fromisoformat(str(payload.get("stat_time_day")))
-            conversions = _integer_text(payload.get("conversion"), "conversion")
-            spend_minor = _half_up(payload.get("spend"), "spend")
-            conversion_value = _half_up(payload.get("total_purchase_value"), "total_purchase_value")
+        vendor = parse_vendor_spend(dataset, payload)
         return (
-            spend_date,
-            platform,
-            platform_campaign_id,
-            _integer_text(payload.get("impressions"), "impressions"),
-            _integer_text(payload.get("clicks"), "clicks"),
-            conversions,
-            spend_minor,
-            conversion_value,
+            vendor.spend_date,
+            vendor.platform,
+            vendor.platform_campaign_id,
+            vendor.impressions,
+            vendor.clicks,
+            vendor.conversions,
+            vendor.spend_minor,
+            vendor.conversion_value_minor,
             source_file,
             row_number,
         )
 
     spend_raw = spark.createDataFrame(
-        source.filter(F.col("source_dataset").isin("google_ads", "meta_ads", "tiktok_ads"))
+        source.filter(F.col("source_dataset").isin(*VENDOR_DATASETS))
         .rdd.map(parse_spend),
         (
             "spend_date date, platform string, platform_campaign_id string, "

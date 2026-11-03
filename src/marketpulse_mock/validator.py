@@ -28,6 +28,7 @@ EXPECTED_SCHEMA_VERSIONS = {
     "quality_cases": 1,
     "ground_truth": 1,
 }
+OPTIONAL_SCHEMA_VERSIONS = {"shopee_ads": 1}
 EVENT_CONTRACTS = {
     "web_events": (
         {"web", "mobile"},
@@ -98,10 +99,19 @@ def validate_dataset(root: Path) -> ValidationReport:
         )
 
     errors: list[str] = []
-    if manifest.get("schema_versions") != EXPECTED_SCHEMA_VERSIONS:
+    manifest_datasets = manifest.get("datasets")
+    expected_versions = {
+        **EXPECTED_SCHEMA_VERSIONS,
+        **{
+            name: version
+            for name, version in OPTIONAL_SCHEMA_VERSIONS.items()
+            if isinstance(manifest_datasets, dict) and name in manifest_datasets
+        },
+    }
+    if manifest.get("schema_versions") != expected_versions:
         errors.append(
             "schema_versions mismatch: "
-            f"manifest={manifest.get('schema_versions')} expected={EXPECTED_SCHEMA_VERSIONS}"
+            f"manifest={manifest.get('schema_versions')} expected={expected_versions}"
         )
     verified_files: list[dict[str, object]] = []
     files_checked = 0
@@ -274,7 +284,7 @@ class _SemanticState:
             self._check_customer(relative_path, row.get("customer_id"))
         elif dataset == "crm":
             self._check_customer(relative_path, row.get("customer_id"))
-        elif dataset in {"google_ads", "meta_ads", "tiktok_ads"}:
+        elif dataset in {"google_ads", "meta_ads", "tiktok_ads", "shopee_ads"}:
             self._observe_vendor(dataset, relative_path, row)
         elif dataset == "ground_truth":
             self._observe_truth(relative_path, row)
@@ -462,7 +472,7 @@ class _SemanticState:
         path: str,
         row: dict[str, object],
     ) -> None:
-        vendor_id = str(row.get("campaign_id", ""))
+        vendor_id = str(row.get("ad_id" if dataset == "shopee_ads" else "campaign_id", ""))
         campaign_id = self.master.vendor_to_campaign.get(vendor_id)
         if campaign_id is None:
             self.errors.append(f"unknown platform campaign_id {vendor_id}: {path}")
@@ -486,6 +496,15 @@ class _SemanticState:
                 int(row["spend"]),
                 int(actions[0]["value"]),
                 int(action_values[0]["value"]),
+            )
+        elif dataset == "shopee_ads":
+            day = datetime.strptime(str(row["date"]), "%d/%m/%Y").date().isoformat()
+            values = (
+                int(row["impression"]),
+                int(row["clicks"]),
+                int(row["expense"]),
+                int(row["conversions"]),
+                int(row["gmv"]),
             )
         else:
             day = str(row["stat_time_day"])
@@ -729,6 +748,7 @@ def _validation_order(item: dict[str, object]) -> tuple[int, str, int, str]:
         "google_ads": 4,
         "meta_ads": 4,
         "tiktok_ads": 4,
+        "shopee_ads": 4,
         "ground_truth": 5,
         "quality_cases": 6,
     }.get(dataset, 7)

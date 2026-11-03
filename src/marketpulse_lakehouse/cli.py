@@ -147,6 +147,10 @@ def _run_ingest_kafka(
 
 
 def _run_ingest_files(*, run_id: str, input_path: Path, from_date: date | None = None, to_date: date | None = None) -> dict[str, object]:
+    from marketpulse_batch.contracts import parse_required_platforms
+
+    required_platforms = parse_required_platforms(os.environ.get("BATCH_REQUIRED_PLATFORMS"))
+
     def operation(spark: object) -> dict[str, object]:
         return ingest_source_files(
             spark,
@@ -155,6 +159,7 @@ def _run_ingest_files(*, run_id: str, input_path: Path, from_date: date | None =
             ingested_at=datetime.now(UTC),
             from_date=from_date,
             to_date=to_date,
+            required_platforms=required_platforms,
         )
 
     return _with_session("marketpulse-ingest-files", operation)

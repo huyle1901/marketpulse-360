@@ -22,7 +22,7 @@ test('journey analysis leads with grouped attribution bars for all three models'
  await page.goto('/analysis');await expect(page.getByRole('heading',{name:'Journey analysis',level:1})).toBeVisible();
  const chart=page.getByRole('region',{name:'Attribution credit by channel'});
  await expect(chart.getByRole('img')).toHaveCount(2);
- await expect(chart.getByRole('img',{name:/google: First touch ₫600, Last touch ₫400, Linear ₫500/})).toBeVisible();
+ await expect(chart.getByRole('img',{name:/Google: First touch ₫600, Last touch ₫400, Linear ₫500/})).toBeVisible();
  await expect(chart.getByRole('img',{name:/Unattributed: First touch -₫50, Last touch ₫0, Linear -₫25/})).toBeVisible();
  await expect(chart.locator('.credit-bar.negative')).toHaveCount(2);
  await expect(chart).toContainText('Attribution credit, not source campaign finance');

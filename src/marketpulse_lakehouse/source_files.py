@@ -29,6 +29,7 @@ ALLOWED_SOURCE_DATASETS = frozenset(
         "google_ads",
         "meta_ads",
         "tiktok_ads",
+        "shopee_ads",
         "master/ads",
         "master/campaigns",
         "master/customers",
@@ -472,6 +473,7 @@ def ingest_source_files(
     from_date: date | None = None,
     to_date: date | None = None,
     datasets: tuple[str, ...] | None = None,
+    required_platforms: tuple[str, ...] | None = None,
 ) -> dict[str, object]:
     if not run_id:
         raise ValueError("run_id must not be empty")
@@ -483,9 +485,12 @@ def ingest_source_files(
 
         plan = select_daily_sources(plan, selection)
     if from_date is not None and to_date is not None:
+        from marketpulse_batch.contracts import DEFAULT_REQUIRED_PLATFORMS
         from marketpulse_batch.selection import select_range_sources
 
-        plan = select_range_sources(plan, from_date, to_date)
+        plan = select_range_sources(
+            plan, from_date, to_date, DEFAULT_REQUIRED_PLATFORMS if required_platforms is None else required_platforms
+        )
     if datasets is not None:
         from marketpulse_batch.selection import select_source_datasets
 

@@ -74,6 +74,15 @@ CSV_FIELDS: dict[str, tuple[str, ...]] = {
         "conversion",
         "total_purchase_value",
     ),
+    "shopee_ads": (
+        "date",
+        "ad_id",
+        "impression",
+        "clicks",
+        "expense",
+        "conversions",
+        "gmv",
+    ),
     "crm": (
         "snapshot_date",
         "customer_id",

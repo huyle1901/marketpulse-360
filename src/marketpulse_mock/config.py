@@ -36,8 +36,6 @@ class ScaleProfile:
             value = getattr(self, field.name)
             if value <= 0:
                 raise ValueError(f"{field.name} must be positive")
-        if self.campaigns % 3:
-            raise ValueError("campaigns must be divisible by 3")
         if self.story_days is not None and self.story_days < self.days:
             raise ValueError("story_days must be at least days")
         if self.scenario not in SCENARIOS:
@@ -87,7 +85,54 @@ class Scenario:
     """How many previous days (>= 0) a returning device is drawn from;
     0 disables returning devices."""
 
+    platforms: tuple[str, ...] = ("google", "meta", "tiktok")
+    """Ad platforms campaigns cycle through, in order; the campaign count
+    must be divisible by their number."""
+
+    platform_spend_share: Mapping[str, int] | None = None
+    """Relative spend share per platform (positive; exactly the ``platforms``);
+    None keeps the legacy round-robin allocation."""
+
+    objective_spend_weight: Mapping[str, float] | None = None
+    """Spend multiplier per campaign objective (positive) splitting a
+    platform's spend between its campaigns; None (or an unlisted objective)
+    weighs 1.0."""
+
+    personas: Mapping[str, tuple[float, float, float]] | None = None
+    """``(cost, ctr, strength)`` multipliers per platform (three positive
+    floats; exactly the ``platforms``); None keeps every platform identical."""
+
     def __post_init__(self) -> None:
+        if not self.platforms:
+            raise ValueError("platforms must not be empty")
+        if self.platform_spend_share is not None:
+            for platform, share in self.platform_spend_share.items():
+                if platform not in self.platforms:
+                    raise ValueError(
+                        f"platform_spend_share names unknown platform {platform!r}"
+                    )
+                if share <= 0:
+                    raise ValueError(
+                        f"platform_spend_share for {platform} must be positive"
+                    )
+            _require_every_platform(
+                "platform_spend_share", self.platform_spend_share, self.platforms
+            )
+        if self.objective_spend_weight is not None:
+            for objective, weight in self.objective_spend_weight.items():
+                if weight <= 0:
+                    raise ValueError(
+                        f"objective_spend_weight for {objective} must be positive"
+                    )
+        if self.personas is not None:
+            for platform, persona in self.personas.items():
+                if platform not in self.platforms:
+                    raise ValueError(f"personas names unknown platform {platform!r}")
+                if len(persona) != 3 or any(value <= 0 for value in persona):
+                    raise ValueError(
+                        f"personas for {platform} must be three positive numbers"
+                    )
+            _require_every_platform("personas", self.personas, self.platforms)
         if self.cities is not None:
             if not self.cities:
                 raise ValueError("cities must not be empty when set")
@@ -105,6 +150,14 @@ class Scenario:
             raise ValueError("returning_device_share must be between 0 and 1")
         if self.returning_window_days < 0:
             raise ValueError("returning_window_days must not be negative")
+
+
+def _require_every_platform(
+    name: str, mapping: Mapping[str, object], platforms: tuple[str, ...]
+) -> None:
+    missing = [platform for platform in platforms if platform not in mapping]
+    if missing:
+        raise ValueError(f"{name} is missing platforms: {', '.join(missing)}")
 
 
 SCENARIOS: Mapping[str, Scenario] = MappingProxyType(
@@ -132,6 +185,21 @@ SCENARIOS: Mapping[str, Scenario] = MappingProxyType(
             tenure_months=6.0,
             returning_device_share=0.3,
             returning_window_days=60,
+            platforms=("google", "meta", "tiktok", "shopee"),
+            platform_spend_share=MappingProxyType(
+                {"google": 30, "meta": 28, "tiktok": 24, "shopee": 18}
+            ),
+            objective_spend_weight=MappingProxyType(
+                {"conversions": 1.3, "traffic": 1.0, "awareness": 0.7}
+            ),
+            personas=MappingProxyType(
+                {
+                    "google": (1.4, 0.8, 1.3),
+                    "meta": (1.0, 1.0, 1.0),
+                    "tiktok": (0.6, 1.6, 0.5),
+                    "shopee": (1.0, 1.1, 1.6),
+                }
+            ),
         ),
     }
 )
@@ -177,7 +245,7 @@ PROFILES: Mapping[str, ScaleProfile] = MappingProxyType(
             "story-demo",
             638,
             3_000,
-            12,
+            16,
             100,
             4_000,
             50_000,
@@ -201,6 +269,11 @@ class GenerationConfig:
     def __post_init__(self) -> None:
         if self.rows_per_file <= 0:
             raise ValueError("rows_per_file must be positive")
+        platform_count = len(self.scenario.platforms)
+        if self.profile.campaigns % platform_count:
+            raise ValueError(
+                f"campaigns must be divisible by {platform_count}"
+            )
 
     @property
     def scenario(self) -> Scenario:
