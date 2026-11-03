@@ -16,6 +16,7 @@ from marketpulse_mock.calendar import HOURLY_WEIGHTS, VIETNAM, utc_hour_weights
 from marketpulse_mock.config import (
     GenerationConfig,
     ScaleProfile,
+    first_email_ordinal,
     first_non_paid_ordinal,
     impression_capacity,
     resolve_config,
@@ -92,9 +93,13 @@ def _assert_identified_sessions_keep_fresh_devices(
     owners: dict[str, set[str]] = defaultdict(set)
     checked = 0
     # Impression ordinals, then overflow ordinals from the fixed capacity,
-    # then the day's non-paid ordinals.
+    # then the day's non-paid ordinals, then one email ordinal per customer.
     ordinals = impression_capacity(config) + config.profile.customers
     non_paid = _non_paid_sessions_per_day(records)
+    email = range(
+        first_email_ordinal(config),
+        first_email_ordinal(config) + config.profile.customers,
+    )
     for r in _page_views(records):
         customer_id = _customer_id(r)
         if customer_id is None:
@@ -105,7 +110,9 @@ def _assert_identified_sessions_keep_fresh_devices(
             first = first_non_paid_ordinal(config)
             fresh_ids[day] = {
                 stable_id(config.seed, f"anonymous-{day_index}", ordinal)
-                for ordinal in (*range(ordinals), *range(first, first + non_paid[day]))
+                for ordinal in (
+                    *range(ordinals), *range(first, first + non_paid[day]), *email
+                )
             }
         anonymous_id = str(r.payload["anonymous_id"])
         test.assertTrue(
@@ -411,10 +418,12 @@ class ReturningDeviceTests(unittest.TestCase):
         _, cls.records = _generate_window(cls.config)
 
     def _anonymous_views(self) -> list[tuple[date, str]]:
-        # Only paid sessions return; organic and direct visits keep fresh ids.
+        # Only paid sessions return; organic, direct and email visits keep
+        # fresh ids. A duplicate anomaly repeats a view, so count it once.
+        views = {str(r.payload["event_id"]): r for r in _page_views(self.records)}
         return [
             (r.event_time.date(), str(r.payload["anonymous_id"]))
-            for r in _page_views(self.records)
+            for r in views.values()
             if _customer_id(r) is None
             and r.payload["anonymous_id"] is not None
             and r.payload["click_id"] is not None
@@ -1012,12 +1021,12 @@ class StoryNonPaidTrafficTests(unittest.TestCase):
     def _non_paid(self, record: SourceRecord) -> bool:
         return self.sources[str(record.payload["session_id"])] in NON_PAID_SOURCES
 
-    def test_organic_and_direct_are_a_quarter_of_sessions(self) -> None:
+    def test_organic_and_direct_are_a_quarter_of_non_email_sessions(self) -> None:
         counts = Counter(self.sources.values())
-        # Email-referred visits arrive with plan 4; all sessions are non-email.
-        self.assertEqual({"paid", "organic", "direct"}, set(counts))
+        # Email-referred visits come on top of the paid and organic/direct mix.
+        self.assertEqual({"paid", "organic", "direct", "email"}, set(counts))
         non_paid = counts["organic"] + counts["direct"]
-        share = non_paid / sum(counts.values())
+        share = non_paid / (sum(counts.values()) - counts["email"])
         self.assertGreaterEqual(share, 0.22, counts)
         self.assertLessEqual(share, 0.28, counts)
         self.assertAlmostEqual(counts["organic"] / non_paid, 0.6, delta=0.03)
@@ -1547,6 +1556,301 @@ class StoryEmailTypeTests(unittest.TestCase):
             sum(send.clicked for send in sends),
             standard_errors=4.0,
         )
+
+
+EMAIL_VISIT_WINDOW = timedelta(hours=2)
+DOUBLE_DAYS_2025 = (0, 32, 61)  # UTC 2025-01-01, 02-02 and 03-03: promo days
+
+
+def _email_clicks(records: list[SourceRecord]) -> dict[tuple[str, date], list[datetime]]:
+    """Return each ``(customer, UTC day)``'s distinct ``email_clicked`` times."""
+
+    seen: set[str] = set()
+    clicks: dict[tuple[str, date], list[datetime]] = defaultdict(list)
+    for r in records:
+        if r.dataset != "email_events" or r.payload["event_name"] != "email_clicked":
+            continue
+        event_id = str(r.payload["event_id"])
+        if event_id in seen:
+            continue  # a duplicate anomaly repeats the click
+        seen.add(event_id)
+        clicks[(str(r.payload["customer_id"]), r.event_time.date())].append(r.event_time)
+    return clicks
+
+
+class StoryEmailReferredVisitTests(unittest.TestCase):
+    """Every story email click sends its recipient back to the store within 2 h."""
+
+    DAYS = 30
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.config = resolve_config("story-demo", 360, Path(tmp), days=cls.DAYS)
+        cls.masters = generate_master_data(cls.config)
+        cls.days = _generate_days(cls.config, cls.masters, range(cls.DAYS))
+        cls.records = [r for i in range(cls.DAYS) for r in cls.days[i]]
+        cls.starts = _session_starts(cls.records)
+        cls.sources = {
+            session_id: _traffic_source(r) for session_id, r in cls.starts.items()
+        }
+        cls.email_starts = [
+            r for r in cls.starts.values() if _traffic_source(r) == "email"
+        ]
+        cls.customer_index = {
+            c.customer_id: index for index, c in enumerate(cls.masters.customers)
+        }
+
+    def _session_records(self, source: str) -> list[SourceRecord]:
+        return [
+            r
+            for r in self.records
+            if r.dataset in ("web_events", "orders")
+            and self.sources[str(r.payload["session_id"])] == source
+        ]
+
+    def test_each_email_click_starts_one_session_for_its_recipient(self) -> None:
+        clicks = _email_clicks(self.records)
+        sessions: Counter[tuple[str, date]] = Counter()
+        for r in self.email_starts:
+            customer_id = _customer_id(r)
+            self.assertIsNotNone(customer_id, r.payload)
+            key = (str(customer_id), r.event_time.date())
+            sessions[key] += 1
+            earlier = [
+                click
+                for click in clicks.get(key, ())
+                if timedelta(0) <= r.event_time - click <= EMAIL_VISIT_WINDOW
+            ]
+            self.assertTrue(earlier, (key, r.event_time, clicks.get(key)))
+        self.assertEqual(
+            Counter({key: len(times) for key, times in clicks.items()}), sessions
+        )
+        self.assertGreater(len(self.email_starts), 200)
+
+    def test_email_sessions_carry_no_campaign_or_click(self) -> None:
+        paid_clicks = {
+            str(r.payload["click_id"])
+            for r in self.starts.values()
+            if _traffic_source(r) == "paid"
+        }
+        records = self._session_records("email")
+        self.assertGreater(len(records), 500)
+        for r in records:
+            self.assertEqual("email", _traffic_source(r), r.payload)
+            self.assertIsNotNone(r.payload["customer_id"], r.payload)
+            if r.dataset == "orders":
+                # The order may credit an earlier paid click, never the email.
+                click_id = r.payload["click_id"]
+                self.assertTrue(click_id is None or click_id in paid_clicks, r.payload)
+                continue
+            for field in ("campaign_id", "platform_campaign_id", "click_id"):
+                self.assertIsNone(r.payload[field], (field, r.payload))
+            self.assertFalse(r.payload["payload"]["is_bot"], r.payload)
+            if r.payload["event_name"] == "page_view":
+                self.assertEqual(
+                    "https://shop.marketpulse.example.test/",
+                    r.payload["payload"]["page_url"],
+                )
+        quality_sessions = {
+            str(r.payload["record"].get("session_id"))
+            for r in self.records
+            if r.dataset == "quality_cases"
+        }
+        self.assertFalse(quality_sessions & {str(r.payload["session_id"]) for r in records})
+
+    def test_email_sessions_use_their_own_fresh_ids(self) -> None:
+        first = first_email_ordinal(self.config)
+        seed = self.config.seed
+        email_message_sessions = {
+            str(r.payload["session_id"])
+            for r in self.records
+            if r.dataset == "email_events"
+        }
+        for r in self.email_starts:
+            day_index = (r.event_time.date() - self.config.start_date).days
+            ordinal = first + self.customer_index[str(r.payload["customer_id"])]
+            self.assertEqual(
+                stable_id(seed, f"session-{day_index}", ordinal), r.payload["session_id"]
+            )
+            self.assertEqual(
+                stable_id(seed, f"anonymous-{day_index}", ordinal),
+                r.payload["anonymous_id"],
+            )
+            self.assertEqual(
+                stable_id(seed, f"web_events-page_view-email-{day_index}", ordinal * 10),
+                r.payload["event_id"],
+            )
+            self.assertNotIn(r.payload["session_id"], email_message_sessions)
+
+        def ids(source: str, field: str) -> set[str]:
+            return {str(r.payload[field]) for r in self._session_records(source)}
+
+        for field in ("session_id", "anonymous_id", "event_id"):
+            email = ids("email", field)
+            self.assertTrue(email, field)
+            for other in ("organic", "direct", "paid"):
+                with self.subTest(field=field, other=other):
+                    self.assertFalse(email & ids(other, field))
+        devices: dict[str, set[str]] = defaultdict(set)
+        session_days: dict[str, set[date]] = defaultdict(set)
+        for r in self._session_records("email"):
+            devices[str(r.payload["anonymous_id"])].add(str(r.payload["session_id"]))
+            session_days[str(r.payload["session_id"])].add(r.event_time.date())
+        self.assertEqual({1}, {len(sessions) for sessions in devices.values()})
+        self.assertEqual({1}, {len(days) for days in session_days.values()})
+
+    def test_email_ordinals_sit_above_every_non_paid_ordinal(self) -> None:
+        from marketpulse_mock.journeys import _non_paid_count, _paid_day
+
+        span = first_email_ordinal(self.config) - first_non_paid_ordinal(self.config)
+        ceiling = impression_capacity(self.config) + self.config.profile.customers
+        # A day's paid sessions never exceed impressions plus joiners.
+        self.assertGreaterEqual(span, _non_paid_count(ceiling))
+        for day_index in range(self.DAYS):
+            paid = _paid_day(self.config, self.masters, day_index)
+            self.assertLessEqual(_non_paid_count(len(paid.session_ordinals)), span)
+
+    def test_email_visits_convert_at_six_fifths_strength(self) -> None:
+        from marketpulse_mock.ids import stable_int
+        from marketpulse_mock.journeys import _device_strength, _funnel_steps
+
+        first = first_email_ordinal(self.config)
+        purchased = {
+            str(r.payload["session_id"])
+            for r in self.records
+            if r.dataset == "web_events" and r.payload["event_name"] == "purchase"
+        }
+        for r in self.email_starts:
+            day_index = (r.event_time.date() - self.config.start_date).days
+            ordinal = first + self.customer_index[str(r.payload["customer_id"])]
+            score = stable_int(self.config.seed, "funnel", day_index, ordinal, modulo=1_000)
+            strength = _device_strength(
+                self.config, str(r.payload["payload"]["device_type"]), 1.2
+            )
+            expected = _funnel_steps(self.config, None, score, strength)[3]
+            self.assertEqual(expected, str(r.payload["session_id"]) in purchased, r.payload)
+        email_rate = sum(
+            str(r.payload["session_id"]) in purchased for r in self.email_starts
+        ) / len(self.email_starts)
+        organic = [r for r in self.starts.values() if _traffic_source(r) == "organic"]
+        organic_rate = sum(
+            str(r.payload["session_id"]) in purchased for r in organic
+        ) / len(organic)
+        self.assertGreater(email_rate, organic_rate)
+
+    def test_email_orders_follow_the_paid_click_policy(self) -> None:
+        _assert_attribution_matches_sessions(self, self.records)
+        orders = [
+            r
+            for r in self._session_records("email")
+            if r.dataset == "orders" and r.payload["event_name"] == "order_created"
+        ]
+        self.assertGreater(len(orders), 50)
+        for r in orders:
+            payload = r.payload["payload"]
+            self.assertEqual(
+                payload["attributed_campaign_id"] is None, r.payload["click_id"] is None
+            )
+            self.assertEqual(
+                payload["attributed_campaign_id"], r.payload["campaign_id"], r.payload
+            )
+
+    def test_email_sessions_stay_inside_their_utc_day(self) -> None:
+        latest = max(r.event_time for r in self.email_starts)
+        # Sends end by 03:00, opens follow within 8 h, clicks within 30 min
+        # and visits within 2 h: every email visit starts before 14:00 UTC.
+        self.assertLess(latest.time(), datetime(2025, 1, 1, 14).time())
+        session_end = max(r.event_time for r in self._session_records("email"))
+        self.assertLess(session_end.time(), datetime(2025, 1, 1, 23, 58).time())
+        for day_index, records in self.days.items():
+            day = self.config.start_date + timedelta(days=day_index)
+            last: dict[str, datetime] = {}
+            for r in records:
+                self.assertEqual(day, r.event_time.date(), (r.dataset, r.event_time))
+                previous = last.get(r.dataset)
+                if previous is not None:
+                    self.assertLessEqual(previous, r.event_time, (day, r.dataset))
+                last[r.dataset] = r.event_time
+
+    def test_an_email_visit_leaving_its_utc_day_raises(self) -> None:
+        from unittest import mock
+
+        from marketpulse_mock import session_timing
+
+        self.assertTrue(session_timing._email_timeline(self.config, self.masters, 13))
+        with mock.patch.object(session_timing, "EMAIL_VISIT_END", timedelta(hours=1)):
+            with self.assertRaises(AssertionError):
+                session_timing._email_timeline(self.config, self.masters, 13)
+
+    def test_a_day_generated_alone_equals_its_sequential_run(self) -> None:
+        day_index = 13  # 2025-01-14, a newsletter Tuesday
+        alone = list(
+            iter_day_records(self.config, generate_master_data(self.config), day_index)
+        )
+        self.assertTrue(
+            any(
+                _traffic_source(r) == "email"
+                for r in alone
+                if r.dataset == "web_events"
+            )
+        )
+        self.assertEqual(
+            [(r.dataset, r.event_time, r.payload) for r in self.days[day_index]],
+            [(r.dataset, r.event_time, r.payload) for r in alone],
+        )
+
+    def test_replay_reader_keeps_event_time_order(self) -> None:
+        from marketpulse_mock.replay_reader import iter_replay_records
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "story"
+            generate_dataset(resolve_config("story-demo", 360, root, days=self.DAYS))
+            previous: datetime | None = None
+            email_visits = 0
+            for record in iter_replay_records(root):
+                if previous is not None:
+                    self.assertLessEqual(previous, record.event_time, record.source_file)
+                previous = record.event_time
+                if record.dataset == "web_events":
+                    value = json.loads(record.value)
+                    email_visits += value["payload"].get("traffic_source") == "email"
+        self.assertGreater(email_visits, 500)
+
+
+class StoryPromoDayEmailShareTests(unittest.TestCase):
+    """On promo days email-referred visits are a minority of the traffic."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = resolve_config("story-demo", 360, Path(tmp), days=90)
+        masters = generate_master_data(config)
+        cls.sources: dict[date, Counter[object]] = {}
+        for day_index in DOUBLE_DAYS_2025:
+            records = list(iter_day_records(config, masters, day_index))
+            cls.sources[config.start_date + timedelta(days=day_index)] = Counter(
+                _traffic_source(r) for r in _session_starts(records).values()
+            )
+        cls.totals: Counter[object] = sum(cls.sources.values(), Counter())
+
+    @staticmethod
+    def _share(sources: Counter[object]) -> float:
+        return sources["email"] / sum(sources.values())
+
+    def test_email_visits_stay_a_minority_of_promo_day_sessions(self) -> None:
+        for day, sources in self.sources.items():
+            with self.subTest(day=day):
+                self.assertGreater(sources["email"], 0, sources)
+                self.assertLessEqual(self._share(sources), 0.35, sources)
+
+    @unittest.expectedFailure
+    def test_email_visits_are_at_least_a_tenth_of_promo_day_sessions(self) -> None:
+        # The spec's rates give about 5-7 % on the 2025 double days (an
+        # audience of a few thousand against ~800 sessions a day), below the
+        # plan's 10 % floor; rates are not retuned here. An unexpected pass
+        # fails the suite, so this marker goes once the gap is resolved.
+        self.assertGreaterEqual(self._share(self.totals), 0.10, self.totals)
 
 
 if __name__ == "__main__":

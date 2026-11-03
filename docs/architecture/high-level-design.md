@@ -222,12 +222,20 @@ sessions (overflow included) as organic or direct visits, so they are a quarter
 of the day's non-email sessions, split 60/40 by a stable hash. They take
 customers from the same day picker, use fresh devices, are timed by the same
 hourly weights, convert at purchase strength 0.8 and have no campaign, click,
-bot probe or quality case. Every story web and order payload carries
-`traffic_source` (`paid`, `organic` or `direct`; `email` is reserved for
-email-referred visits); `flat` never emits it. A non-paid order credits the
-same customer's latest non-bot paid click in the previous 7 days up to the
-purchase, campaign aggregate and vendor conversions included, and is otherwise
-unattributed. Only the order events (`order_created`, `order_refunded`) carry
+bot probe or quality case. Each story `email_clicked` also starts one
+email-referred visit by the email's recipient, 0–2 h after the click (so
+before 14:00 UTC of the click's day), on a fresh device with the normal funnel
+at purchase strength 1.2 (device multiplier applied) and no campaign, click,
+bot probe or quality case; its web session is new, not the email message's
+`session_id`. The day's session list tags every entry with its kind (`paid`,
+`visit` or `email`); email visits take ordinals from `first_email_ordinal`
+(one per customer, above every non-paid ordinal) and event ids under a
+`-email-<day>` scope (organic/direct use `-visit-<day>`). Every story web and
+order payload carries `traffic_source` (`paid`, `organic`, `direct` or
+`email`); `flat` never emits it. A non-paid (organic, direct or email) order
+credits the same customer's latest non-bot paid click in the previous 7 days up
+to the purchase, campaign aggregate and vendor conversions included, and is
+otherwise unattributed; the email itself is never credited. Only the order events (`order_created`, `order_refunded`) carry
 that credited click: the session's web events, its `purchase` included, stay
 campaign-free, so funnels that bucket web events by their own `campaign_id`
 count the whole non-paid session as unattributed and never show a campaign

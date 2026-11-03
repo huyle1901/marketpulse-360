@@ -11,9 +11,16 @@ from itertools import chain
 from typing import Iterator
 
 from .calendar import HOURLY_WEIGHTS, VIETNAM, is_double_day, utc_hour_weights
-from .config import GenerationConfig, first_non_paid_ordinal, impression_capacity
+from .config import (
+    GenerationConfig,
+    first_email_ordinal,
+    first_non_paid_ordinal,
+    impression_capacity,
+)
 from .customer_picker import CustomerPicker
+from .email_schedule import EmailSchedule, message_events
 from .ids import stable_int
+from .models import MasterData
 
 
 LEGACY_SESSION_SPAN_SECONDS = 86_000
@@ -276,3 +283,52 @@ def _non_paid_timeline(
         (_drawn_time(config, day_index, ordinal, "visit"), ordinal)
         for ordinal in range(first, first + count)
     )
+
+
+EMAIL_VISIT_DELAY_SECONDS = 2 * 3600
+"""An email-referred visit starts 0-2 h (whole seconds) after its click."""
+
+SESSION_FUNNEL_SECONDS = 62
+"""A session's last event (a refund) follows its start by at most 62 s."""
+
+EMAIL_VISIT_END = timedelta(hours=23, minutes=58)
+"""Every email visit, funnel included, ends before 23:58 of its UTC day."""
+
+
+def _email_timeline(
+    config: GenerationConfig, masters: MasterData, day_index: int
+) -> list[tuple[datetime, int]]:
+    """Return ``(time, ordinal)`` for the day's email-referred visits, sorted.
+
+    Each ``email_clicked`` of the day's sends (``message_events``, the same
+    times the email events carry) starts one visit by its recipient within
+    ``EMAIL_VISIT_DELAY_SECONDS``; the ordinal is ``first_email_ordinal``
+    plus the recipient's customer index. Sends end by 03:00 UTC and clicks
+    follow within 8.5 h, so visits start before 14:00 UTC; a visit whose
+    funnel could reach ``EMAIL_VISIT_END`` raises instead of crossing midnight.
+    """
+
+    if not (config.scenario.calendar_rhythm and config.scenario.email_lifecycle):
+        raise ValueError("only calendar email-lifecycle scenarios have email visits")
+    day = _utc_day(config, day_index)
+    end = datetime.combine(day, time.min, tzinfo=timezone.utc) + EMAIL_VISIT_END
+    first = first_email_ordinal(config)
+    visits: list[tuple[datetime, int]] = []
+    for send in EmailSchedule.build(config, masters).sends_on(day):
+        if not send.clicked:
+            continue
+        clicked_at = dict(message_events(config.seed, day, send))["email_clicked"]
+        visit_time = clicked_at + timedelta(
+            seconds=stable_int(
+                config.seed,
+                "email-visit",
+                day,
+                send.customer.customer_id,
+                modulo=EMAIL_VISIT_DELAY_SECONDS,
+            )
+        )
+        if visit_time + timedelta(seconds=SESSION_FUNNEL_SECONDS) >= end:
+            raise AssertionError(f"email visit at {visit_time} leaves its UTC day")
+        visits.append((visit_time, first + send.ordinal))
+    visits.sort()
+    return visits

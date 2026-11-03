@@ -336,6 +336,24 @@ def first_non_paid_ordinal(config: GenerationConfig) -> int:
     return impression_capacity(config) + config.profile.customers
 
 
+def first_email_ordinal(config: GenerationConfig) -> int:
+    """Return the first ordinal of a day's email-referred sessions.
+
+    A day has at most ``impression_capacity + customers`` paid sessions and
+    adds a third of them as non-paid visits, so reserving that whole span
+    after ``first_non_paid_ordinal`` keeps every non-paid ordinal below this
+    one on any day. An email session's ordinal is this plus its recipient's
+    index in ``MasterData.customers`` (one email per customer per day), so
+    email ordinals fill ``[first_email_ordinal, first_email_ordinal + customers)``.
+    """
+
+    return (
+        first_non_paid_ordinal(config)
+        + impression_capacity(config)
+        + config.profile.customers
+    )
+
+
 def resolve_config(
     profile_name: str,
     seed: int,

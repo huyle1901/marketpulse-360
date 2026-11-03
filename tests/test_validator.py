@@ -312,28 +312,36 @@ class DatasetValidatorTests(unittest.TestCase):
         self.assertTrue(report.valid, report.errors[:5])
 
     def test_non_paid_web_event_with_a_campaign_is_detected(self) -> None:
-        self.root = Path(self.temporary_directory.name) / "story"
-        generate_dataset(resolve_config("story-demo", 360, self.root, days=1))
-        truth = next((self.root / "ground_truth").rglob("*.jsonl.gz"))
-        with gzip.open(truth, "rt", encoding="utf-8") as stream:
-            campaign_id = json.loads(stream.readline())["campaign_id"]
+        for source in ("organic", "email"):
+            with self.subTest(source=source):
+                self.root = Path(self.temporary_directory.name) / f"story-{source}"
+                generate_dataset(resolve_config("story-demo", 360, self.root, days=1))
+                self.assertTrue(validate_dataset(self.root).valid)
+                truth = next((self.root / "ground_truth").rglob("*.jsonl.gz"))
+                with gzip.open(truth, "rt", encoding="utf-8") as stream:
+                    campaign_id = json.loads(stream.readline())["campaign_id"]
 
-        def mutate(row: dict[str, object]) -> None:
-            row["campaign_id"] = campaign_id
+                def mutate(row: dict[str, object]) -> None:
+                    row["campaign_id"] = campaign_id
 
-        self._mutate_first_json_record(
-            "web_events",
-            mutate,
-            match=lambda row: row["payload"].get("traffic_source") == "organic",
-        )
+                self._mutate_first_json_record(
+                    "web_events",
+                    mutate,
+                    match=lambda row, source=source: (
+                        row["payload"].get("traffic_source") == source
+                    ),
+                )
 
-        report = validate_dataset(self.root)
+                report = validate_dataset(self.root)
 
-        self.assertFalse(report.valid)
-        self.assertTrue(
-            any("non-paid web event with campaign" in error for error in report.errors),
-            report.errors,
-        )
+                self.assertFalse(report.valid)
+                self.assertTrue(
+                    any(
+                        "non-paid web event with campaign" in error
+                        for error in report.errors
+                    ),
+                    report.errors,
+                )
 
     def _mutate_first_json_record(
         self,
