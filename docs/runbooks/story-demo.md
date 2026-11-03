@@ -1,15 +1,16 @@
 # Story demo: certified history plus September streaming
 
-An isolated Compose project (`marketpulse-story-demo`) that opens the Command
-Center on January 2025 – August 2026 certified history and then streams
-September 2026. It never touches `marketpulse-mp05-proof` containers or volumes.
+An isolated Compose project (`marketpulse-story-demo-v2`, the varied world; the first
+world stays in `marketpulse-story-demo`) that opens the Command Center on January 2025 –
+August 2026 certified history and then streams September 2026. It never touches `marketpulse-mp05-proof` containers or volumes.
 Design: [continuous demo](../superpowers/specs/2026-10-29-marketing-dashboard-and-continuous-demo-design.md),
 [modern command center](../superpowers/specs/2026-10-29-modern-marketing-command-center-design.md).
 
 Always load the project, ports and resource sizes first:
 
 ```bash
-source scripts/story-demo-env.sh   # project name, 43110 web, 48110 API, 3 GiB Flink, 5g batch Spark, 4 GiB ClickHouse
+source scripts/story-demo-env.sh   # v2: project name, 43210 web, 48210 API, 3 GiB Flink, 5g batch Spark, 4 GiB ClickHouse
+# the first world: source scripts/story-demo-v1-env.sh (43110 web)
 dc=(docker compose --profile '*')
 ```
 
@@ -28,7 +29,7 @@ dc=(docker compose --profile '*')
 ```
 
 Before building v2, stop the v1 project without removing its volumes (this 24 GB machine cannot
-hold both): `source scripts/story-demo-env.sh && docker compose --profile '*' stop`. The steps
+hold both): `source scripts/story-demo-v1-env.sh && docker compose --profile '*' stop`. The steps
 below apply to v2 with `story-demo-v2` paths; measured values for v2 are recorded in the evidence
 sections once it is certified.
 
