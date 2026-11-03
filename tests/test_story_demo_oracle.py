@@ -145,5 +145,42 @@ class GroundTruthTests(unittest.TestCase):
         # Ungoverned measures are the generator's ground truth either way.
         self.assertEqual(raw.spend_minor, governed.spend_minor)
 
+    def test_platform_attribution_matches_the_generator_ground_truth(self) -> None:
+        import gzip, json
+        root = ROOT / "data" / "mock" / "fixtures" / "seed-360"
+        raw = oracle.ground_truth_totals(root)
+        truth_orders: dict[tuple[str], int] = {}
+        truth_gross: dict[tuple[str], int] = {}
+        for path in sorted((root / "ground_truth").glob("date=*/*.gz")):
+            for line in gzip.open(path, "rt"):
+                row = json.loads(line)
+                key = (row["platform"],)
+                truth_orders[key] = truth_orders.get(key, 0) + row["orders"]
+                truth_gross[key] = truth_gross.get(key, 0) + row["gross_revenue_minor"]
+
+        self.assertEqual({k: v for k, v in truth_orders.items() if v}, raw.platform_orders)
+        self.assertEqual({k: v for k, v in truth_gross.items() if v}, raw.platform_gross_minor)
+        governed = oracle.governed_totals(root)
+        self.assertLessEqual(sum(governed.platform_orders.values()), sum(raw.platform_orders.values()))
+
+    def test_governed_sessions_drop_consent_denied_and_bot_sessions(self) -> None:
+        root = ROOT / "data" / "mock" / "fixtures" / "seed-360"
+        raw = oracle.ground_truth_totals(root)
+        governed = oracle.governed_totals(root)
+
+        self.assertLess(governed.sessions[("paid",)], raw.sessions[("paid",)])
+        self.assertEqual(set(raw.email_sends), set(governed.email_sends))
+
+    def test_silver_json_loads_sessions_and_email_sends(self) -> None:
+        import json, tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".json") as handle:
+            json.dump({"sessions": {"paid": 3, "organic": 1},
+                       "email_sends": {"promo 2025-01": 2}}, handle)
+            handle.flush()
+            silver = oracle.load_silver(Path(handle.name))
+
+        self.assertEqual({("paid",): 3, ("organic",): 1}, silver.sessions)
+        self.assertEqual({("promo", "2025-01"): 2}, silver.email_sends)
+
 if __name__ == "__main__":
     unittest.main()

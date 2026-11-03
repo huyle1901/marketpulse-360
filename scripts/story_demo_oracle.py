@@ -28,7 +28,10 @@ from typing import Any
 Key = tuple[str, ...]
 Measure = dict[Key, int]
 
-GOVERNED = frozenset({"orders", "gross_minor", "refunds_minor", "city_gross_minor"})
+GOVERNED = frozenset({
+    "orders", "gross_minor", "refunds_minor", "city_gross_minor", "platform_orders", "platform_gross_minor",
+    "sessions", "email_sends",
+})
 """Measures the certified release governs (consent, bots, identity)."""
 
 UNEXPLAINED = "unexplained raw−governed gap"
@@ -45,6 +48,8 @@ class Totals:
     gross_minor: Measure = field(default_factory=dict)
     refunds_minor: Measure = field(default_factory=dict)
     city_gross_minor: Measure = field(default_factory=dict)
+    platform_orders: Measure = field(default_factory=dict)
+    platform_gross_minor: Measure = field(default_factory=dict)
     sessions: Measure = field(default_factory=dict)
     email_sends: Measure = field(default_factory=dict)
     distinct_orders: int = 0
@@ -195,6 +200,8 @@ def _file_totals(root: Path, through: date | None, *, consented_only: bool) -> T
     gross: Measure = defaultdict(int)
     refunds: Measure = defaultdict(int)
     city_gross: Measure = defaultdict(int)
+    platform_orders: Measure = defaultdict(int)
+    platform_gross: Measure = defaultdict(int)
     created: set[str] = set()
     refunded: set[str] = set()
     for event in _unique_events(root, "orders", through):
@@ -211,19 +218,28 @@ def _file_totals(root: Path, through: date | None, *, consented_only: bool) -> T
             customer = event.get("customer_id")
             city = city_of.get(customer, "unknown") if customer else "anonymous"
             city_gross[(city,)] += amount
+            if platform := payload.get("attributed_platform"):
+                platform_orders[(platform,)] += 1
+                platform_gross[(platform,)] += amount
         elif event["event_name"] == "order_refunded" and order_id not in refunded:
             refunded.add(order_id)
             refunds[month] += int(payload["refund_amount_minor"])
 
+    web = list(_unique_events(root, "web_events", through))
+    # Silver drops every event of a bot session (web/app only) and consent-denied events.
+    bot_sessions = {e["session_id"] for e in web if e["payload"].get("is_bot") is True}
     sessions: dict[str, set[str]] = defaultdict(set)
-    for event in _unique_events(root, "web_events", through):
-        if event["event_name"] == "page_view":
-            source = event["payload"].get("traffic_source") or "paid"
-            sessions[source].add(event["session_id"])
+    for event in web:
+        if event["event_name"] != "page_view":
+            continue
+        if consented_only and (event["consent_analytics"] is not True or event["session_id"] in bot_sessions):
+            continue
+        source = event["payload"].get("traffic_source") or "paid"
+        sessions[source].add(event["session_id"])
 
     email_sends: Measure = defaultdict(int)
     for event in _unique_events(root, "email_events", through):
-        if event["event_name"] == "email_sent":
+        if event["event_name"] == "email_sent" and (not consented_only or event["consent_analytics"] is True):
             email_type = event["payload"].get("email_type") or "untyped"
             email_sends[(email_type, _month(event["event_time"]))] += 1
 
@@ -235,9 +251,25 @@ def _file_totals(root: Path, through: date | None, *, consented_only: bool) -> T
         gross_minor=dict(gross),
         refunds_minor=dict(refunds),
         city_gross_minor=dict(city_gross),
+        platform_orders=dict(platform_orders),
+        platform_gross_minor=dict(platform_gross),
         sessions={(source,): len(ids) for source, ids in sessions.items()},
         email_sends=dict(email_sends),
         distinct_orders=len(created),
+    )
+
+
+def load_silver(path: Path) -> Totals:
+    """Sessions by traffic source and email sends by type x month read from Silver.
+
+    The JSON comes from ``scripts/story_demo_silver_mix.py`` (spark-submit in spark-lakehouse);
+    these measures are not served by the release.
+    """
+
+    data = json.loads(path.read_text())
+    return Totals(
+        sessions={(source,): int(count) for source, count in data["sessions"].items()},
+        email_sends={tuple(key.split(" ", 1)): int(count) for key, count in data["email_sends"].items()},
     )
 
 
@@ -271,6 +303,16 @@ def certified_totals(client: Any, database: str) -> Totals:
         gross[(month,)] = int(amount)
         refunds[(month,)] = int(refund)
 
+    platform_orders: Measure = {}
+    platform_gross: Measure = {}
+    for platform, count, amount in rows(
+        f"SELECT platform, sum(orders), sum(gross_revenue_minor) FROM {database}.campaign_performance_daily "
+        "WHERE platform != '' GROUP BY 1"
+    ):
+        if int(count) or int(amount):
+            platform_orders[(platform,)] = int(count)
+            platform_gross[(platform,)] = int(amount)
+
     city_gross: Measure = {}
     for city, amount in rows(
         f"SELECT if(p.customer_id IS NULL OR p.customer_id = '', 'anonymous', "
@@ -290,6 +332,8 @@ def certified_totals(client: Any, database: str) -> Totals:
         gross_minor=gross,
         refunds_minor=refunds,
         city_gross_minor=city_gross,
+        platform_orders=platform_orders,
+        platform_gross_minor=platform_gross,
     )
 
 
@@ -301,6 +345,7 @@ def main() -> int:
     parser.add_argument("--through", type=date.fromisoformat, required=True)
     parser.add_argument("--user", default="marketpulse")
     parser.add_argument("--password-file", type=Path)
+    parser.add_argument("--silver", type=Path, help="JSON from story_demo_silver_mix.py to check unserved measures")
     args = parser.parse_args()
 
     import clickhouse_connect
@@ -321,10 +366,15 @@ def main() -> int:
     certified = certified_totals(client, database)
     denied = consent_denied_orders(args.root, through=args.through)
     reason = f"CONSENT_DENIED: {denied:,} orders without analytics consent are not certified"
-    checks = compare(truth, certified, governed=governed, reasons=dict.fromkeys(GOVERNED, reason))
+    reasons = dict.fromkeys(GOVERNED, reason)
+    reasons["sessions"] = "consent-denied events and bot sessions (web/app) are not governed"
+    reasons["email_sends"] = "consent-denied email events are not governed"
+    checks = compare(truth, certified, governed=governed, reasons=reasons)
+    if args.silver:
+        checks += compare(truth, load_silver(args.silver), governed=governed, reasons=reasons)
     print(f"Release database: {database}\n")
     print(markdown(checks))
-    missing = uncompared(truth, certified)
+    missing = () if args.silver else uncompared(truth, certified)
     if missing:
         print("\nNot served by the release (checked elsewhere): " + ", ".join(missing))
     failed = [check for check in checks if not check.equal]
