@@ -8,7 +8,7 @@ import math
 import unittest
 from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from statistics import median
 
@@ -26,6 +26,7 @@ from marketpulse_mock.journeys import (
     SourceRecord,
     _customer_picker,
     _day_impressions,
+    _iter_email_events,
     iter_day_records,
 )
 from marketpulse_mock.masters import generate_master_data
@@ -1430,6 +1431,73 @@ class FlatChannelHelperTests(unittest.TestCase):
                 (score < 850, score < 400, score < 250, score < 120),
                 _funnel_steps(config, campaigns[0], score, 1.0),
             )
+
+
+class StoryEmailTypeTests(unittest.TestCase):
+    """Story emails carry their lifecycle type; rates match the targets."""
+
+    TARGETS = {
+        "welcome": (55.0, 12.0),
+        "newsletter": (28.0, 2.5),
+        "promo": (32.0, 4.5),
+    }
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            # Seed 361, not 360: welcome volume is ~160 sends in 90 days (one
+            # standard error is ~4 points), and seed 360's sample happens to
+            # land 6.5 points high on opens (the full-window rate is 52 %).
+            config = resolve_config("story-demo", 361, Path(tmp), days=90)
+        masters = generate_master_data(config)
+        cls.records = []
+        for day_index in range(config.profile.days):
+            day_start = datetime.combine(
+                config.start_date + timedelta(days=day_index),
+                datetime.min.time(),
+                tzinfo=timezone.utc,
+            )
+            cls.records.extend(_iter_email_events(config, masters, day_index, day_start))
+
+    def test_every_story_email_event_carries_its_type(self) -> None:
+        self.assertTrue(self.records)
+        by_message: dict[str, set[object]] = defaultdict(set)
+        for record in self.records:
+            payload = record.payload["payload"]
+            self.assertIn(payload["email_type"], self.TARGETS)
+            self.assertRegex(
+                payload["lifecycle_campaign_id"],
+                rf"^LC-{payload['email_type']}-\d{{8}}$",
+            )
+            self.assertEqual(
+                record.event_time.strftime("%Y%m%d"),
+                payload["lifecycle_campaign_id"][-8:],
+            )
+            by_message[payload["message_id"]].add(payload["email_type"])
+        self.assertTrue(all(len(types) == 1 for types in by_message.values()))
+        self.assertEqual(set(self.TARGETS), {t for v in by_message.values() for t in v})
+
+    def test_open_and_click_rates_per_type_match_targets(self) -> None:
+        delivered: Counter[str] = Counter()
+        opened: Counter[str] = Counter()
+        clicked: Counter[str] = Counter()
+        for record in self.records:
+            payload = record.payload["payload"]
+            email_type = payload["email_type"]
+            name = record.payload["event_name"]
+            delivered[email_type] += name == "email_delivered"
+            opened[email_type] += name == "email_opened"
+            clicked[email_type] += name == "email_clicked"
+        for email_type, (open_target, click_target) in self.TARGETS.items():
+            self.assertGreater(delivered[email_type], 0, email_type)
+            open_rate = 100 * opened[email_type] / delivered[email_type]
+            click_rate = 100 * clicked[email_type] / delivered[email_type]
+            print(
+                f"{email_type}: delivered={delivered[email_type]} "
+                f"open={open_rate:.2f} click={click_rate:.2f}"
+            )
+            self.assertAlmostEqual(open_target, open_rate, delta=5.0, msg=email_type)
+            self.assertAlmostEqual(click_target, click_rate, delta=5.0, msg=email_type)
 
 
 if __name__ == "__main__":

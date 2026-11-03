@@ -268,10 +268,11 @@ class StoryEmailEventTests(unittest.TestCase):
                 last = max(t for name, t in times.items() if name != "email_unsubscribed")
                 self.assertGreater(times["email_unsubscribed"], last)
                 self.assertLessEqual(
-                    times["email_unsubscribed"] - last, timedelta(minutes=10)
+                    times["email_unsubscribed"] - last, timedelta(minutes=5)
                 )
         self.assertGreater(opened, 0)
         self.assertGreater(clicked, 0)
+        self.assertGreater(unsubscribed, 0)
 
     def test_crm_consent_turns_off_the_day_after_an_unsubscribe(self) -> None:
         start = self.config.start_date

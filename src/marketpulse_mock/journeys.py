@@ -650,15 +650,22 @@ def _iter_lifecycle_email_events(
     """
 
     events = sorted(
-        (event_time, send.ordinal, event_offset, event_name, send.customer)
+        (event_time, send.ordinal, event_offset, event_name, send)
         for send in EmailSchedule.build(config, masters).sends_on(day)
         for event_offset, (event_name, event_time) in enumerate(
             message_events(config.seed, day, send)
         )
     )
-    for event_time, ordinal, event_offset, event_name, customer in events:
+    for event_time, ordinal, event_offset, event_name, send in events:
         yield _email_record(
-            config, day_index, ordinal, event_offset, event_name, event_time, customer
+            config,
+            day_index,
+            ordinal,
+            event_offset,
+            event_name,
+            event_time,
+            send.customer,
+            send.email_type,
         )
 
 
@@ -670,9 +677,24 @@ def _email_record(
     event_name: str,
     event_time: datetime,
     customer: Customer,
+    email_type: str | None = None,
 ) -> SourceRecord:
-    """Build one email event; its message is ``(day_index, ordinal)``."""
+    """Build one email event; its message is ``(day_index, ordinal)``.
 
+    A story email names its lifecycle ``email_type`` and campaign
+    ``LC-<type>-<yyyymmdd>``; the legacy flat email has neither.
+    """
+
+    type_tag: dict[str, object] = (
+        {}
+        if email_type is None
+        else {"email_type": email_type}
+    )
+    lifecycle_campaign_id = (
+        f"LC-{day_index + 1:04d}"
+        if email_type is None
+        else f"LC-{email_type}-{event_time:%Y%m%d}"
+    )
     return SourceRecord(
         dataset="email_events",
         event_time=event_time,
@@ -694,7 +716,8 @@ def _email_record(
             click_id=None,
             payload={
                 "message_id": stable_id(config.seed, f"email-{day_index}", ordinal),
-                "lifecycle_campaign_id": f"LC-{day_index + 1:04d}",
+                "lifecycle_campaign_id": lifecycle_campaign_id,
+                **type_tag,
                 "destination_url": (
                     "https://shop.marketpulse.example.test/email"
                     if event_name == "email_clicked"
