@@ -24,8 +24,10 @@ anyone. A lifecycle programme should grow with the customer base and mix email t
    `traffic_source = email`, no ad click, the customer's identity, and the normal funnel at
    1.2× purchase probability. The email itself is never credited with these orders; an earlier
    non-bot paid click within 7 days may be (last-paid-click policy).
-5. **UI**: no change required; the Email page's monthly chart now grows. A per-type breakdown is
-   a later, separate change (needs an API field).
+5. **UI**: the Email page's monthly chart adds a Recipients line (distinct customers emailed,
+   already in the API) beside sends, because sends follow the send calendar and jump on promo
+   days while recipients show the audience growing. A per-type breakdown is a later, separate
+   change (needs an API field).
 
 ## Resolved after builder review
 
