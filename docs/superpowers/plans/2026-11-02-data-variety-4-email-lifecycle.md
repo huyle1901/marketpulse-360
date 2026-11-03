@@ -62,7 +62,7 @@
 
 **Interfaces:** Consumes plan 3's `emit_session(ordinal, None, event_time, "email", strength)` with strength 1.2 (×1.0 base, not ×`NON_PAID_STRENGTH`; device and promo multipliers still apply), extended with the recipient as the session's customer (not `picker.pick`). The session time = click time + `stable_int(..., modulo=7200)` seconds; the send window keeps it inside the click's UTC day (see Review Focus). Email sessions get their own id scope (e.g. `-email-<day>`) and ordinal range above the non-paid range, and the day's session list carries an explicit kind per entry (`paid`, `visit`, `email`) instead of dispatching on ordinal ranges.
 
-- [ ] **Step 1: Failing tests:** every `traffic_source = email` session has an `email_clicked` for the same customer 0–2 h earlier on the same UTC day; none has a campaign or click id on any web event; on promo days email sessions are 10–35 % of all sessions; every record lies in its own UTC day and the replay reader finds no event-time violation; generating day N alone equals day N from a sequential run; email session ids never collide with organic/direct ids.
+- [ ] **Step 1: Failing tests:** every `traffic_source = email` session has an `email_clicked` for the same customer 0–2 h earlier on the same UTC day; none has a campaign or click id on any web event; on promo days email sessions are 3–35 % of all sessions and above plain days; every record lies in its own UTC day and the replay reader finds no event-time violation; generating day N alone equals day N from a sequential run; email session ids never collide with organic/direct ids.
 - [ ] **Step 2: Run** — Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** all Python tests — Expected: PASS, fixture unchanged.

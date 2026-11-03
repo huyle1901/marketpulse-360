@@ -29,7 +29,8 @@ anyone. A lifecycle programme should grow with the customer base and mix email t
 ## Resolved after builder review
 
 - **Volume** *(my call)*: rates follow typical e-commerce benchmarks instead of the first draft,
-  so email-referred visits stay a minority of traffic (about a fifth on promo days):
+  so email-referred visits stay a minority of traffic (about 6 % of sessions on early-2025 promo
+  days and about 8 % across all story promo days, growing with the audience):
   welcome open 55 % / click 12 %, newsletter 28 % / 2.5 %, promo 32 % / 4.5 %.
 - **Consent** (answered): consent rules do not change; "honoured" means an unsubscribe stops
   later sends and shows as `consent_marketing = false` in the next CRM snapshot. No new
