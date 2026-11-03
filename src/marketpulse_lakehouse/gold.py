@@ -243,7 +243,9 @@ def build_customer_360(
                 "first_activity_at": _required_datetime(ordered[0], "event_time"),
                 "last_activity_at": _required_datetime(ordered[-1], "event_time"),
                 "event_count": len(ordered),
-                "session_count": len({str(row.get("session_id")) for row in ordered}),
+                "session_count": len(
+                    {str(row.get("session_id")) for row in ordered if row.get("source") != "email"}
+                ),
                 "order_count": sum(row.get("event_name") == "order_created" for row in ordered),
                 "refund_count": sum(row.get("event_name") == "order_refunded" for row in ordered),
                 "gross_revenue_minor": gross,
@@ -748,7 +750,9 @@ def _customer_frames(events: Any, customers: Any) -> tuple[Any, Any]:
         F.min("event_time").alias("first_activity_at"),
         F.max("event_time").alias("last_activity_at"),
         F.count(F.lit(1)).cast("long").alias("event_count"),
-        F.countDistinct("session_id").cast("long").alias("session_count"),
+        F.countDistinct(F.when(F.col("source") != "email", F.col("session_id")))
+        .cast("long")
+        .alias("session_count"),
         F.sum(F.when(F.col("event_name") == "order_created", 1).otherwise(0))
         .cast("long")
         .alias("order_count"),

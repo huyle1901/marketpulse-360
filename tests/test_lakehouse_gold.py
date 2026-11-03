@@ -298,6 +298,43 @@ class GoldModelTests(unittest.TestCase):
         self.assertIn((date(2026, 1, 1), 1, Decimal("1.000000")), known_months)
         self.assertIn((date(2026, 2, 1), 1, Decimal("1.000000")), known_months)
 
+    def test_customer_360_session_count_ignores_email_message_sessions(self) -> None:
+        events = [
+            _event("view-1", "page_view", "2026-01-02T01:00:00Z", session="web-1"),
+            _event("view-2", "page_view", "2026-01-03T01:00:00Z", session="web-2"),
+            _event(
+                "order-1",
+                "order_created",
+                "2026-01-03T01:10:00Z",
+                session="web-2",
+                order="order-1",
+                gross=20,
+            ),
+        ]
+        for n, name in enumerate(("email_delivered", "email_opened", "email_clicked")):
+            email = _event(
+                f"email-{n}",
+                name,
+                f"2026-01-0{n + 2}T00:30:00Z",
+                session=f"email-session-{n}",
+                campaign=None,
+            )
+            email["source"] = "email"
+            events.append(email)
+        customers = [
+            {
+                "customer_id": "c-1",
+                "created_at": datetime(2025, 12, 1, tzinfo=UTC),
+                "consent_analytics": True,
+                "consent_marketing": True,
+            }
+        ]
+
+        (profile,) = build_customer_360(events, customers)
+
+        self.assertEqual(profile["event_count"], 6)
+        self.assertEqual(profile["session_count"], 2)
+
     def test_campaign_performance_full_outer_join_and_zero_spend_roas(self) -> None:
         spend = [
             {

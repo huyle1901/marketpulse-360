@@ -352,7 +352,10 @@ Payload-conflict detection compares the clean logical hash together with this
 recovered click ID using a null-safe struct; different paid-touch identities are
 reported as conflicts even when the clean v1 envelopes are otherwise identical.
 Gold exposes funnel, first/last/linear attribution, Customer 360, cohort retention, and campaign
-performance tables. Evidence records both MP-03 source totals and consent-governed
+performance tables. Customer 360 `session_count` counts a profile's distinct site
+sessions (web, mobile and commerce); email messages carry their own `session_id`
+but are not sessions, so email events add to `event_count` only. The MP-08
+detail check counts sessions the same way. Evidence records both MP-03 source totals and consent-governed
 Gold totals, because those layers intentionally answer different questions.
 Gross revenue counts only `order_created`; refund amounts count only
 `order_refunded`. Refund payloads retain the original order gross as context, so
