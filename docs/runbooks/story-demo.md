@@ -13,6 +13,25 @@ source scripts/story-demo-env.sh   # project name, 43110 web, 48110 API, 3 GiB F
 dc=(docker compose --profile '*')
 ```
 
+## Varied world (v2 project)
+
+The varied story world (plans 1–4 of the data-variety work: 13 cities, four channels including
+Shopee Ads, Vietnam-time rhythm, organic/direct/email visits, the email lifecycle) is built in a
+second Compose project, `marketpulse-story-demo-v2`, on the v1 ports + 100 (web 43210, API 48210,
+ClickHouse 48213, Dagster 43220, Flink 48285). Its generated world lives in
+`data/generated/story-demo-v2`, and its batch stack requires all four ad reports
+(`BATCH_REQUIRED_PLATFORMS=google_ads,meta_ads,tiktok_ads,shopee_ads`).
+
+```bash
+source scripts/story-demo-v2-env.sh
+dc=(docker compose --profile '*')
+```
+
+Before building v2, stop the v1 project without removing its volumes (this 24 GB machine cannot
+hold both): `source scripts/story-demo-env.sh && docker compose --profile '*' stop`. The steps
+below apply to v2 with `story-demo-v2` paths; measured values for v2 are recorded in the evidence
+sections once it is certified.
+
 ## One-time preparation (measured 2026-10-29)
 
 1. Generate the world (seed 360, 638 days, ignored under `data/generated/`):
