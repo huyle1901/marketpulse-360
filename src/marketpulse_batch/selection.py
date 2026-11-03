@@ -33,6 +33,23 @@ def _row_matches_day(dataset: str, row: dict, field: str, day: date) -> bool:
     return value == expected
 
 
+def _require_declared_platforms(plan: SourceArchivePlan, required_platforms: tuple[str, ...]) -> None:
+    """Fail closed when the world has campaigns on a platform whose report the stack skips.
+
+    Otherwise that platform's orders and revenue would be certified with no spend.
+    """
+    for source in plan.source_files:
+        if source.source_dataset != "master/campaigns":
+            continue
+        verify_source_archive_object(source)
+        platforms = {f"{row['platform']}_ads" for row in iter_source_file_rows(source)}
+        if undeclared := sorted(platforms - set(required_platforms)):
+            raise ValueError(
+                f"campaigns name {', '.join(undeclared)} but the stack does not require that report; "
+                "add it to BATCH_REQUIRED_PLATFORMS"
+            )
+
+
 def select_range_sources(plan: SourceArchivePlan, from_date: date, to_date: date,
                          required_platforms: tuple[str, ...]) -> SourceArchivePlan:
     """Pin complete daily ad/CRM inputs in one half-open history window."""
@@ -41,6 +58,7 @@ def select_range_sources(plan: SourceArchivePlan, from_date: date, to_date: date
     if (to_date - from_date).days > 731:
         raise ValueError("source window exceeds 731 days")
     required_platforms = BatchSelection(from_date, required_platforms).required_platforms
+    _require_declared_platforms(plan, required_platforms)
     selected = []
     observed: dict[date, set[str]] = {}
     for source in plan.source_files:
@@ -80,6 +98,7 @@ def select_range_sources(plan: SourceArchivePlan, from_date: date, to_date: date
 
 
 def select_daily_sources(plan: SourceArchivePlan, selection: BatchSelection) -> SourceArchivePlan:
+    _require_declared_platforms(plan, selection.required_platforms)
     selected = []
     observed: set[str] = set()
     for source in plan.source_files:

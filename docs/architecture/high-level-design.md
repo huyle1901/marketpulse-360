@@ -453,7 +453,9 @@ Shopee Ads `date` (DD/MM/YYYY, day-first) and CRM `snapshot_date` against the UT
 file partition. The range and daily window checks require only the configured
 required platforms (default google_ads, meta_ads, tiktok_ads; set via
 `BATCH_REQUIRED_PLATFORMS`, which Compose passes to batch-code, dagster-webserver,
-dagster-daemon and spark-lakehouse); undeclared reports are not required; retains shared master
+dagster-daemon and spark-lakehouse); undeclared reports are not required, but selection fails closed
+when `master/campaigns` names a platform whose report is not required (its revenue would otherwise be
+certified with no spend); retains shared master
 files and original row lineage. Preparation identities hash selected day/platforms,
 model digest and pinned Bronze snapshots. Local receipt files use exclusive atomic
 creation, immutable snapshot maps and conflict detection; PostgreSQL/Dagster
