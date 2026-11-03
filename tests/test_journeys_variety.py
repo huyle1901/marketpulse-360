@@ -28,6 +28,7 @@ from marketpulse_mock.journeys import (
     SourceRecord,
     _customer_picker,
     _day_impressions,
+    _email_record,
     _iter_email_events,
     iter_day_records,
 )
@@ -1441,6 +1442,22 @@ class FlatChannelHelperTests(unittest.TestCase):
                 (score < 850, score < 400, score < 250, score < 120),
                 _funnel_steps(config, campaigns[0], score, 1.0),
             )
+
+
+class EmailRecordContractTests(unittest.TestCase):
+    def test_a_typed_email_needs_its_send_day(self) -> None:
+        config = resolve_config("story-demo", 360, Path("unused"), days=1)
+        customer = generate_master_data(config).customers[0]
+        when = datetime(2025, 1, 1, 1, tzinfo=timezone.utc)
+        with self.assertRaisesRegex(ValueError, "send_day"):
+            _email_record(config, 0, 0, 0, "email_sent", when, customer, "promo")
+        typed = _email_record(
+            config, 0, 0, 0, "email_sent", when, customer, "promo", date(2025, 1, 1)
+        )
+        self.assertEqual(typed.payload["payload"]["lifecycle_campaign_id"], "LC-promo-20250101")
+        flat = _email_record(config, 0, 0, 0, "email_sent", when, customer)
+        self.assertEqual(flat.payload["payload"]["lifecycle_campaign_id"], "LC-0001")
+        self.assertNotIn("email_type", flat.payload["payload"])
 
 
 class StoryEmailTypeTests(unittest.TestCase):

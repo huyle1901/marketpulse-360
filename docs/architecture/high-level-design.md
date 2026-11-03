@@ -265,7 +265,11 @@ by walking each customer's sends, so generation stays linear in days. Every
 story email event's payload carries an optional-in-contract `email_type`
 (`welcome`, `newsletter` or `promo`; the email v1 contract restricts it to those
 values) and a `lifecycle_campaign_id` of `LC-<type>-<yyyymmdd>` for the send's
-UTC date. `flat` keeps the legacy fixed list of 2 % of consented customers,
+UTC date. The validator rejects any other `email_type`, a campaign id that
+does not name the event's type and UTC day, and a typed message clicked without
+being opened. A scenario cannot set `email_lifecycle` without
+`calendar_rhythm`, because email-referred visits exist only on the calendar
+branch. `flat` keeps the legacy fixed list of 2 % of consented customers,
 without `email_type`.
 
 Mock source data is not application operational data. User accounts, saved segments,

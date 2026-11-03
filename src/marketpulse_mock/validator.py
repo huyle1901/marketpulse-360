@@ -6,6 +6,7 @@ import csv
 import gzip
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -15,6 +16,9 @@ from typing import Iterator
 REPLAYABLE_DATASETS = {"web_events", "orders", "email_events"}
 NON_PAID_TRAFFIC_SOURCES = frozenset({"organic", "direct", "email"})
 """Story traffic sources whose web events carry no campaign or click."""
+EMAIL_TYPES = frozenset({"welcome", "newsletter", "promo"})
+LIFECYCLE_CAMPAIGN_ID = re.compile(r"LC-([a-z]+)-(\d{8})")
+"""A story email's campaign: its ``email_type`` and UTC send day (yyyymmdd)."""
 EXPECTED_SCHEMA_VERSIONS = {
     "master/customers": 1,
     "master/products": 1,
@@ -245,6 +249,8 @@ class _SemanticState:
     order_metrics: dict[tuple[str, str], list[int]] = field(default_factory=dict)
     refund_truth: dict[tuple[str, str], int] = field(default_factory=dict)
     session_stages: dict[str, int] = field(default_factory=dict)
+    typed_email_steps: dict[str, set[str]] = field(default_factory=dict)
+    """Event names seen per typed (story) email message in this partition."""
 
     def __post_init__(self) -> None:
         self.truth_totals = {
@@ -284,6 +290,7 @@ class _SemanticState:
             self._observe_order(relative_path, row)
         elif dataset == "email_events":
             self._check_customer(relative_path, row.get("customer_id"))
+            self._observe_email(relative_path, row)
         elif dataset == "crm":
             self._check_customer(relative_path, row.get("customer_id"))
         elif dataset in {"google_ads", "meta_ads", "tiktok_ads", "shopee_ads"}:
@@ -330,10 +337,17 @@ class _SemanticState:
                 f"missing_orders={missing_orders} missing_purchases={missing_purchases} differing={differing}"
             )
 
+        for message_id, steps in sorted(self.typed_email_steps.items()):
+            if "email_clicked" in steps and "email_opened" not in steps:
+                self.errors.append(
+                    f"email_clicked without email_opened for message {message_id}: {day}"
+                )
+
         self.purchases.clear()
         self.orders.clear()
         self.previous_event_ids.clear()
         self.session_stages.clear()
+        self.typed_email_steps.clear()
 
         all_keys = {
             key
@@ -569,6 +583,40 @@ class _SemanticState:
             self.errors.append(f"quality case does not have unsupported schema: {path}")
         if expected == "ORPHAN_CLICK_ID" and not str(record.get("click_id", "")).startswith("orphan-"):
             self.errors.append(f"quality case does not have orphan click_id: {path}")
+
+    def _observe_email(self, path: str, row: dict[str, object]) -> None:
+        """Check a story email's lifecycle type, campaign id and open-before-click.
+
+        Legacy flat emails carry no ``email_type`` and are left alone.
+        """
+
+        payload = row.get("payload")
+        if not isinstance(payload, dict) or "email_type" not in payload:
+            return
+        email_type = payload["email_type"]
+        if email_type not in EMAIL_TYPES:
+            self.errors.append(f"invalid email_type {email_type!r}: {path}")
+            return
+        campaign_id = payload.get("lifecycle_campaign_id")
+        event_time = row.get("event_time")
+        send_day = (
+            event_time[:10].replace("-", "") if isinstance(event_time, str) else None
+        )
+        match = (
+            LIFECYCLE_CAMPAIGN_ID.fullmatch(campaign_id)
+            if isinstance(campaign_id, str)
+            else None
+        )
+        if match is None or match.group(1) != email_type or match.group(2) != send_day:
+            self.errors.append(
+                f"lifecycle_campaign_id {campaign_id!r} does not match "
+                f"LC-{email_type}-<send day>: {path}"
+            )
+        message_id = payload.get("message_id")
+        if isinstance(message_id, str):
+            self.typed_email_steps.setdefault(message_id, set()).add(
+                str(row.get("event_name"))
+            )
 
     def _check_customer(self, path: str, value: object) -> None:
         if value is not None and str(value) not in self.master.customer_ids:

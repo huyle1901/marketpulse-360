@@ -63,10 +63,10 @@ class EmailSend:
 
     customer: Customer
     email_type: EmailType
-    ordinal: int = 0
-    opened: bool = False
-    clicked: bool = False
-    unsubscribed: bool = False
+    ordinal: int
+    opened: bool
+    clicked: bool
+    unsubscribed: bool
 
 
 class EmailSchedule:

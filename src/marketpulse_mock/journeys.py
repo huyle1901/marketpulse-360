@@ -19,7 +19,7 @@ from .config import (
     impression_capacity,
 )
 from .customer_picker import CustomerPicker, is_identified
-from .email_schedule import EmailSchedule, message_events
+from .email_schedule import EmailSchedule, EmailType, message_events
 from .ids import stable_id, stable_int
 from .models import Campaign, Customer, MasterData, Product
 from .session_timing import (
@@ -710,26 +710,24 @@ def _email_record(
     event_name: str,
     event_time: datetime,
     customer: Customer,
-    email_type: str | None = None,
+    email_type: EmailType | None = None,
     send_day: date | None = None,
 ) -> SourceRecord:
     """Build one email event; its message is ``(day_index, ordinal)``.
 
     A story email names its lifecycle ``email_type`` and campaign
-    ``LC-<type>-<yyyymmdd>`` of its ``send_day``; the legacy flat email has
-    neither.
+    ``LC-<type>-<yyyymmdd>`` of its ``send_day``, which it must be given; the
+    legacy flat email has neither.
     """
 
-    type_tag: dict[str, object] = (
-        {}
-        if email_type is None
-        else {"email_type": email_type}
-    )
-    lifecycle_campaign_id = (
-        f"LC-{day_index + 1:04d}"
-        if email_type is None or send_day is None
-        else f"LC-{email_type}-{send_day:%Y%m%d}"
-    )
+    type_tag: dict[str, object] = {}
+    if email_type is None:
+        lifecycle_campaign_id = f"LC-{day_index + 1:04d}"
+    elif send_day is None:
+        raise ValueError("a typed email needs its send_day")
+    else:
+        type_tag["email_type"] = email_type
+        lifecycle_campaign_id = f"LC-{email_type}-{send_day:%Y%m%d}"
     return SourceRecord(
         dataset="email_events",
         event_time=event_time,

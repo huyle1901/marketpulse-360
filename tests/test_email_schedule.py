@@ -25,6 +25,18 @@ def _window(config) -> list[date]:
     ]
 
 
+class EmailSendContractTests(unittest.TestCase):
+    def test_every_outcome_field_is_required(self) -> None:
+        _config, masters = _story(days=1)
+        customer = masters.customers[0]
+        with self.assertRaises(TypeError):
+            EmailSend(customer, "promo")  # type: ignore[call-arg]
+        with self.assertRaises(TypeError):
+            EmailSend(customer, "promo", 0, True, False)  # type: ignore[call-arg]
+        send = EmailSend(customer, "promo", 0, True, False, False)
+        self.assertFalse(send.unsubscribed)
+
+
 class EmailScheduleTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:

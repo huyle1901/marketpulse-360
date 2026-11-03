@@ -343,6 +343,64 @@ class DatasetValidatorTests(unittest.TestCase):
                     report.errors,
                 )
 
+    def _story_day(self, name: str = "story-email") -> None:
+        self.root = Path(self.temporary_directory.name) / name
+        generate_dataset(resolve_config("story-demo", 360, self.root, days=1))
+        self.assertTrue(validate_dataset(self.root).valid)
+
+    def _assert_rejected(self, fragment: str) -> None:
+        report = validate_dataset(self.root)
+        self.assertFalse(report.valid)
+        self.assertTrue(any(fragment in error for error in report.errors), report.errors)
+
+    def test_story_email_type_must_be_a_lifecycle_type(self) -> None:
+        self._story_day()
+
+        def mutate(row: dict[str, object]) -> None:
+            row["payload"]["email_type"] = "winback"
+
+        self._mutate_first_json_record("email_events", mutate)
+        self._assert_rejected("invalid email_type 'winback'")
+
+    def test_story_email_campaign_id_must_name_its_type_and_day(self) -> None:
+        for n, campaign_id in enumerate(
+            ("LC-0001", "LC-welcome-20250101", "LC-promo-20250102", "LC-promo-2025011")
+        ):
+            with self.subTest(campaign_id=campaign_id):
+                self._story_day(f"story-email-{n}")
+
+                def mutate(row: dict[str, object], campaign_id: str = campaign_id) -> None:
+                    row["payload"]["lifecycle_campaign_id"] = campaign_id
+
+                self._mutate_first_json_record(
+                    "email_events",
+                    mutate,
+                    match=lambda row: row["payload"].get("email_type") == "promo"
+                    and row["event_time"].startswith("2025-01-01"),
+                )
+                self._assert_rejected(f"lifecycle_campaign_id {campaign_id!r} does not match")
+
+    def test_story_email_click_needs_an_open_of_the_same_message(self) -> None:
+        self._story_day()
+        target = next((self.root / "email_events").rglob("*.jsonl.gz"))
+        with gzip.open(target, "rt", encoding="utf-8") as stream:
+            clicked = next(
+                json.loads(line)["payload"]["message_id"]
+                for line in stream
+                if json.loads(line)["event_name"] == "email_clicked"
+            )
+
+        def mutate(row: dict[str, object]) -> None:
+            row["event_name"] = "email_delivered"
+
+        self._mutate_first_json_record(
+            "email_events",
+            mutate,
+            event_name="email_opened",
+            match=lambda row: row["payload"]["message_id"] == clicked,
+        )
+        self._assert_rejected(f"email_clicked without email_opened for message {clicked}")
+
     def _mutate_first_json_record(
         self,
         dataset: str,

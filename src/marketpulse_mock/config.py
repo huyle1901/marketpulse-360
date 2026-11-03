@@ -172,6 +172,9 @@ class Scenario:
             raise ValueError("returning_device_share must be between 0 and 1")
         if self.returning_window_days < 0:
             raise ValueError("returning_window_days must not be negative")
+        if self.email_lifecycle and not self.calendar_rhythm:
+            # Email-referred visits are drawn only on the calendar branch.
+            raise ValueError("email_lifecycle requires calendar_rhythm")
 
 
 def _require_every_platform(
