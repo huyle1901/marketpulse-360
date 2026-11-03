@@ -34,6 +34,14 @@
   `campaign_id desc, click_id desc`); generator 7-day vs Gold 30-day touch window for non-paid orders; a paid order
   crediting a later same-day bot click (Gold excludes bot touches).
 
+## Carried from plan 4 (final review)
+
+- Rebuild Gold on v2 before trusting customer detail: releases built before the email-aware `session_count`
+  (email messages are not sessions) disagree with the app's consistency check. Run `MP08_CLICKHOUSE_TEST` and the
+  Spark Gold path once on the v2 stack.
+- Email page: monthly sends follow the send calendar (promo days jump); the Recipients line should rise steadily —
+  check it in the walkthrough. The oracle counts email sends by type × month and email-referred sessions.
+
 ## Review Focus
 
 - Port collisions with v1 services still running (Postgres, MinIO) → v2 must start with v1's app up — checked in Task 1.
