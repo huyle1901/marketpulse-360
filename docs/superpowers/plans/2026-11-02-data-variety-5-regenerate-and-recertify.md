@@ -27,6 +27,13 @@
   with no spend).
 - Record the scenario in the manifest for non-flat runs (carried from plan 1).
 
+## Carried from plan 3 (final review)
+
+- Run the Kafka smoke test and register the widened v1 web/order contracts on the v2 registry.
+- Recertification reasons to check or explain: same-second last-touch ties (generator `(time, ordinal)` vs Gold
+  `campaign_id desc, click_id desc`); generator 7-day vs Gold 30-day touch window for non-paid orders; a paid order
+  crediting a later same-day bot click (Gold excludes bot touches).
+
 ## Review Focus
 
 - Port collisions with v1 services still running (Postgres, MinIO) → v2 must start with v1's app up — checked in Task 1.
