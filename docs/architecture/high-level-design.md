@@ -239,6 +239,23 @@ and both constrain the optional payload `traffic_source` to `paid`, `organic`,
 payload's `traffic_source` is organic, direct or email, and campaign metrics
 skip events without a campaign key.
 
+Story email follows a lifecycle programme (`email_schedule`): every
+marketing-consented customer is in the audience from their join date until they
+unsubscribe. A customer who joins inside the window gets a `welcome` on the join
+day; the audience gets a `promo` on Vietnam sale days (double days and the three
+days before Tết) and a `newsletter` on other Vietnam Tuesdays, at most one email
+per customer per day (welcome > promo > newsletter). Open and click rates of
+delivered emails are welcome 55 %/12 %, newsletter 28 %/2.5 % and promo
+32 %/4.5 % (a click is always an open), and 0.5 % of delivered emails
+unsubscribe, which ends the customer's sends and turns `consent_marketing`
+false from the next day's CRM snapshot. Sends go out 08:00–10:00 Vietnam time
+(01:00–03:00 UTC); delivery follows within 30 s, an open within 8 h, a click
+within 30 min of the open and an unsubscribe within 5 min of the message's last
+event, so every email event stays inside its UTC day, and each day's email
+events are emitted in event-time order. The schedule is computed once per window
+by walking each customer's sends, so generation stays linear in days. `flat`
+keeps the legacy fixed list of 2 % of consented customers.
+
 Mock source data is not application operational data. User accounts, saved segments,
 alert rules, annotations, and platform configuration created through the future
 MarketPulse 360 application remain a separate PostgreSQL domain.

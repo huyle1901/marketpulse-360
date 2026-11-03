@@ -112,6 +112,11 @@ class Scenario:
     """Purchase-strength multiplier per device (``desktop``, ``mobile``,
     ``tablet``; positive); None leaves every device's strength unchanged."""
 
+    email_lifecycle: bool = False
+    """Email every marketing-consented customer from their join date until
+    they unsubscribe (welcome, promo and newsletter sends, see
+    ``email_schedule``); False keeps the legacy fixed 2 % email list."""
+
     def __post_init__(self) -> None:
         if not self.platforms:
             raise ValueError("platforms must not be empty")
@@ -221,6 +226,7 @@ SCENARIOS: Mapping[str, Scenario] = MappingProxyType(
             device_strength=MappingProxyType(
                 {"mobile": 0.85, "desktop": 1.15, "tablet": 1.0}
             ),
+            email_lifecycle=True,
         ),
     }
 )

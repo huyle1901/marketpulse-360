@@ -19,6 +19,7 @@ from .config import (
     impression_capacity,
 )
 from .customer_picker import CustomerPicker, is_identified
+from .email_schedule import EmailSchedule, message_events
 from .ids import stable_id, stable_int
 from .models import Campaign, Customer, MasterData, Product
 from .session_timing import (
@@ -558,17 +559,31 @@ def _iter_crm_snapshots(
     day: date,
     day_start: datetime,
 ) -> Iterator[SourceRecord]:
-    email_ordinals = {
-        customer.customer_id: ordinal
-        for ordinal, customer in _email_audience(masters, day)
-    }
+    if config.scenario.email_lifecycle:
+        schedule = EmailSchedule.build(config, masters)
+
+        def unsubscribed(customer: Customer) -> bool:
+            # Snapshots sit at day start, so an unsubscribe shows the next day.
+            unsubscribed_on = schedule.unsubscribed_on(customer.customer_id)
+            return unsubscribed_on is not None and unsubscribed_on < day
+
+    else:
+        email_ordinals = {
+            customer.customer_id: ordinal
+            for ordinal, customer in _email_audience(masters, day)
+        }
+
+        def unsubscribed(customer: Customer) -> bool:
+            email_ordinal = email_ordinals.get(customer.customer_id)
+            return email_ordinal is not None and _email_unsubscribed_before(
+                config, email_ordinal, day_index
+            )
+
     for ordinal, customer in enumerate(masters.customers):
         if customer.created_at.date() > day:
             continue
-        email_ordinal = email_ordinals.get(customer.customer_id)
-        consent_marketing = customer.consent_marketing and not (
-            email_ordinal is not None
-            and _email_unsubscribed_before(config, email_ordinal, day_index)
+        consent_marketing = customer.consent_marketing and not unsubscribed(
+            customer
         )
         yield SourceRecord(
             dataset="crm",
@@ -595,11 +610,12 @@ def _iter_email_events(
     day_start: datetime,
 ) -> Iterator[SourceRecord]:
     day = day_start.date()
+    if config.scenario.email_lifecycle:
+        yield from _iter_lifecycle_email_events(config, masters, day_index, day)
+        return
     for ordinal, customer in _email_audience(masters, day):
         if _email_unsubscribed_before(config, ordinal, day_index):
             continue
-        message_id = stable_id(config.seed, f"email-{day_index}", ordinal)
-        session_id = stable_id(config.seed, f"email-session-{day_index}", ordinal)
         event_time = day_start + timedelta(hours=8, seconds=ordinal * 10)
         event_names = ["email_sent", "email_delivered"]
         score = stable_int(config.seed, "email", day_index, ordinal, modulo=100)
@@ -610,34 +626,83 @@ def _iter_email_events(
         if score == 0:
             event_names.append("email_unsubscribed")
         for event_offset, event_name in enumerate(event_names):
-            yield SourceRecord(
-                dataset="email_events",
-                event_time=event_time + timedelta(seconds=event_offset),
-                payload=_envelope(
-                    event_id=stable_id(
-                        config.seed,
-                        f"email-event-{day_index}-{ordinal}",
-                        event_offset,
-                    ),
-                    event_name=event_name,
-                    event_time=event_time + timedelta(seconds=event_offset),
-                    source="email",
-                    customer=customer,
-                    anonymous_id=None,
-                    session_id=session_id,
-                    campaign=None,
-                    click_id=None,
-                    payload={
-                        "message_id": message_id,
-                        "lifecycle_campaign_id": f"LC-{day_index + 1:04d}",
-                        "destination_url": (
-                            "https://shop.marketpulse.example.test/email"
-                            if event_name == "email_clicked"
-                            else None
-                        ),
-                    },
-                ),
+            yield _email_record(
+                config,
+                day_index,
+                ordinal,
+                event_offset,
+                event_name,
+                event_time + timedelta(seconds=event_offset),
+                customer,
             )
+
+
+def _iter_lifecycle_email_events(
+    config: GenerationConfig,
+    masters: MasterData,
+    day_index: int,
+    day: date,
+) -> Iterator[SourceRecord]:
+    """Yield the story day's scheduled email events in event-time order.
+
+    Ties (none occur within a message) break by customer ordinal, then by the
+    event's position in its message.
+    """
+
+    events = sorted(
+        (event_time, send.ordinal, event_offset, event_name, send.customer)
+        for send in EmailSchedule.build(config, masters).sends_on(day)
+        for event_offset, (event_name, event_time) in enumerate(
+            message_events(config.seed, day, send)
+        )
+    )
+    for event_time, ordinal, event_offset, event_name, customer in events:
+        yield _email_record(
+            config, day_index, ordinal, event_offset, event_name, event_time, customer
+        )
+
+
+def _email_record(
+    config: GenerationConfig,
+    day_index: int,
+    ordinal: int,
+    event_offset: int,
+    event_name: str,
+    event_time: datetime,
+    customer: Customer,
+) -> SourceRecord:
+    """Build one email event; its message is ``(day_index, ordinal)``."""
+
+    return SourceRecord(
+        dataset="email_events",
+        event_time=event_time,
+        payload=_envelope(
+            event_id=stable_id(
+                config.seed,
+                f"email-event-{day_index}-{ordinal}",
+                event_offset,
+            ),
+            event_name=event_name,
+            event_time=event_time,
+            source="email",
+            customer=customer,
+            anonymous_id=None,
+            session_id=stable_id(
+                config.seed, f"email-session-{day_index}", ordinal
+            ),
+            campaign=None,
+            click_id=None,
+            payload={
+                "message_id": stable_id(config.seed, f"email-{day_index}", ordinal),
+                "lifecycle_campaign_id": f"LC-{day_index + 1:04d}",
+                "destination_url": (
+                    "https://shop.marketpulse.example.test/email"
+                    if event_name == "email_clicked"
+                    else None
+                ),
+            },
+        ),
+    )
 
 
 def _email_audience(
