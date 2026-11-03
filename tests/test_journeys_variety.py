@@ -904,6 +904,62 @@ class StoryCalendarRhythmTests(unittest.TestCase):
         self.assertNotEqual(stream(self.days[314]), stream(other_day))
 
 
+class ShopeeDoubleDayStrengthTests(unittest.TestCase):
+    """A Shopee session on a Vietnam double day converts at 1.5x its persona."""
+
+    SINGLES_DAY = 314  # UTC 2025-11-11: VN 11/11 until 17:00 UTC, then VN 11/12
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.config = resolve_config("story-demo", 360, Path(tmp))
+            cls.flat = resolve_config("fixture", 360, Path(tmp))
+        masters = generate_master_data(cls.config)
+        cls.shopee = next(c for c in masters.campaigns if c.platform == "shopee")
+        cls.other = next(c for c in masters.campaigns if c.platform != "shopee")
+
+    def _ordinal(self, double: bool) -> int:
+        from marketpulse_mock.session_timing import _session_hour
+
+        return next(
+            ordinal
+            for ordinal in range(1_000)
+            if (_session_hour(self.config, self.SINGLES_DAY, ordinal) < 17) == double
+        )
+
+    def test_double_day_lifts_only_shopee_by_half(self) -> None:
+        from marketpulse_mock.journeys import _persona, _purchase_strength
+
+        double, plain = self._ordinal(True), self._ordinal(False)
+        for campaign, lift in ((self.shopee, 1.5), (self.other, 1.0)):
+            persona = _persona(self.config, campaign)[2]
+            self.assertAlmostEqual(
+                lift * persona,
+                _purchase_strength(self.config, campaign, self.SINGLES_DAY, double),
+                msg=campaign.platform,
+            )
+            self.assertAlmostEqual(
+                persona,
+                _purchase_strength(self.config, campaign, self.SINGLES_DAY, plain),
+                msg=campaign.platform,
+            )
+        self.assertNotAlmostEqual(
+            1.0, _persona(self.config, self.shopee)[2], msg="persona must be non-neutral"
+        )
+
+    def test_flat_strength_ignores_the_double_day(self) -> None:
+        from marketpulse_mock.journeys import _purchase_strength
+
+        for campaign in (self.shopee, self.other):
+            for double in (True, False):
+                self.assertEqual(
+                    1.0,
+                    _purchase_strength(
+                        self.flat, campaign, self.SINGLES_DAY, self._ordinal(double)
+                    ),
+                )
+
+
 class StoryTetDipTests(unittest.TestCase):
     """Tết 2026: eve through the fourth day dips below its surrounding weeks."""
 
