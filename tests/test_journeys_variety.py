@@ -20,6 +20,7 @@ from marketpulse_mock.config import (
     impression_capacity,
     resolve_config,
 )
+from marketpulse_mock.email_schedule import EmailSchedule
 from marketpulse_mock.generator import generate_dataset
 from marketpulse_mock.ids import stable_id
 from marketpulse_mock.journeys import (
@@ -1445,10 +1446,7 @@ class StoryEmailTypeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            # Seed 361, not 360: welcome volume is ~160 sends in 90 days (one
-            # standard error is ~4 points), and seed 360's sample happens to
-            # land 6.5 points high on opens (the full-window rate is 52 %).
-            config = resolve_config("story-demo", 361, Path(tmp), days=90)
+            config = resolve_config("story-demo", 360, Path(tmp), days=90)
         masters = generate_master_data(config)
         cls.records = []
         for day_index in range(config.profile.days):
@@ -1477,27 +1475,78 @@ class StoryEmailTypeTests(unittest.TestCase):
         self.assertTrue(all(len(types) == 1 for types in by_message.values()))
         self.assertEqual(set(self.TARGETS), {t for v in by_message.values() for t in v})
 
-    def test_open_and_click_rates_per_type_match_targets(self) -> None:
+    def _assert_rates(
+        self,
+        email_type: str,
+        delivered: int,
+        opened: int,
+        clicked: int,
+        *,
+        click_delta: float = 5.0,
+        standard_errors: float | None = None,
+    ) -> None:
+        open_target, click_target = self.TARGETS[email_type]
+        self.assertGreater(delivered, 0, email_type)
+        msg = (
+            f"{email_type}: delivered={delivered} "
+            f"open={100 * opened / delivered:.2f} "
+            f"click={100 * clicked / delivered:.2f}"
+        )
+        for observed, target, delta in (
+            (100 * opened / delivered, open_target, 5.0),
+            (100 * clicked / delivered, click_target, click_delta),
+        ):
+            self.assertAlmostEqual(target, observed, delta=delta, msg=msg)
+            if standard_errors is not None:
+                p = target / 100
+                se = 100 * math.sqrt(p * (1 - p) / delivered)
+                self.assertLessEqual(
+                    abs(observed - target), standard_errors * se, msg
+                )
+
+    def test_newsletter_and_promo_rates_match_targets(self) -> None:
         delivered: Counter[str] = Counter()
         opened: Counter[str] = Counter()
         clicked: Counter[str] = Counter()
         for record in self.records:
-            payload = record.payload["payload"]
-            email_type = payload["email_type"]
+            email_type = record.payload["payload"]["email_type"]
             name = record.payload["event_name"]
             delivered[email_type] += name == "email_delivered"
             opened[email_type] += name == "email_opened"
             clicked[email_type] += name == "email_clicked"
-        for email_type, (open_target, click_target) in self.TARGETS.items():
-            self.assertGreater(delivered[email_type], 0, email_type)
-            open_rate = 100 * opened[email_type] / delivered[email_type]
-            click_rate = 100 * clicked[email_type] / delivered[email_type]
-            print(
-                f"{email_type}: delivered={delivered[email_type]} "
-                f"open={open_rate:.2f} click={click_rate:.2f}"
+        for email_type in ("newsletter", "promo"):
+            # n is ~12k / ~6k, so clicks must land within 1 point: a rate of
+            # zero (or double) cannot hide inside the +-5 outer bound.
+            self._assert_rates(
+                email_type,
+                delivered[email_type],
+                opened[email_type],
+                clicked[email_type],
+                click_delta=1.0,
             )
-            self.assertAlmostEqual(open_target, open_rate, delta=5.0, msg=email_type)
-            self.assertAlmostEqual(click_target, click_rate, delta=5.0, msg=email_type)
+
+    def test_welcome_rates_match_targets_over_the_full_window(self) -> None:
+        # Welcome volume is ~50 a month, so a 90-day sample (n~160, one
+        # standard error ~4 points) cannot judge +-5. The full story window
+        # (n~1600) can; the schedule alone carries the outcomes.
+        with tempfile.TemporaryDirectory() as tmp:
+            config = resolve_config("story-demo", 360, Path(tmp))
+        schedule = EmailSchedule.build(config, generate_master_data(config))
+        sends = [
+            send
+            for offset in range(config.profile.days)
+            for send in schedule.sends_on(
+                config.start_date + timedelta(days=offset)
+            )
+            if send.email_type == "welcome"
+        ]
+        self._assert_rates(
+            "welcome",
+            len(sends),
+            sum(send.opened for send in sends),
+            sum(send.clicked for send in sends),
+            standard_errors=4.0,
+        )
 
 
 if __name__ == "__main__":
