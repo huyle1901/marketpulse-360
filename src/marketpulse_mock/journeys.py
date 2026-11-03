@@ -222,9 +222,9 @@ def iter_day_records(
 
         A paid session has its ``campaign`` and a click; a non-paid one
         (``campaign`` None: organic, direct, later email) has neither, adds
-        nothing to campaign aggregates and credits its order to the
-        customer's latest paid click in the window, if any. ``strength``
-        scales the late funnel.
+        nothing to campaign aggregates and credits its order (the order
+        events only, never its web events) to the customer's latest paid
+        click in the window, if any. ``strength`` scales the late funnel.
         """
 
         nonlocal click_index, order_index
@@ -401,13 +401,16 @@ def iter_day_records(
                 attributed_aggregate.orders += 1
                 attributed_aggregate.gross_revenue_minor += amount_minor
 
+            # A non-paid session's web events stay campaign-free, purchase
+            # included, so funnels never count it under the credited
+            # campaign; only its order events carry the credited click.
             web_purchase = session_event(
                 "web_events",
                 "purchase",
                 5,
                 purchase_time,
-                attributed_campaign,
-                attributed_click_id,
+                attributed_campaign if paid else None,
+                attributed_click_id if paid else None,
                 {
                     **_web_payload(product, device, "confirmation", False),
                     "order_id": order_id,

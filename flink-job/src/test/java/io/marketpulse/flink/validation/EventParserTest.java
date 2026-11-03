@@ -83,6 +83,27 @@ class EventParserTest {
     }
 
     @Test
+    void acceptsNonPaidWebPurchaseWithoutCampaign() throws Exception {
+        // The order carries the credited click; the session's purchase does not.
+        ObjectNode value = withoutCampaign((ObjectNode) MAPPER.readTree(resource("web.json")));
+        value.put("event_name", "purchase");
+        ObjectNode payload = (ObjectNode) value.get("payload");
+        payload.put("order_id", "d2127506-099e-5a21-99ee-90646e812316");
+        payload.put("amount_minor", 1958000);
+        payload.put("currency", "VND");
+        payload.put("traffic_source", "organic");
+
+        var result = parser.parse(
+                rawBytes("marketing.raw.web-events.v1", MAPPER.writeValueAsBytes(value)), DETECTED_AT);
+
+        assertTrue(result.valid());
+        assertEquals("purchase", result.event().eventName());
+        assertNull(result.event().campaignId());
+        assertNull(result.event().clickId());
+        assertNull(result.event().campaignKey());
+    }
+
+    @Test
     void rejectsPaidOrUnlabelledWebEventsWithoutCampaign() throws Exception {
         assertMutation("web.json", node -> {
             withoutCampaign(node);

@@ -993,8 +993,9 @@ class StoryNonPaidTrafficTests(unittest.TestCase):
                 self.assertIsNotNone(r.payload["click_id"], r.payload)
                 continue
             checked += 1
-            if r.payload["event_name"] in ("purchase", "order_created", "order_refunded"):
-                # An order may credit an earlier paid click, never its own.
+            if r.dataset == "orders":
+                # An order may credit an earlier paid click, never its own;
+                # the session's web events, purchase included, stay campaign-free.
                 click_id = r.payload["click_id"]
                 self.assertTrue(click_id is None or click_id in paid_clicks, r.payload)
                 self.assertEqual(click_id is None, r.payload["campaign_id"] is None)
@@ -1062,9 +1063,17 @@ class StoryNonPaidTrafficTests(unittest.TestCase):
         ]
         self.assertGreater(len(refunds), 0)
         for order_id, order in created.items():
+            # Only the order carries the credited click; the web purchase
+            # stays in the unattributed funnel with the rest of its session.
             purchase = purchases[order_id]
             for field in ("campaign_id", "platform_campaign_id", "click_id"):
+                self.assertIsNone(purchase.payload[field], (field, purchase.payload))
+            for field in ("customer_id", "session_id"):
                 self.assertEqual(order.payload[field], purchase.payload[field])
+            self.assertEqual(
+                order.payload["payload"]["gross_amount_minor"],
+                purchase.payload["payload"]["amount_minor"],
+            )
         for refund in refunds:
             order = created[str(refund.payload["payload"]["order_id"])]
             for field in ("campaign_id", "platform_campaign_id", "click_id"):
@@ -1073,6 +1082,38 @@ class StoryNonPaidTrafficTests(unittest.TestCase):
                 self.assertEqual(
                     order.payload["payload"][field], refund.payload["payload"][field]
                 )
+
+    def test_campaign_funnels_never_purchase_more_than_checkout(self) -> None:
+        # Gold build_funnel_daily buckets each web event by its own
+        # campaign_id (bot sessions excluded); a non-paid purchase carrying
+        # its credited campaign would land in a funnel without its checkout.
+        bots = {
+            str(r.payload["session_id"])
+            for r in _page_views(self.records)
+            if r.payload["payload"]["is_bot"]
+        }
+        funnels: dict[tuple[date, str], dict[str, set[str]]] = defaultdict(
+            lambda: defaultdict(set)
+        )
+        for r in self.records:
+            if r.dataset != "web_events":
+                continue
+            session_id = str(r.payload["session_id"])
+            if self._non_paid(r):
+                self.assertIsNone(r.payload["campaign_id"], r.payload)
+            if session_id in bots:
+                continue
+            campaign_id = str(r.payload["campaign_id"] or "__unattributed__")
+            funnels[(r.event_time.date(), campaign_id)][
+                str(r.payload["event_name"])
+            ].add(session_id)
+        purchases = 0
+        for key, stages in funnels.items():
+            purchases += len(stages["purchase"])
+            self.assertLessEqual(
+                len(stages["purchase"]), len(stages["begin_checkout"]), key
+            )
+        self.assertGreater(purchases, 1_000)
 
     def test_ground_truth_counts_paid_sessions_and_attributed_orders(self) -> None:
         truth: dict[tuple[str, str], list[int]] = defaultdict(lambda: [0, 0, 0, 0])
