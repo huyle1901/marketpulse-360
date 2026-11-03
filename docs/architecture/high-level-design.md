@@ -262,9 +262,9 @@ within 30 min of the open and an unsubscribe within 5 min of the message's last
 event, so every email event stays inside its UTC day, and each day's email
 events are emitted in event-time order. The schedule is computed once per window
 by walking each customer's sends, so generation stays linear in days. Every
-story email event's payload carries an optional-in-contract `email_type`
-(`welcome`, `newsletter` or `promo`; the email v1 contract restricts it to those
-values) and a `lifecycle_campaign_id` of `LC-<type>-<yyyymmdd>` for the send's
+story email event's payload carries an `email_type` (optional in the v1 contract),
+which is `welcome`, `newsletter` or `promo` (the contract allows only those
+values), and a `lifecycle_campaign_id` of `LC-<type>-<yyyymmdd>` for the send's
 UTC date. The validator rejects any other `email_type`, a campaign id that
 does not name the event's type and UTC day, and a typed message clicked without
 being opened. A scenario cannot set `email_lifecycle` without
