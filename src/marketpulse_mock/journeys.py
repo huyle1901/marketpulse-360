@@ -365,6 +365,7 @@ def iter_day_records(
                     current_touch=touch,
                     purchase_time=purchase_time,
                     timeline=timeline,
+                    paid_day=paid_day,
                 )
                 if attributed_touch is None:
                     raise AssertionError("new paid touch must be attributable")
@@ -883,6 +884,7 @@ def _latest_purchase_touch(
     current_touch: PaidTouch,
     purchase_time: datetime,
     timeline: Sequence[tuple[datetime, int]],
+    paid_day: _PaidDay | None = None,
 ) -> PaidTouch | None:
     """Resolve last paid click, including clicks during an overlapping journey.
 
@@ -890,7 +892,8 @@ def _latest_purchase_touch(
     clicks credited here belong to the customer who actually made them.
     ``timeline`` is the day's ``_session_timeline``; the sessions emitted after
     this one up to ``purchase_time``, overflow join-day sessions included, are
-    the candidates.
+    the candidates. A calendar day passes its ``paid_day``, whose campaigns
+    and sessions are then the only decision source; ``flat`` draws them here.
     """
 
     if customer is None:
@@ -902,10 +905,15 @@ def _latest_purchase_touch(
         candidate_time, candidate_ordinal = timeline[position]
         if candidate_time > purchase_time:
             break
-        campaign = _pick_campaign(config, masters, day_index, candidate_ordinal)
-        if candidate_ordinal < capacity and not _is_clicked(
-            config, campaign, day_index, candidate_ordinal
-        ):
+        if paid_day is None:
+            campaign = _pick_campaign(config, masters, day_index, candidate_ordinal)
+            if candidate_ordinal < capacity and not _is_clicked(
+                config, campaign, day_index, candidate_ordinal
+            ):
+                continue
+        elif candidate_ordinal in paid_day.session_ordinals:
+            campaign = paid_day.campaigns[candidate_ordinal]
+        else:
             continue
         candidate_customer = picker.pick(day_index, candidate_ordinal)
         if candidate_customer != customer:
