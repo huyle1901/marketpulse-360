@@ -741,7 +741,10 @@ class StoryCalendarRhythmTests(unittest.TestCase):
                     spend[str(r.payload["platform"])] += int(r.payload["spend_minor"])
             return spend["shopee"] / sum(spend.values())
 
-        self.assertGreater(share(date(2025, 11, 11)), share(date(2025, 11, 12)))
+        # Doubling an 18 % share gives about 30.5 %; noise between two
+        # unboosted days of about 18 % stays far below a 1.4x margin.
+        singles_day, next_day = share(date(2025, 11, 11)), share(date(2025, 11, 12))
+        self.assertGreaterEqual(singles_day, 1.4 * next_day, (singles_day, next_day))
 
     def test_records_stay_ordered_inside_their_utc_day(self) -> None:
         for day_index, records in self.days.items():
