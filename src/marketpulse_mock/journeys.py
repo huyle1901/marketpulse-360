@@ -666,6 +666,7 @@ def _iter_lifecycle_email_events(
             event_time,
             send.customer,
             send.email_type,
+            day,
         )
 
 
@@ -678,11 +679,13 @@ def _email_record(
     event_time: datetime,
     customer: Customer,
     email_type: str | None = None,
+    send_day: date | None = None,
 ) -> SourceRecord:
     """Build one email event; its message is ``(day_index, ordinal)``.
 
     A story email names its lifecycle ``email_type`` and campaign
-    ``LC-<type>-<yyyymmdd>``; the legacy flat email has neither.
+    ``LC-<type>-<yyyymmdd>`` of its ``send_day``; the legacy flat email has
+    neither.
     """
 
     type_tag: dict[str, object] = (
@@ -692,8 +695,8 @@ def _email_record(
     )
     lifecycle_campaign_id = (
         f"LC-{day_index + 1:04d}"
-        if email_type is None
-        else f"LC-{email_type}-{event_time:%Y%m%d}"
+        if email_type is None or send_day is None
+        else f"LC-{email_type}-{send_day:%Y%m%d}"
     )
     return SourceRecord(
         dataset="email_events",
