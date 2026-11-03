@@ -30,7 +30,8 @@ export function useRead<T>(path:string,valid:(body:any)=>boolean):{data:T|null;e
 }
 export const useLifecycleRead=<T,>(path:string)=>useRead<T>('lifecycle/'+path,body=>Array.isArray(body.months));
 
-const emailConfig={sent:{label:'Sent',color:'var(--chart-4)'},opened:{label:'Opened',color:'var(--chart-1)'},clicked:{label:'Clicked',color:'var(--chart-2)'}} satisfies ChartConfig;
+const emailConfig={sent:{label:'Sent',color:'var(--chart-4)'},opened:{label:'Opened',color:'var(--chart-1)'},clicked:{label:'Clicked',color:'var(--chart-2)'},recipients:{label:'Recipients',color:'var(--chart-3)'}} satisfies ChartConfig;
+const emailSeries=['sent','opened','clicked','recipients'] as const;
 export function EmailWorkspace(){
  const {data,error}=useLifecycleRead<EmailReport>('email-engagement');
  if(error)return <div className="error" role="alert"><strong>Email engagement unavailable</strong><p>{error}</p></div>;
@@ -38,12 +39,12 @@ export function EmailWorkspace(){
  if(data.status==='unavailable')return <p className="empty">{data.message||'Email engagement is unavailable for this certified release.'}</p>;
  const t=data.totals!;
  const cards:[string,string,string][]=[['Emails sent',exact(t.sent),'All lifecycle sends'],['Delivered',exact(t.delivered),'Reached an inbox'],['Open rate',ratePercent(t.open_rate),'Opened ÷ delivered'],['Click rate',ratePercent(t.click_rate),'Clicked ÷ delivered'],['Unsubscribe rate',ratePercent(t.unsubscribe_rate),'Unsubscribed ÷ delivered']];
- const chart=data.months.map(m=>({month:monthLabel(m.month),sent:Number(m.sent),opened:Number(m.opened),clicked:Number(m.clicked)}));
+ const chart=data.months.map(m=>({month:monthLabel(m.month),sent:Number(m.sent),opened:Number(m.opened),clicked:Number(m.clicked),recipients:Number(m.recipients)}));
  return <div className="space-y-4">
   <StatStrip label="Email totals" className="md:grid-cols-5" items={cards.map(([name,value,hint])=>({name,value,hint}))}/>
-  <Card className="min-w-0"><CardHeader><CardTitle>Monthly engagement</CardTitle><CardDescription>Governed email events by month · {data.definition}</CardDescription></CardHeader><CardContent>
-   <div className="mb-3"><Legend label="Monthly engagement legend" items={(['sent','opened','clicked'] as const).map(k=>({key:k,label:emailConfig[k].label,color:emailConfig[k].color}))}/></div>
-   <div role="img" aria-label="Monthly emails sent, opened and clicked"><ChartContainer config={emailConfig} className="aspect-auto h-[260px] w-full"><LineChart data={chart} margin={{left:4,right:12,top:8}}><CartesianGrid vertical={false}/><XAxis dataKey="month" tickLine={false} axisLine={false} minTickGap={24}/><YAxis tickLine={false} axisLine={false} width={44}/><ChartTooltip content={<ChartTooltipContent/>}/>{(['sent','opened','clicked'] as const).map(k=><Line key={k} dataKey={k} type="monotone" stroke={'var(--color-'+k+')'} strokeWidth={2} dot={false} isAnimationActive={false}/>)}</LineChart></ChartContainer></div>
+  <Card className="min-w-0"><CardHeader><CardTitle>Monthly engagement</CardTitle><CardDescription>Governed email events by month. Sends follow the send calendar, so promo days make them jump; recipients (distinct customers emailed) show audience growth · {data.definition}</CardDescription></CardHeader><CardContent>
+   <div className="mb-3"><Legend label="Monthly engagement legend" items={emailSeries.map(k=>({key:k,label:emailConfig[k].label,color:emailConfig[k].color}))}/></div>
+   <div role="img" aria-label="Monthly emails sent, opened and clicked, and recipients emailed"><ChartContainer config={emailConfig} className="aspect-auto h-[260px] w-full"><LineChart data={chart} margin={{left:4,right:12,top:8}}><CartesianGrid vertical={false}/><XAxis dataKey="month" tickLine={false} axisLine={false} minTickGap={24}/><YAxis tickLine={false} axisLine={false} width={44}/><ChartTooltip content={<ChartTooltipContent/>}/>{emailSeries.map(k=><Line key={k} dataKey={k} type="monotone" stroke={'var(--color-'+k+')'} strokeWidth={2} dot={false} isAnimationActive={false}/>)}</LineChart></ChartContainer></div>
   </CardContent></Card>
   <Card className="min-w-0"><CardHeader><CardTitle>Email funnel</CardTitle><CardDescription>How many lifecycle emails reached each step across the certified history</CardDescription></CardHeader><CardContent>
    <BarList name="Email funnel" rows={([['sent','Sent',t.sent],['delivered','Delivered',t.delivered],['opened','Opened',t.opened],['clicked','Clicked',t.clicked],['unsubscribed','Unsubscribed',t.unsubscribed]] as const).map(([key,label,value])=>({key,label,value:Number(value),display:exact(value)}))}/>

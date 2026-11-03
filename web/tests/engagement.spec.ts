@@ -22,7 +22,10 @@ test('email workspace summarizes the delivery funnel with honest rates',async({p
  const kpis=page.getByRole('region',{name:'Email totals'});const card=(name:string)=>kpis.getByRole('article',{name});
  await expect(card('Emails sent')).toContainText('15');await expect(card('Open rate')).toContainText('50.0%');
  await expect(card('Click rate')).toContainText('12.5%');await expect(card('Unsubscribe rate')).toContainText('0.0%');
- await expect(page.getByRole('img',{name:'Monthly emails sent, opened and clicked'})).toBeVisible();
+ const trend=page.getByRole('img',{name:'Monthly emails sent, opened and clicked, and recipients emailed'});await expect(trend).toBeVisible();
+ await expect(trend.locator('path.recharts-line-curve')).toHaveCount(4);
+ await expect(trend.locator('path.recharts-line-curve[stroke="var(--color-recipients)"]')).toHaveCount(1);
+ await expect(page.getByText('Sends follow the send calendar',{exact:false})).toBeVisible();
  await expect(page.getByRole('list',{name:'Email funnel'})).toContainText('Opened');
  await page.getByText('Exact monthly email values').click();const table=page.getByRole('table',{name:'Email engagement by month'});
  await expect(table.locator('tbody tr').nth(0)).toContainText('Unavailable');
@@ -51,7 +54,7 @@ test('email fits a phone',async({page})=>{
 for(const theme of ['light','dark'] as const)test(`email legend follows the funnel order and the funnel uses one colour in ${theme} mode`,async({page})=>{
  await page.addInitScript(t=>localStorage.setItem('mp-theme',t),theme);await page.goto('/email');
  const legend=page.getByRole('list',{name:'Monthly engagement legend',exact:true});
- await expectReadableLegend(legend);await expect(legend.getByRole('listitem')).toHaveText(['Sent','Opened','Clicked']);
+ await expectReadableLegend(legend);await expect(legend.getByRole('listitem')).toHaveCount(4);await expect(legend.getByRole('listitem')).toHaveText(['Sent','Opened','Clicked','Recipients']);
  const bars=await page.getByRole('list',{name:'Email funnel'}).locator('li div[style*="width"]').evaluateAll(b=>b.map(x=>getComputedStyle(x).backgroundColor));
  expect(new Set(bars).size).toBe(1);
 });
